@@ -1,0 +1,50 @@
+# docker-compose.override.yml.example
+# 
+# This file shows optional overrides for advanced configurations
+# Copy to docker-compose.override.yml and customize as needed
+#
+# Example: cp docker-compose.override.yml.example docker-compose.override.yml
+
+version: '3.8'
+
+services:
+  api:
+    # Example: Expose on different port
+    # ports:
+    #   - "9000:8000"
+    
+    # Example: Add to existing network (for reverse proxy)
+    # networks:
+    #   - notification-network
+    #   - traefik-network
+    
+    # Example: Add labels for Traefik
+    # labels:
+    #   - "traefik.enable=true"
+    #   - "traefik.http.routers.notifications.rule=Host(`notifications.yourdomain.com`)"
+    #   - "traefik.http.routers.notifications.entrypoints=websecure"
+    #   - "traefik.http.routers.notifications.tls.certresolver=letsencrypt"
+    
+    # Example: Resource limits
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '0.5'
+    #       memory: 512M
+    #     reservations:
+    #       cpus: '0.25'
+    #       memory: 256M
+  
+  postgres:
+    # Example: Expose PostgreSQL (for debugging - not recommended for production)
+    # ports:
+    #   - "5432:5432"
+    
+    # Example: Custom data location
+    # volumes:
+    #   - /custom/path/postgres:/var/lib/postgresql/data
+
+# Example: Add to existing networks
+# networks:
+#   traefik-network:
+#     external: true
