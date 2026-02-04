@@ -1,7 +1,9 @@
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import logging
+import os
 
 from app.config import settings
 from app.database import engine, Base
@@ -51,6 +53,11 @@ app.include_router(health.router, prefix="/health", tags=["Health"])
 app.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks"])
 app.include_router(admin.router, prefix="/admin", tags=["Admin"])
 
+# Mount static files
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.exists(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -66,5 +73,15 @@ async def root():
     return {
         "message": "Plex Notification Portal API",
         "version": "1.0.0",
-        "docs": "/docs"
+        "docs": "/docs",
+        "admin_dashboard": "/dashboard"
     }
+
+
+@app.get("/dashboard")
+async def dashboard():
+    """Serve the admin dashboard"""
+    static_file = os.path.join(os.path.dirname(__file__), "static", "admin.html")
+    if os.path.exists(static_file):
+        return FileResponse(static_file)
+    return {"error": "Dashboard not found"}

@@ -11,6 +11,7 @@ A notification service that monitors Sonarr/Radarr downloads and sends email not
 - 🔄 **Automatic syncing** - Keeps track of all user requests and content availability
 - 🎯 **Smart tracking** - Prevents duplicate notifications and tracks notification history
 - 📥 **Existing episode import** - Automatically imports already-downloaded episodes from Sonarr to prevent notification spam for old episodes
+- 🎛️ **Web Admin Dashboard** - Beautiful web interface to manage users, requests, and notifications
 
 ## How It Works
 
@@ -189,6 +190,21 @@ curl http://localhost:8000/health
 - `GET /redoc` - Alternative API documentation (ReDoc)
 
 ## Usage Examples
+
+### Access the Admin Dashboard
+
+Open your browser and go to:
+```
+http://localhost:8000/dashboard
+```
+
+The dashboard provides:
+- Real-time statistics (users, requests, episodes, notifications)
+- User management and search
+- Request tracking with import episode buttons
+- Notification queue monitoring
+- One-click sync and import actions
+- Search and filter capabilities
 
 ### Manual Sync
 

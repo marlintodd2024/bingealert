@@ -19,6 +19,9 @@ class EmailService:
         self.smtp_user = settings.smtp_user
         self.smtp_password = settings.smtp_password
         self.smtp_from = settings.smtp_from
+        # Check if authentication is needed
+        self.use_auth = bool(self.smtp_user and self.smtp_password and 
+                            self.smtp_user.lower() not in ['none', ''])
     
     async def send_email(self, to_email: str, subject: str, html_body: str) -> bool:
         """Send an email via SMTP"""
@@ -32,15 +35,23 @@ class EmailService:
             html_part = MIMEText(html_body, "html")
             message.attach(html_part)
             
-            # Send email
-            await aiosmtplib.send(
-                message,
-                hostname=self.smtp_host,
-                port=self.smtp_port,
-                username=self.smtp_user,
-                password=self.smtp_password,
-                start_tls=True
-            )
+            # Send email with or without authentication
+            if self.use_auth:
+                await aiosmtplib.send(
+                    message,
+                    hostname=self.smtp_host,
+                    port=self.smtp_port,
+                    username=self.smtp_user,
+                    password=self.smtp_password,
+                    start_tls=True
+                )
+            else:
+                # No authentication
+                await aiosmtplib.send(
+                    message,
+                    hostname=self.smtp_host,
+                    port=self.smtp_port
+                )
             
             logger.info(f"Email sent successfully to {to_email}")
             return True

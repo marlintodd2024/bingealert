@@ -86,7 +86,10 @@ docker-compose up -d
 # Check health
 curl http://localhost:8000/health
 
-# Sync users and requests
+# Open the admin dashboard in your browser
+# http://localhost:8000/dashboard
+
+# Sync users and requests (or use the dashboard buttons!)
 curl -X POST http://localhost:8000/admin/sync/users
 curl -X POST http://localhost:8000/admin/sync/requests
 
@@ -94,11 +97,23 @@ curl -X POST http://localhost:8000/admin/sync/requests
 curl http://localhost:8000/admin/stats
 ```
 
+## 7. Use the Admin Dashboard
+
+Open http://localhost:8000/dashboard in your browser to:
+- View all users, requests, and notifications
+- Sync data with one-click buttons  
+- Import existing episodes
+- Search and filter data
+- Monitor notification queue
+
 ## 7. Test It Out
 
-1. Request content in Jellyseerr
-2. Download completes in Sonarr/Radarr
-3. Check your email! 📧
+1. Open the admin dashboard: http://localhost:8000/dashboard
+2. Click "Sync Users" and "Sync Requests"
+3. Request content in Jellyseerr
+4. Download completes in Sonarr/Radarr
+5. Check your email! 📧
+6. Monitor notifications in the dashboard
 
 ## Troubleshooting
 
