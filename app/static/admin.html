@@ -1040,6 +1040,121 @@
             }
         }
 
+        async function loadBackups() {
+            try {
+                const response = await fetch(`${API_BASE}/admin/backup/list`);
+                const data = await response.json();
+                renderBackups(data.backups || []);
+            } catch (error) {
+                console.error('Failed to load backups:', error);
+                document.getElementById('backupsTableBody').innerHTML = '<tr><td colspan="4" class="empty-state">Failed to load backups</td></tr>';
+            }
+        }
+
+        function renderBackups(backups) {
+            const tbody = document.getElementById('backupsTableBody');
+            if (backups.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="empty-state"><div>No backups found</div></td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = backups.map(backup => `
+                <tr>
+                    <td>${backup.filename}</td>
+                    <td>${new Date(backup.created).toLocaleString()}</td>
+                    <td>${(backup.size / 1024 / 1024).toFixed(2)} MB</td>
+                    <td>
+                        <button class="action-btn" onclick="downloadBackup('${backup.filename}')">⬇️ Download</button>
+                        <button class="action-btn" onclick="deleteBackup('${backup.filename}')" style="background: rgba(244, 67, 54, 0.2); color: #f44336;">🗑️ Delete</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function createBackup() {
+            const btn = document.getElementById('createBackupBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Creating backup...';
+            
+            try {
+                const response = await fetch(`${API_BASE}/admin/backup/create`, { method: 'POST' });
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showSuccess(data.message || 'Backup created successfully!');
+                    await loadBackups();
+                } else {
+                    showError(data.detail || 'Failed to create backup');
+                }
+            } catch (error) {
+                showError('Failed to create backup: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '💾 Create Backup';
+            }
+        }
+
+        async function restoreBackup() {
+            const fileInput = document.getElementById('restoreFileInput');
+            if (!fileInput.files || !fileInput.files[0]) {
+                showError('Please select a backup file');
+                return;
+            }
+            
+            if (!confirm('Are you sure? This will replace ALL current data with the backup. This action cannot be undone!')) {
+                return;
+            }
+            
+            const btn = document.getElementById('restoreBackupBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Restoring...';
+            
+            try {
+                const formData = new FormData();
+                formData.append('file', fileInput.files[0]);
+                
+                const response = await fetch(`${API_BASE}/admin/backup/restore`, {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showSuccess(data.message || 'Backup restored! Please refresh the page.');
+                    setTimeout(() => location.reload(), 3000);
+                } else {
+                    showError(data.detail || 'Failed to restore backup');
+                }
+            } catch (error) {
+                showError('Failed to restore backup: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '📤 Restore Backup';
+            }
+        }
+
+        function downloadBackup(filename) {
+            window.location.href = `${API_BASE}/admin/backup/download/${filename}`;
+        }
+
+        async function deleteBackup(filename) {
+            if (!confirm(`Delete backup ${filename}?`)) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}/admin/backup/delete/${filename}`, { method: 'DELETE' });
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showSuccess(data.message || 'Backup deleted');
+                    await loadBackups();
+                } else {
+                    showError(data.detail || 'Failed to delete backup');
+                }
+            } catch (error) {
+                showError('Failed to delete backup: ' + error.message);
+            }
+        }
+
         // Initial load
         refreshData();
     </script>
