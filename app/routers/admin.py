@@ -226,3 +226,66 @@ async def import_all_existing_episodes(db: Session = Depends(get_db)):
         logger.error(f"Failed to import all existing episodes: {e}")
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/test-email")
+async def send_test_email(
+    email: str,
+    notification_type: str = "episode",
+    db: Session = Depends(get_db)
+):
+    """Send a test email notification"""
+    try:
+        from app.services.email_service import EmailService
+        
+        email_service = EmailService()
+        
+        # Generate test email based on type
+        if notification_type == "episode":
+            html_body = email_service.render_episode_notification(
+                series_title="Breaking Bad",
+                episodes=[
+                    {
+                        'season': 1,
+                        'episode': 1,
+                        'title': "Pilot",
+                        'air_date': "2008-01-20"
+                    },
+                    {
+                        'season': 1,
+                        'episode': 2,
+                        'title': "Cat's in the Bag...",
+                        'air_date': "2008-01-27"
+                    }
+                ]
+            )
+            subject = "Test: New Episodes Available - Breaking Bad"
+        elif notification_type == "movie":
+            html_body = email_service.render_movie_notification(
+                movie_title="The Shawshank Redemption",
+                year=1994
+            )
+            subject = "Test: Movie Available - The Shawshank Redemption"
+        else:
+            raise HTTPException(status_code=400, detail="Invalid notification type. Use 'episode' or 'movie'")
+        
+        # Send the test email
+        success = await email_service.send_email(
+            to_email=email,
+            subject=subject,
+            html_body=html_body
+        )
+        
+        if success:
+            return {
+                "success": True,
+                "message": f"Test email sent successfully to {email}"
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to send test email")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to send test email: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

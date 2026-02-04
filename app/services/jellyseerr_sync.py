@@ -45,6 +45,17 @@ class JellyseerrSyncService:
             logger.error(f"Failed to fetch requests from Jellyseerr: {e}")
             return []
     
+    async def get_media_details(self, media_type: str, tmdb_id: int) -> dict:
+        """Fetch media details including title from Jellyseerr"""
+        try:
+            # Jellyseerr uses /movie/{tmdbId} or /tv/{tmdbId}
+            endpoint = f"/{media_type}/{tmdb_id}"
+            data = await self._get(endpoint)
+            return data
+        except Exception as e:
+            logger.error(f"Failed to fetch media details for {media_type} {tmdb_id}: {e}")
+            return {}
+    
     async def sync_users(self):
         """Sync users from Jellyseerr to local database"""
         logger.info("Starting user sync from Jellyseerr...")
@@ -127,27 +138,16 @@ class JellyseerrSyncService:
                 
                 media = request_data.get("media", {})
                 media_type = request_data.get("type", "").lower()
+                tmdb_id = media.get("tmdbId")
                 
-                # Get the actual title from the media object
-                # Try different fields where title might be stored
-                title = (media.get("title") or 
-                        media.get("name") or
-                        media.get("originalTitle") or
-                        media.get("originalName") or
-                        request_data.get("media", {}).get("tmdbId", "Unknown"))
-                
-                # If still no title, try to get it from the full media details
-                if title == "Unknown" or str(title).isdigit():
-                    try:
-                        media_id = media.get("id")
-                        if media_id:
-                            full_media = await self._get(f"/media/{media_id}")
-                            title = (full_media.get("title") or 
-                                   full_media.get("name") or 
-                                   f"TMDB ID {media.get('tmdbId')}")
-                    except Exception as e:
-                        logger.warning(f"Could not fetch full media details: {e}")
-                        title = f"TMDB ID {media.get('tmdbId')}"
+                # Fetch the actual title from Jellyseerr's media endpoint
+                title = "Unknown"
+                try:
+                    media_details = await self.get_media_details(media_type, tmdb_id)
+                    title = media_details.get("title") or media_details.get("name") or f"TMDB {tmdb_id}"
+                except Exception as e:
+                    logger.warning(f"Could not fetch title for {media_type} {tmdb_id}: {e}")
+                    title = f"TMDB {tmdb_id}"
                 
                 # Map Jellyseerr status codes
                 status_code = request_data.get("status", 1)
@@ -170,7 +170,7 @@ class JellyseerrSyncService:
                         user_id=user.id,
                         jellyseerr_request_id=jellyseerr_request_id,
                         media_type=media_type,
-                        tmdb_id=media.get("tmdbId"),
+                        tmdb_id=tmdb_id,
                         title=title,
                         status=status,
                         season_count=season_count
@@ -185,7 +185,7 @@ class JellyseerrSyncService:
                     await self._import_existing_episodes(
                         db, 
                         request_to_check, 
-                        media.get("tmdbId"),
+                        tmdb_id,
                         sonarr
                     )
                 

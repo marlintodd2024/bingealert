@@ -358,6 +358,7 @@
             <button onclick="syncRequests()" id="syncRequestsBtn">🔄 Sync Requests</button>
             <button onclick="importAllEpisodes()" id="importEpisodesBtn">📥 Import All Episodes</button>
             <button onclick="processNotifications()" id="processNotifBtn">📧 Process Notifications</button>
+            <button onclick="showTestEmailModal()" class="secondary">✉️ Send Test Email</button>
             <button onclick="refreshData()" class="secondary">♻️ Refresh Data</button>
         </div>
 
@@ -428,6 +429,31 @@
                         <tr><td colspan="7" class="loading"><div class="spinner"></div>Loading notifications...</td></tr>
                     </tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Test Email Modal -->
+    <div id="testEmailModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center;">
+        <div style="background: #1a1a2e; border-radius: 12px; padding: 30px; max-width: 500px; width: 90%; border: 1px solid rgba(255,255,255,0.1);">
+            <h2 style="margin-bottom: 20px; color: #e5a00d;">Send Test Email</h2>
+            
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 8px; color: #999; font-size: 14px;">Email Address</label>
+                <input type="email" id="testEmailAddress" placeholder="user@example.com" style="width: 100%; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
+            </div>
+            
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 8px; color: #999; font-size: 14px;">Notification Type</label>
+                <select id="testEmailType" style="width: 100%; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
+                    <option value="episode">TV Episode (Breaking Bad)</option>
+                    <option value="movie">Movie (The Shawshank Redemption)</option>
+                </select>
+            </div>
+            
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button onclick="closeTestEmailModal()" class="secondary">Cancel</button>
+                <button onclick="sendTestEmail()" id="sendTestBtn">Send Test Email</button>
             </div>
         </div>
     </div>
@@ -699,6 +725,49 @@
             el.textContent = message;
             el.style.display = 'block';
             setTimeout(() => el.style.display = 'none', 5000);
+        }
+
+        function showTestEmailModal() {
+            const modal = document.getElementById('testEmailModal');
+            modal.style.display = 'flex';
+        }
+
+        function closeTestEmailModal() {
+            const modal = document.getElementById('testEmailModal');
+            modal.style.display = 'none';
+        }
+
+        async function sendTestEmail() {
+            const email = document.getElementById('testEmailAddress').value;
+            const type = document.getElementById('testEmailType').value;
+            
+            if (!email) {
+                showError('Please enter an email address');
+                return;
+            }
+            
+            const btn = document.getElementById('sendTestBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Sending...';
+            
+            try {
+                const response = await fetch(`${API_BASE}/admin/test-email?email=${encodeURIComponent(email)}&notification_type=${type}`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showSuccess(data.message || 'Test email sent successfully!');
+                    closeTestEmailModal();
+                } else {
+                    showError(data.detail || 'Failed to send test email');
+                }
+            } catch (error) {
+                showError('Failed to send test email: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Send Test Email';
+            }
         }
 
         // Initial load
