@@ -361,6 +361,10 @@
                 <div class="stat-label">Total Requests</div>
                 <div class="stat-value" id="totalRequests">-</div>
             </div>
+            <div class="stat-card" style="cursor: pointer;" onclick="showTrackingRequests()">
+                <div class="stat-label">⏳ Tracking (Waiting)</div>
+                <div class="stat-value" id="trackingRequests">-</div>
+            </div>
             <div class="stat-card" style="cursor: pointer;" onclick="switchTab('upcoming')">
                 <div class="stat-label">Episodes Tracked</div>
                 <div class="stat-value" id="episodesTracked">-</div>
@@ -600,6 +604,7 @@
                 
                 document.getElementById('totalUsers').textContent = data.users || 0;
                 document.getElementById('totalRequests').textContent = data.requests.total || 0;
+                document.getElementById('trackingRequests').textContent = data.requests.tracking || 0;
                 document.getElementById('episodesTracked').textContent = data.episodes_tracked || 0;
                 document.getElementById('notificationsSent').textContent = data.notifications.sent || 0;
                 document.getElementById('notificationsPending').textContent = data.notifications.pending || 0;
@@ -983,6 +988,13 @@
             // Filter to show only pending notifications
             const pending = allNotifications.filter(n => !n.sent);
             renderNotifications(pending);
+        }
+
+        function showTrackingRequests() {
+            switchTab('requests');
+            // Filter to approved/pending requests that are not yet available
+            const tracking = allRequests.filter(r => r.status !== 'available');
+            renderRequests(tracking);
         }
 
         function showTestEmailModal() {

@@ -58,6 +58,7 @@ async def get_stats(db: Session = Depends(get_db)):
                 "total": db.query(func.count(MediaRequest.id)).scalar(),
                 "movies": db.query(func.count(MediaRequest.id)).filter(MediaRequest.media_type == "movie").scalar(),
                 "tv_shows": db.query(func.count(MediaRequest.id)).filter(MediaRequest.media_type == "tv").scalar(),
+                "tracking": db.query(func.count(MediaRequest.id)).filter(MediaRequest.status != "available").scalar(),
             },
             "episodes_tracked": db.query(func.count(EpisodeTracking.id)).scalar(),
             "notifications": {
