@@ -49,6 +49,33 @@ class JellyseerrUser(BaseModel):
     plexId: Optional[int] = None
 
 
+# Jellyseerr Webhook Schemas
+class JellyseerrWebhookMedia(BaseModel):
+    media_type: str
+    tmdbId: int
+    tvdbId: Optional[int] = None
+    status: Optional[int] = None
+    status4k: Optional[int] = None
+
+
+class JellyseerrWebhookRequest(BaseModel):
+    request_id: int
+    requestedBy_email: Optional[str] = None
+    requestedBy_username: Optional[str] = None
+    requestedBy_avatar: Optional[str] = None
+
+
+class JellyseerrWebhook(BaseModel):
+    notification_type: str  # "MEDIA_PENDING", "MEDIA_APPROVED", "MEDIA_AVAILABLE", etc.
+    event: Optional[str] = None
+    subject: str
+    message: Optional[str] = None
+    image: Optional[str] = None
+    media: Optional[JellyseerrWebhookMedia] = None
+    request: Optional[JellyseerrWebhookRequest] = None
+    extra: Optional[List[dict]] = None
+
+
 class JellyseerrMediaInfo(BaseModel):
     tmdbId: int
     tvdbId: Optional[int] = None

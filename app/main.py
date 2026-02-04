@@ -4,6 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import logging
 import os
+import asyncio
 
 from app.config import settings
 from app.database import engine, Base
@@ -16,6 +17,20 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+async def periodic_sync():
+    """Background task to sync with Jellyseerr once daily as backup"""
+    while True:
+        try:
+            await asyncio.sleep(86400)  # 86400 seconds = 24 hours
+            logger.info("Starting daily backup sync with Jellyseerr...")
+            sync_service = JellyseerrSyncService()
+            await sync_service.sync_users()
+            await sync_service.sync_requests()
+            logger.info("Daily backup sync completed")
+        except Exception as e:
+            logger.error(f"Daily backup sync failed: {e}")
 
 
 @asynccontextmanager
@@ -36,7 +51,18 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Failed to sync with Jellyseerr: {e}")
     
+    # Start background sync task (daily backup)
+    sync_task = asyncio.create_task(periodic_sync())
+    logger.info("Started daily backup sync task (runs every 24 hours)")
+    
     yield
+    
+    # Cancel background task on shutdown
+    sync_task.cancel()
+    try:
+        await sync_task
+    except asyncio.CancelledError:
+        logger.info("Periodic sync task cancelled")
     
     logger.info("Shutting down Plex Notification Portal...")
 
