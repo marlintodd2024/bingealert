@@ -57,25 +57,34 @@ class JellyseerrSyncService:
             for user_data in users_data:
                 # Skip users without email
                 if not user_data.get("email"):
+                    logger.warning(f"Skipping user {user_data.get('id')} - no email address")
                     continue
                 
                 jellyseerr_id = user_data.get("id")
                 existing_user = db.query(User).filter(User.jellyseerr_id == jellyseerr_id).first()
                 
+                # Use username, displayName, plexUsername, or email as fallback
+                username = (user_data.get("username") or 
+                          user_data.get("displayName") or 
+                          user_data.get("plexUsername") or 
+                          user_data.get("email").split("@")[0])
+                
                 if existing_user:
                     # Update existing user
                     existing_user.email = user_data.get("email")
-                    existing_user.username = user_data.get("username", user_data.get("email"))
+                    existing_user.username = username
                     existing_user.plex_id = user_data.get("plexId")
+                    logger.info(f"Updated user: {username} ({user_data.get('email')})")
                 else:
                     # Create new user
                     new_user = User(
                         jellyseerr_id=jellyseerr_id,
                         email=user_data.get("email"),
-                        username=user_data.get("username", user_data.get("email")),
+                        username=username,
                         plex_id=user_data.get("plexId")
                     )
                     db.add(new_user)
+                    logger.info(f"Created new user: {username} ({user_data.get('email')})")
                 
                 synced_count += 1
             
