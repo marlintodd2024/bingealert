@@ -156,7 +156,10 @@ class JellyseerrSyncService:
                 
                 if existing_request:
                     # Update existing request
-                    existing_request.status = status
+                    # Don't downgrade status: if it's already "available", keep it that way
+                    # (Webhooks from Sonarr/Radarr set to "available", Jellyseerr might lag behind)
+                    if existing_request.status != "available":
+                        existing_request.status = status
                     existing_request.title = title  # Update title in case it changed
                     logger.info(f"Updated request: {title} ({media_type})")
                     request_to_check = existing_request
