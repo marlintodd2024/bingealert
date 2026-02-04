@@ -128,6 +128,27 @@ class JellyseerrSyncService:
                 media = request_data.get("media", {})
                 media_type = request_data.get("type", "").lower()
                 
+                # Get the actual title from the media object
+                # Try different fields where title might be stored
+                title = (media.get("title") or 
+                        media.get("name") or
+                        media.get("originalTitle") or
+                        media.get("originalName") or
+                        request_data.get("media", {}).get("tmdbId", "Unknown"))
+                
+                # If still no title, try to get it from the full media details
+                if title == "Unknown" or str(title).isdigit():
+                    try:
+                        media_id = media.get("id")
+                        if media_id:
+                            full_media = await self._get(f"/media/{media_id}")
+                            title = (full_media.get("title") or 
+                                   full_media.get("name") or 
+                                   f"TMDB ID {media.get('tmdbId')}")
+                    except Exception as e:
+                        logger.warning(f"Could not fetch full media details: {e}")
+                        title = f"TMDB ID {media.get('tmdbId')}"
+                
                 # Map Jellyseerr status codes
                 status_code = request_data.get("status", 1)
                 status_map = {1: "pending", 2: "approved", 3: "declined", 4: "available"}
@@ -136,6 +157,8 @@ class JellyseerrSyncService:
                 if existing_request:
                     # Update existing request
                     existing_request.status = status
+                    existing_request.title = title  # Update title in case it changed
+                    logger.info(f"Updated request: {title} ({media_type})")
                     request_to_check = existing_request
                 else:
                     # Create new request
@@ -148,12 +171,13 @@ class JellyseerrSyncService:
                         jellyseerr_request_id=jellyseerr_request_id,
                         media_type=media_type,
                         tmdb_id=media.get("tmdbId"),
-                        title=media.get("title", "Unknown"),
+                        title=title,
                         status=status,
                         season_count=season_count
                     )
                     db.add(new_request)
                     db.flush()  # Get the ID for the new request
+                    logger.info(f"Created new request: {title} ({media_type})")
                     request_to_check = new_request
                 
                 # For TV shows, check Sonarr for existing episodes
