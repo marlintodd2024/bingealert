@@ -366,6 +366,7 @@
             <div class="tab active" onclick="switchTab('users')">Users</div>
             <div class="tab" onclick="switchTab('requests')">Requests</div>
             <div class="tab" onclick="switchTab('notifications')">Notifications</div>
+            <div class="tab" onclick="switchTab('upcoming')">📅 Upcoming Episodes</div>
         </div>
 
         <div id="usersTab" class="tab-content active">
@@ -431,6 +432,36 @@
                 </table>
             </div>
         </div>
+
+        <div id="upcomingTab" class="tab-content">
+            <div style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center;">
+                <input type="text" class="search-box" placeholder="Search upcoming episodes..." id="upcomingSearch" oninput="filterUpcoming()" style="flex: 1;">
+                <select id="upcomingDays" onchange="loadUpcoming()" style="padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
+                    <option value="7">Next 7 Days</option>
+                    <option value="14">Next 14 Days</option>
+                    <option value="30" selected>Next 30 Days</option>
+                    <option value="60">Next 60 Days</option>
+                </select>
+            </div>
+            <div class="data-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Series</th>
+                            <th>Episode</th>
+                            <th>Title</th>
+                            <th>Air Date</th>
+                            <th>Downloaded</th>
+                            <th>User</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="upcomingTableBody">
+                        <tr><td colspan="7" class="loading"><div class="spinner"></div>Loading upcoming episodes...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <!-- Test Email Modal -->
@@ -462,6 +493,7 @@
         let allUsers = [];
         let allRequests = [];
         let allNotifications = [];
+        let allUpcoming = [];
 
         // API Base URL
         const API_BASE = '';
@@ -515,6 +547,19 @@
             } catch (error) {
                 console.error('Failed to load notifications:', error);
                 document.getElementById('notificationsTableBody').innerHTML = '<tr><td colspan="7" class="empty-state">Failed to load notifications</td></tr>';
+            }
+        }
+
+        async function loadUpcoming() {
+            try {
+                const days = document.getElementById('upcomingDays').value;
+                const response = await fetch(`${API_BASE}/admin/upcoming-episodes?days=${days}`);
+                const data = await response.json();
+                allUpcoming = data.upcoming || [];
+                renderUpcoming(allUpcoming);
+            } catch (error) {
+                console.error('Failed to load upcoming episodes:', error);
+                document.getElementById('upcomingTableBody').innerHTML = '<tr><td colspan="7" class="empty-state">Failed to load upcoming episodes</td></tr>';
             }
         }
 
@@ -578,6 +623,31 @@
             `).join('');
         }
 
+        function renderUpcoming(upcoming) {
+            const tbody = document.getElementById('upcomingTableBody');
+            if (upcoming.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="empty-state"><div>No upcoming episodes found for requested shows</div></td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = upcoming.map(ep => {
+                const airDate = new Date(ep.air_date);
+                const isToday = airDate.toDateString() === new Date().toDateString();
+                const isPast = airDate < new Date();
+                
+                return `
+                <tr style="${isToday ? 'background: rgba(229, 160, 13, 0.1);' : ''}">
+                    <td>${ep.series_title}</td>
+                    <td>S${String(ep.season_number).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')}</td>
+                    <td>${ep.episode_title || 'TBA'}</td>
+                    <td>${airDate.toLocaleDateString()} ${airDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
+                    <td><span class="badge ${ep.has_file ? 'available' : 'pending'}">${ep.has_file ? '✓ Downloaded' : isPast ? 'Waiting' : 'Not Aired'}</span></td>
+                    <td>${ep.user_name} (${ep.user_email})</td>
+                    <td><span class="badge ${ep.already_notified ? 'sent' : 'pending-email'}">${ep.already_notified ? 'Notified' : 'Will Notify'}</span></td>
+                </tr>
+            `}).join('');
+        }
+
         function filterUsers() {
             const search = document.getElementById('userSearch').value.toLowerCase();
             const filtered = allUsers.filter(u => 
@@ -605,6 +675,16 @@
             renderNotifications(filtered);
         }
 
+        function filterUpcoming() {
+            const search = document.getElementById('upcomingSearch').value.toLowerCase();
+            const filtered = allUpcoming.filter(ep => 
+                ep.series_title.toLowerCase().includes(search) || 
+                ep.episode_title.toLowerCase().includes(search) ||
+                ep.user_email.toLowerCase().includes(search)
+            );
+            renderUpcoming(filtered);
+        }
+
         function switchTab(tabName) {
             // Update tab buttons
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
@@ -618,6 +698,7 @@
             if (tabName === 'users' && allUsers.length === 0) loadUsers();
             if (tabName === 'requests' && allRequests.length === 0) loadRequests();
             if (tabName === 'notifications' && allNotifications.length === 0) loadNotifications();
+            if (tabName === 'upcoming' && allUpcoming.length === 0) loadUpcoming();
         }
 
         async function syncUsers() {
@@ -710,6 +791,7 @@
             await loadUsers();
             await loadRequests();
             await loadNotifications();
+            await loadUpcoming();
             document.getElementById('lastSync').textContent = 'Last sync: ' + new Date().toLocaleString();
         }
 

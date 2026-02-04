@@ -139,6 +139,79 @@ async def list_notifications(
     }
 
 
+@router.get("/upcoming-episodes")
+async def get_upcoming_episodes(days: int = 30, db: Session = Depends(get_db)):
+    """Get upcoming episodes from Sonarr calendar that match user requests"""
+    try:
+        from app.services.sonarr_service import SonarrService
+        from datetime import datetime, timedelta
+        
+        sonarr = SonarrService()
+        
+        # Get calendar for next N days
+        start_date = datetime.utcnow().strftime('%Y-%m-%d')
+        end_date = (datetime.utcnow() + timedelta(days=days)).strftime('%Y-%m-%d')
+        
+        calendar_episodes = await sonarr.get_calendar(start_date, end_date)
+        
+        if not calendar_episodes:
+            return {"upcoming": []}
+        
+        # Get all TV show requests with their users
+        tv_requests = db.query(MediaRequest).filter(
+            MediaRequest.media_type == "tv"
+        ).all()
+        
+        # Create a mapping of series TMDB IDs to users who requested them
+        tmdb_to_requests = {}
+        for request in tv_requests:
+            if request.tmdb_id not in tmdb_to_requests:
+                tmdb_to_requests[request.tmdb_id] = []
+            tmdb_to_requests[request.tmdb_id].append(request)
+        
+        upcoming = []
+        for episode in calendar_episodes:
+            series = episode.get("series", {})
+            series_tmdb = series.get("tmdbId")
+            
+            # Check if any user has requested this series
+            if series_tmdb in tmdb_to_requests:
+                # Check if this episode has already been notified
+                for request in tmdb_to_requests[series_tmdb]:
+                    existing_tracking = db.query(EpisodeTracking).filter(
+                        EpisodeTracking.request_id == request.id,
+                        EpisodeTracking.season_number == episode.get("seasonNumber"),
+                        EpisodeTracking.episode_number == episode.get("episodeNumber")
+                    ).first()
+                    
+                    # Only include if not already notified
+                    if not existing_tracking or not existing_tracking.notified:
+                        upcoming.append({
+                            "series_title": series.get("title"),
+                            "season_number": episode.get("seasonNumber"),
+                            "episode_number": episode.get("episodeNumber"),
+                            "episode_title": episode.get("title"),
+                            "air_date": episode.get("airDateUtc"),
+                            "has_file": episode.get("hasFile", False),
+                            "monitored": episode.get("monitored", True),
+                            "user_email": request.user.email,
+                            "user_name": request.user.username,
+                            "already_notified": existing_tracking.notified if existing_tracking else False
+                        })
+        
+        # Sort by air date
+        upcoming.sort(key=lambda x: x["air_date"])
+        
+        return {
+            "upcoming": upcoming,
+            "count": len(upcoming)
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get upcoming episodes: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/requests/{request_id}/import-episodes")
 async def import_existing_episodes(request_id: int, db: Session = Depends(get_db)):
     """Manually import existing episodes from Sonarr for a specific TV show request"""

@@ -62,3 +62,20 @@ class SonarrService:
         except Exception as e:
             logger.error(f"Failed to fetch episodes for series {series_id}: {e}")
             return None
+    
+    async def get_calendar(self, start_date: str = None, end_date: str = None) -> Optional[list]:
+        """Get calendar of upcoming episodes"""
+        try:
+            # Default to next 7 days if no dates provided
+            from datetime import datetime, timedelta
+            if not start_date:
+                start_date = datetime.utcnow().strftime('%Y-%m-%d')
+            if not end_date:
+                end = datetime.utcnow() + timedelta(days=30)
+                end_date = end.strftime('%Y-%m-%d')
+            
+            calendar = await self._get(f"/calendar?start={start_date}&end={end_date}")
+            return calendar
+        except Exception as e:
+            logger.error(f"Failed to fetch Sonarr calendar: {e}")
+            return None
