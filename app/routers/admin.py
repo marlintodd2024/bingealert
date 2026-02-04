@@ -367,11 +367,17 @@ async def send_test_email(
     """Send a test email notification"""
     try:
         from app.services.email_service import EmailService
+        from app.services.tmdb_service import TMDBService
+        from app.config import settings as app_settings
         
         email_service = EmailService()
+        tmdb_service = TMDBService(app_settings.jellyseerr_url, app_settings.jellyseerr_api_key)
         
         # Generate test email based on type
         if notification_type == "episode":
+            # Breaking Bad TMDB ID: 1396
+            poster_url = await tmdb_service.get_tv_poster(1396)
+            
             html_body = email_service.render_episode_notification(
                 series_title="Breaking Bad",
                 episodes=[
@@ -387,13 +393,18 @@ async def send_test_email(
                         'title': "Cat's in the Bag...",
                         'air_date': "2008-01-27"
                     }
-                ]
+                ],
+                poster_url=poster_url
             )
             subject = "Test: New Episodes Available - Breaking Bad"
         elif notification_type == "movie":
+            # The Shawshank Redemption TMDB ID: 278
+            poster_url = await tmdb_service.get_movie_poster(278)
+            
             html_body = email_service.render_movie_notification(
                 movie_title="The Shawshank Redemption",
-                year=1994
+                year=1994,
+                poster_url=poster_url
             )
             subject = "Test: Movie Available - The Shawshank Redemption"
         else:
@@ -481,7 +492,16 @@ async def notify_episode_now(
         else:
             # Mark as notified
             tracking.notified = True
+        
+        # Create notification
         email_service = EmailService()
+        
+        # Get poster URL
+        from app.services.tmdb_service import TMDBService
+        from app.config import settings as app_settings
+        tmdb_service = TMDBService(app_settings.jellyseerr_url, app_settings.jellyseerr_api_key)
+        poster_url = await tmdb_service.get_tv_poster(request.tmdb_id)
+        
         html_body = email_service.render_episode_notification(
             series_title=series.get("title"),
             episodes=[{
@@ -489,7 +509,8 @@ async def notify_episode_now(
                 'episode': episode_number,
                 'title': episode.get("title"),
                 'air_date': episode.get("airDate")
-            }]
+            }],
+            poster_url=poster_url
         )
         
         notification = Notification(

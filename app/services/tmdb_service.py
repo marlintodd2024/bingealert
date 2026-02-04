@@ -31,11 +31,19 @@ class TMDBService:
                         data = response.json()
                         poster_path = data.get("posterPath")
                         if poster_path:
-                            return f"{self.TMDB_IMAGE_BASE}{poster_path}"
+                            poster_url = f"{self.TMDB_IMAGE_BASE}{poster_path}"
+                            logger.info(f"Fetched TV poster for TMDB ID {tmdb_id}: {poster_url}")
+                            return poster_url
+                        else:
+                            logger.warning(f"No posterPath in Jellyseerr response for TV TMDB ID {tmdb_id}")
+                    else:
+                        logger.warning(f"Failed to fetch TV show from Jellyseerr (TMDB ID {tmdb_id}): Status {response.status_code}")
+            else:
+                logger.warning("TMDB service not configured - Jellyseerr URL/API key missing")
             
             return None
         except Exception as e:
-            logger.warning(f"Failed to fetch TV poster for TMDB ID {tmdb_id}: {e}")
+            logger.error(f"Failed to fetch TV poster for TMDB ID {tmdb_id}: {e}")
             return None
     
     async def get_movie_poster(self, tmdb_id: int) -> Optional[str]:
@@ -53,9 +61,17 @@ class TMDBService:
                         data = response.json()
                         poster_path = data.get("posterPath")
                         if poster_path:
-                            return f"{self.TMDB_IMAGE_BASE}{poster_path}"
+                            poster_url = f"{self.TMDB_IMAGE_BASE}{poster_path}"
+                            logger.info(f"Fetched movie poster for TMDB ID {tmdb_id}: {poster_url}")
+                            return poster_url
+                        else:
+                            logger.warning(f"No posterPath in Jellyseerr response for movie TMDB ID {tmdb_id}")
+                    else:
+                        logger.warning(f"Failed to fetch movie from Jellyseerr (TMDB ID {tmdb_id}): Status {response.status_code}")
+            else:
+                logger.warning("TMDB service not configured - Jellyseerr URL/API key missing")
             
             return None
         except Exception as e:
-            logger.warning(f"Failed to fetch movie poster for TMDB ID {tmdb_id}: {e}")
+            logger.error(f"Failed to fetch movie poster for TMDB ID {tmdb_id}: {e}")
             return None
