@@ -554,20 +554,64 @@ async def notify_episode_now(
 
 
 @router.post("/resend-notification/{notification_id}")
-async def resend_notification(notification_id: int, db: Session = Depends(get_db)):
-    """Resend an existing notification"""
+async def resend_notification(notification_id: int, regenerate: bool = True, db: Session = Depends(get_db)):
+    """Resend an existing notification (optionally regenerate with fresh poster)"""
     try:
         from app.services.email_service import EmailService
+        from app.services.tmdb_service import TMDBService
+        from app.config import settings as app_settings
         
         notification = db.query(Notification).filter(Notification.id == notification_id).first()
         if not notification:
             raise HTTPException(status_code=404, detail="Notification not found")
         
         email_service = EmailService()
+        tmdb_service = TMDBService(app_settings.jellyseerr_url, app_settings.jellyseerr_api_key)
+        
+        # Optionally regenerate the email body with a fresh poster
+        body = notification.body
+        if regenerate and notification.request:
+            logger.info(f"Regenerating notification {notification_id} with fresh poster")
+            
+            if notification.notification_type == "episode":
+                # Extract episode info from subject (e.g., "New Episode: Breaking Bad S01E05")
+                import re
+                match = re.search(r'S(\d+)E(\d+)', notification.subject)
+                if match and notification.request.tmdb_id:
+                    season = int(match.group(1))
+                    episode = int(match.group(2))
+                    
+                    poster_url = await tmdb_service.get_tv_poster(notification.request.tmdb_id)
+                    
+                    # Get episode title from tracking if available
+                    from app.database import EpisodeTracking
+                    tracking = db.query(EpisodeTracking).filter(
+                        EpisodeTracking.request_id == notification.request_id,
+                        EpisodeTracking.season_number == season,
+                        EpisodeTracking.episode_number == episode
+                    ).first()
+                    
+                    body = email_service.render_episode_notification(
+                        series_title=notification.request.title,
+                        episodes=[{
+                            'season': season,
+                            'episode': episode,
+                            'title': tracking.episode_title if tracking else None,
+                            'air_date': tracking.air_date.strftime('%Y-%m-%d') if tracking and tracking.air_date else None
+                        }],
+                        poster_url=poster_url
+                    )
+            elif notification.notification_type == "movie" and notification.request.tmdb_id:
+                poster_url = await tmdb_service.get_movie_poster(notification.request.tmdb_id)
+                body = email_service.render_movie_notification(
+                    movie_title=notification.request.title,
+                    poster_url=poster_url
+                )
+        
         success = await email_service.send_email(
             to_email=notification.user.email,
             subject=notification.subject,
-            html_body=notification.body
+            html_body=body
         )
         
         if success:
@@ -575,11 +619,13 @@ async def resend_notification(notification_id: int, db: Session = Depends(get_db
             notification.sent = True
             notification.sent_at = datetime.utcnow()
             notification.error_message = None
+            if regenerate:
+                notification.body = body  # Update stored body with new poster
             db.commit()
             
             return {
                 "success": True,
-                "message": f"Notification resent to {notification.user.email}"
+                "message": f"Notification resent to {notification.user.email}" + (" (regenerated with poster)" if regenerate else "")
             }
         else:
             raise HTTPException(status_code=500, detail="Failed to resend notification")
@@ -587,5 +633,5 @@ async def resend_notification(notification_id: int, db: Session = Depends(get_db
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to resend notification: {e}")
+        logger.error(f"Failed to resend notification: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
