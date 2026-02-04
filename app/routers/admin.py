@@ -169,6 +169,16 @@ async def get_upcoming_episodes(days: int = 30, db: Session = Depends(get_db)):
         
         logger.info(f"Found {len(tv_requests)} TV show requests in database")
         
+        # Get all series from Sonarr to map seriesId to series details
+        all_series = await sonarr._get("/series")
+        series_map = {}  # seriesId -> series details
+        for series in all_series:
+            series_id = series.get("id")
+            if series_id:
+                series_map[series_id] = series
+        
+        logger.info(f"Loaded {len(series_map)} series from Sonarr")
+        
         # Create a mapping of series TMDB IDs to users who requested them
         tmdb_to_requests = {}
         title_to_requests = {}  # Fallback matching by title
@@ -191,14 +201,14 @@ async def get_upcoming_episodes(days: int = 30, db: Session = Depends(get_db)):
         upcoming = []
         matched_count = 0
         
-        # Log first few calendar entries for debugging
-        if calendar_episodes:
-            for ep in calendar_episodes[:3]:
-                series = ep.get("series", {})
-                logger.info(f"Calendar episode: {series.get('title')} (TMDB: {series.get('tmdbId')})")
-        
         for episode in calendar_episodes:
-            series = episode.get("series", {})
+            # Get series details from the series map
+            series_id = episode.get("seriesId")
+            if not series_id or series_id not in series_map:
+                logger.debug(f"Episode {episode.get('title')} has no series in map")
+                continue
+            
+            series = series_map[series_id]
             series_tmdb = series.get("tmdbId")
             series_title = series.get("title", "").lower().strip()
             
@@ -210,12 +220,6 @@ async def get_upcoming_episodes(days: int = 30, db: Session = Depends(get_db)):
             elif series_title in title_to_requests:
                 matching_requests = title_to_requests[series_title]
                 logger.debug(f"Matched '{series.get('title')}' by title '{series_title}'")
-            else:
-                # Log why it didn't match
-                if not series_tmdb:
-                    logger.debug(f"No match for '{series.get('title')}' - no TMDB ID in Sonarr")
-                else:
-                    logger.debug(f"No match for '{series.get('title')}' - TMDB {series_tmdb} not in requests, title '{series_title}' not in titles")
             
             # Check if any user has requested this series
             if matching_requests:
