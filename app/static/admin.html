@@ -639,71 +639,64 @@
             ⚠️ Warning: Changing these settings may break integrations. Container restart required after saving.
         </p>
 
-        <!-- Timing Section -->
+        <!-- Timing -->
         <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 20px; margin-bottom: 20px;">
-            <h3 style="color: #e5a00d; margin-bottom: 15px;">⏱️ Notification Timing</h3>
+            <h3 style="color: #e5a00d; margin: 0 0 15px 0;">⏱️ Notification Timing</h3>
             <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px;">
                 <div>
                     <label style="display: block; color: #999; font-size: 12px; margin-bottom: 5px;">Initial Delay (min)</label>
-                    <input type="number" id="config-initial-delay" value="7" min="1" max="30" class="search-box" style="width: 100%; margin-bottom: 0;">
+                    <input type="number" id="config-initial-delay" value="7" min="1" max="30" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 10px 15px; color: #e4e4e4; width: 100%; box-sizing: border-box;">
                 </div>
                 <div>
                     <label style="display: block; color: #999; font-size: 12px; margin-bottom: 5px;">Extension (min)</label>
-                    <input type="number" id="config-extension-delay" value="3" min="1" max="10" class="search-box" style="width: 100%; margin-bottom: 0;">
+                    <input type="number" id="config-extension-delay" value="3" min="1" max="10" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 10px 15px; color: #e4e4e4; width: 100%; box-sizing: border-box;">
                 </div>
                 <div>
                     <label style="display: block; color: #999; font-size: 12px; margin-bottom: 5px;">Max Wait (min)</label>
-                    <input type="number" id="config-max-wait" value="15" min="5" max="60" class="search-box" style="width: 100%; margin-bottom: 0;">
+                    <input type="number" id="config-max-wait" value="15" min="5" max="60" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 10px 15px; color: #e4e4e4; width: 100%; box-sizing: border-box;">
                 </div>
                 <div>
                     <label style="display: block; color: #999; font-size: 12px; margin-bottom: 5px;">Check Freq (sec)</label>
-                    <input type="number" id="config-check-frequency" value="60" min="30" max="300" class="search-box" style="width: 100%; margin-bottom: 0;">
+                    <input type="number" id="config-check-frequency" value="60" min="30" max="300" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 10px 15px; color: #e4e4e4; width: 100%; box-sizing: border-box;">
                 </div>
             </div>
         </div>
 
-        <!-- SMTP Section -->
+        <!-- SMTP -->
         <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 20px; margin-bottom: 20px;">
-            <h3 style="color: #e5a00d; margin-bottom: 15px;">📧 SMTP Settings</h3>
+            <h3 style="color: #e5a00d; margin: 0 0 15px 0;">📧 SMTP Settings</h3>
             <div style="display: grid; gap: 12px;">
-                <input type="text" id="config-smtp-host" placeholder="Host" class="search-box" style="width: 100%; margin-bottom: 0;">
+                <input type="text" id="config-smtp-host" placeholder="Host" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 10px 15px; color: #e4e4e4; width: 100%; box-sizing: border-box;">
                 <div style="display: grid; grid-template-columns: 150px 1fr; gap: 12px;">
-                    <input type="number" id="config-smtp-port" placeholder="Port" class="search-box" style="width: 100%; margin-bottom: 0;">
-                    <input type="email" id="config-smtp-from" placeholder="From Address" class="search-box" style="width: 100%; margin-bottom: 0;">
+                    <input type="number" id="config-smtp-port" placeholder="Port" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 10px 15px; color: #e4e4e4; width: 100%; box-sizing: border-box;">
+                    <input type="email" id="config-smtp-from" placeholder="From Address" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 10px 15px; color: #e4e4e4; width: 100%; box-sizing: border-box;">
                 </div>
-                <input type="text" id="config-smtp-user" placeholder="Username" class="search-box" style="width: 100%; margin-bottom: 0;">
-                <input type="password" id="config-smtp-password" placeholder="Password (leave masked)" class="search-box" style="width: 100%; margin-bottom: 0;">
+                <input type="text" id="config-smtp-user" placeholder="Username" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 10px 15px; color: #e4e4e4; width: 100%; box-sizing: border-box;">
+                <input type="password" id="config-smtp-password" placeholder="Password (masked)" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 10px 15px; color: #e4e4e4; width: 100%; box-sizing: border-box;">
             </div>
         </div>
 
-        <!-- Services Grid -->
+        <!-- Services -->
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
-            <!-- Jellyseerr -->
             <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 20px;">
-                <h3 style="color: #e5a00d; margin-bottom: 15px;">🎬 Jellyseerr</h3>
-                <input type="url" id="config-jellyseerr-url" placeholder="URL" class="search-box" style="width: 100%; margin-bottom: 12px;">
-                <input type="password" id="config-jellyseerr-api" placeholder="API Key" class="search-box" style="width: 100%; margin-bottom: 0;">
+                <h3 style="color: #e5a00d; margin: 0 0 12px 0;">🎬 Jellyseerr</h3>
+                <input type="url" id="config-jellyseerr-url" placeholder="URL" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 10px 15px; color: #e4e4e4; width: 100%; box-sizing: border-box; margin-bottom: 12px;">
+                <input type="password" id="config-jellyseerr-api" placeholder="API Key" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 10px 15px; color: #e4e4e4; width: 100%; box-sizing: border-box;">
             </div>
-
-            <!-- Sonarr -->
             <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 20px;">
-                <h3 style="color: #e5a00d; margin-bottom: 15px;">📺 Sonarr</h3>
-                <input type="url" id="config-sonarr-url" placeholder="URL" class="search-box" style="width: 100%; margin-bottom: 12px;">
-                <input type="password" id="config-sonarr-api" placeholder="API Key" class="search-box" style="width: 100%; margin-bottom: 0;">
+                <h3 style="color: #e5a00d; margin: 0 0 12px 0;">📺 Sonarr</h3>
+                <input type="url" id="config-sonarr-url" placeholder="URL" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 10px 15px; color: #e4e4e4; width: 100%; box-sizing: border-box; margin-bottom: 12px;">
+                <input type="password" id="config-sonarr-api" placeholder="API Key" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 10px 15px; color: #e4e4e4; width: 100%; box-sizing: border-box;">
             </div>
-
-            <!-- Radarr -->
             <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 20px;">
-                <h3 style="color: #e5a00d; margin-bottom: 15px;">🎥 Radarr</h3>
-                <input type="url" id="config-radarr-url" placeholder="URL" class="search-box" style="width: 100%; margin-bottom: 12px;">
-                <input type="password" id="config-radarr-api" placeholder="API Key" class="search-box" style="width: 100%; margin-bottom: 0;">
+                <h3 style="color: #e5a00d; margin: 0 0 12px 0;">🎥 Radarr</h3>
+                <input type="url" id="config-radarr-url" placeholder="URL" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 10px 15px; color: #e4e4e4; width: 100%; box-sizing: border-box; margin-bottom: 12px;">
+                <input type="password" id="config-radarr-api" placeholder="API Key" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 10px 15px; color: #e4e4e4; width: 100%; box-sizing: border-box;">
             </div>
-
-            <!-- Plex -->
             <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 20px;">
-                <h3 style="color: #e5a00d; margin-bottom: 15px;">🍿 Plex</h3>
-                <input type="url" id="config-plex-url" placeholder="URL" class="search-box" style="width: 100%; margin-bottom: 12px;">
-                <input type="password" id="config-plex-token" placeholder="Token" class="search-box" style="width: 100%; margin-bottom: 0;">
+                <h3 style="color: #e5a00d; margin: 0 0 12px 0;">🍿 Plex</h3>
+                <input type="url" id="config-plex-url" placeholder="URL" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 10px 15px; color: #e4e4e4; width: 100%; box-sizing: border-box; margin-bottom: 12px;">
+                <input type="password" id="config-plex-token" placeholder="Token" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 10px 15px; color: #e4e4e4; width: 100%; box-sizing: border-box;">
             </div>
         </div>
 
