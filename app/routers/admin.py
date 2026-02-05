@@ -918,6 +918,12 @@ async def get_config():
     
     try:
         config = {
+            "timing": {
+                "initial_delay_minutes": int(os.getenv("NOTIFICATION_INITIAL_DELAY_MIN", "7")),
+                "extension_delay_minutes": int(os.getenv("NOTIFICATION_EXTENSION_DELAY_MIN", "3")),
+                "max_wait_minutes": int(os.getenv("NOTIFICATION_MAX_WAIT_MIN", "15")),
+                "check_frequency_seconds": int(os.getenv("NOTIFICATION_CHECK_FREQUENCY_SEC", "60"))
+            },
             "smtp": {
                 "host": os.getenv("SMTP_HOST", ""),
                 "port": os.getenv("SMTP_PORT", "587"),
@@ -973,6 +979,21 @@ async def update_config(config: dict):
         
         # Update with new values (only if not masked)
         updates = []
+        
+        # Notification Timing
+        if 'timing' in config:
+            if config['timing'].get('initial_delay_minutes'):
+                env_dict['NOTIFICATION_INITIAL_DELAY_MIN'] = str(config['timing']['initial_delay_minutes'])
+                updates.append('NOTIFICATION_INITIAL_DELAY_MIN')
+            if config['timing'].get('extension_delay_minutes'):
+                env_dict['NOTIFICATION_EXTENSION_DELAY_MIN'] = str(config['timing']['extension_delay_minutes'])
+                updates.append('NOTIFICATION_EXTENSION_DELAY_MIN')
+            if config['timing'].get('max_wait_minutes'):
+                env_dict['NOTIFICATION_MAX_WAIT_MIN'] = str(config['timing']['max_wait_minutes'])
+                updates.append('NOTIFICATION_MAX_WAIT_MIN')
+            if config['timing'].get('check_frequency_seconds'):
+                env_dict['NOTIFICATION_CHECK_FREQUENCY_SEC'] = str(config['timing']['check_frequency_seconds'])
+                updates.append('NOTIFICATION_CHECK_FREQUENCY_SEC')
         
         # SMTP
         if 'smtp' in config:

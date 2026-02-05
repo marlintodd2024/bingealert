@@ -363,6 +363,53 @@
             opacity: 0.3;
         }
 
+        /* Config page styles */
+        .config-section {
+            background: var(--bg-card);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+        }
+
+        .config-section h3 {
+            color: var(--accent-primary);
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+
+        .config-grid {
+            display: grid;
+            gap: 15px;
+        }
+
+        .config-input {
+            width: 100%;
+            padding: 10px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+
+        .config-input:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+        }
+
+        .config-label {
+            display: block;
+            margin-bottom: 5px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .config-hint {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-left: 5px;
+        }
+
         .search-box {
             background: rgba(255, 255, 255, 0.05);
             border: 1px solid rgba(255, 255, 255, 0.1);
@@ -626,97 +673,129 @@
 
     <!-- Settings Tab -->
     <div id="settingsTab" class="tab-content">
-        <h2 style="margin-bottom: 20px;">⚙️ Configuration Settings</h2>
+        <h2 style="margin-bottom: 20px; color: var(--text-primary);">⚙️ Configuration Settings</h2>
         <p style="color: var(--text-secondary); margin-bottom: 30px;">
             ⚠️ Warning: Changing these settings may break integrations. A container restart is required after saving.
         </p>
 
         <div style="display: grid; gap: 30px;">
-            <!-- SMTP Settings -->
-            <div style="background: var(--bg-card); padding: 20px; border-radius: 12px; border: 1px solid var(--border-color);">
-                <h3 style="color: var(--accent-primary); margin-bottom: 15px;">📧 SMTP Email Settings</h3>
-                <div style="display: grid; gap: 15px;">
+            <!-- Notification Timing Settings -->
+            <div class="config-section">
+                <h3>⏱️ Notification Timing</h3>
+                <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 15px;">
+                    Control how the smart batching system works. These affect when emails are sent.
+                </p>
+                <div class="config-grid">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+                        <div>
+                            <label class="config-label">Initial Delay (minutes)</label>
+                            <input type="number" id="config-initial-delay" value="7" min="1" max="30" class="config-input">
+                            <small style="color: var(--text-secondary); font-size: 11px;">Time before first send check</small>
+                        </div>
+                        <div>
+                            <label class="config-label">Extension Interval (minutes)</label>
+                            <input type="number" id="config-extension-delay" value="3" min="1" max="10" class="config-input">
+                            <small style="color: var(--text-secondary); font-size: 11px;">Extend when queue has more</small>
+                        </div>
+                        <div>
+                            <label class="config-label">Max Wait Time (minutes)</label>
+                            <input type="number" id="config-max-wait" value="15" min="5" max="60" class="config-input">
+                            <small style="color: var(--text-secondary); font-size: 11px;">Never wait longer than this</small>
+                        </div>
+                    </div>
                     <div>
-                        <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 14px;">Host</label>
-                        <input type="text" id="config-smtp-host" placeholder="smtp.gmail.com" style="width: 100%; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-primary);">
+                        <label class="config-label">Processor Check Frequency (seconds)</label>
+                        <input type="number" id="config-check-frequency" value="60" min="30" max="300" class="config-input">
+                        <small style="color: var(--text-secondary); font-size: 11px;">How often to check for pending notifications (60 = every minute)</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SMTP Settings -->
+            <div class="config-section">
+                <h3>📧 SMTP Email Settings</h3>
+                <div class="config-grid">
+                    <div>
+                        <label class="config-label">Host</label>
+                        <input type="text" id="config-smtp-host" placeholder="smtp.gmail.com" class="config-input">
                     </div>
                     <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 15px;">
                         <div>
-                            <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 14px;">Port</label>
-                            <input type="number" id="config-smtp-port" placeholder="587" style="width: 100%; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-primary);">
+                            <label class="config-label">Port</label>
+                            <input type="number" id="config-smtp-port" placeholder="587" class="config-input">
                         </div>
                         <div>
-                            <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 14px;">From Address</label>
-                            <input type="email" id="config-smtp-from" placeholder="noreply@example.com" style="width: 100%; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-primary);">
+                            <label class="config-label">From Address</label>
+                            <input type="email" id="config-smtp-from" placeholder="noreply@example.com" class="config-input">
                         </div>
                     </div>
                     <div>
-                        <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 14px;">Username</label>
-                        <input type="text" id="config-smtp-user" placeholder="user@gmail.com" style="width: 100%; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-primary);">
+                        <label class="config-label">Username</label>
+                        <input type="text" id="config-smtp-user" placeholder="user@gmail.com" class="config-input">
                     </div>
                     <div>
-                        <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 14px;">Password <span style="font-size: 12px;">(leave masked to keep current)</span></label>
-                        <input type="password" id="config-smtp-password" placeholder="••••••••" style="width: 100%; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-primary);">
+                        <label class="config-label">Password <span class="config-hint">(leave masked to keep current)</span></label>
+                        <input type="password" id="config-smtp-password" placeholder="••••••••" class="config-input">
                     </div>
                 </div>
             </div>
 
             <!-- Jellyseerr Settings -->
-            <div style="background: var(--bg-card); padding: 20px; border-radius: 12px; border: 1px solid var(--border-color);">
-                <h3 style="color: var(--accent-primary); margin-bottom: 15px;">🎬 Jellyseerr Settings</h3>
-                <div style="display: grid; gap: 15px;">
+            <div class="config-section">
+                <h3>🎬 Jellyseerr Settings</h3>
+                <div class="config-grid">
                     <div>
-                        <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 14px;">URL</label>
-                        <input type="url" id="config-jellyseerr-url" placeholder="http://192.168.1.15:5055" style="width: 100%; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-primary);">
+                        <label class="config-label">URL</label>
+                        <input type="url" id="config-jellyseerr-url" placeholder="http://192.168.1.15:5055" class="config-input">
                     </div>
                     <div>
-                        <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 14px;">API Key <span style="font-size: 12px;">(leave masked to keep current)</span></label>
-                        <input type="password" id="config-jellyseerr-api" placeholder="••••••••" style="width: 100%; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-primary);">
+                        <label class="config-label">API Key <span class="config-hint">(leave masked to keep current)</span></label>
+                        <input type="password" id="config-jellyseerr-api" placeholder="••••••••" class="config-input">
                     </div>
                 </div>
             </div>
 
             <!-- Sonarr Settings -->
-            <div style="background: var(--bg-card); padding: 20px; border-radius: 12px; border: 1px solid var(--border-color);">
-                <h3 style="color: var(--accent-primary); margin-bottom: 15px;">📺 Sonarr Settings</h3>
-                <div style="display: grid; gap: 15px;">
+            <div class="config-section">
+                <h3>📺 Sonarr Settings</h3>
+                <div class="config-grid">
                     <div>
-                        <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 14px;">URL</label>
-                        <input type="url" id="config-sonarr-url" placeholder="http://192.168.1.200:8989" style="width: 100%; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-primary);">
+                        <label class="config-label">URL</label>
+                        <input type="url" id="config-sonarr-url" placeholder="http://192.168.1.200:8989" class="config-input">
                     </div>
                     <div>
-                        <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 14px;">API Key <span style="font-size: 12px;">(leave masked to keep current)</span></label>
-                        <input type="password" id="config-sonarr-api" placeholder="••••••••" style="width: 100%; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-primary);">
+                        <label class="config-label">API Key <span class="config-hint">(leave masked to keep current)</span></label>
+                        <input type="password" id="config-sonarr-api" placeholder="••••••••" class="config-input">
                     </div>
                 </div>
             </div>
 
             <!-- Radarr Settings -->
-            <div style="background: var(--bg-card); padding: 20px; border-radius: 12px; border: 1px solid var(--border-color);">
-                <h3 style="color: var(--accent-primary); margin-bottom: 15px;">🎥 Radarr Settings</h3>
-                <div style="display: grid; gap: 15px;">
+            <div class="config-section">
+                <h3>🎥 Radarr Settings</h3>
+                <div class="config-grid">
                     <div>
-                        <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 14px;">URL</label>
-                        <input type="url" id="config-radarr-url" placeholder="http://192.168.1.200:7878" style="width: 100%; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-primary);">
+                        <label class="config-label">URL</label>
+                        <input type="url" id="config-radarr-url" placeholder="http://192.168.1.200:7878" class="config-input">
                     </div>
                     <div>
-                        <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 14px;">API Key <span style="font-size: 12px;">(leave masked to keep current)</span></label>
-                        <input type="password" id="config-radarr-api" placeholder="••••••••" style="width: 100%; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-primary);">
+                        <label class="config-label">API Key <span class="config-hint">(leave masked to keep current)</span></label>
+                        <input type="password" id="config-radarr-api" placeholder="••••••••" class="config-input">
                     </div>
                 </div>
             </div>
 
             <!-- Plex Settings -->
-            <div style="background: var(--bg-card); padding: 20px; border-radius: 12px; border: 1px solid var(--border-color);">
-                <h3 style="color: var(--accent-primary); margin-bottom: 15px;">🍿 Plex Settings</h3>
-                <div style="display: grid; gap: 15px;">
+            <div class="config-section">
+                <h3>🍿 Plex Settings</h3>
+                <div class="config-grid">
                     <div>
-                        <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 14px;">URL</label>
-                        <input type="url" id="config-plex-url" placeholder="http://192.168.1.10:32400" style="width: 100%; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-primary);">
+                        <label class="config-label">URL</label>
+                        <input type="url" id="config-plex-url" placeholder="http://192.168.1.10:32400" class="config-input">
                     </div>
                     <div>
-                        <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 14px;">Token <span style="font-size: 12px;">(leave masked to keep current)</span></label>
-                        <input type="password" id="config-plex-token" placeholder="••••••••" style="width: 100%; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-primary);">
+                        <label class="config-label">Token <span class="config-hint">(leave masked to keep current)</span></label>
+                        <input type="password" id="config-plex-token" placeholder="••••••••" class="config-input">
                     </div>
                 </div>
             </div>
@@ -1427,6 +1506,12 @@
                 const response = await fetch(`${API_BASE}/admin/config`);
                 const config = await response.json();
                 
+                // Populate Timing fields
+                document.getElementById('config-initial-delay').value = config.timing?.initial_delay_minutes || 7;
+                document.getElementById('config-extension-delay').value = config.timing?.extension_delay_minutes || 3;
+                document.getElementById('config-max-wait').value = config.timing?.max_wait_minutes || 15;
+                document.getElementById('config-check-frequency').value = config.timing?.check_frequency_seconds || 60;
+                
                 // Populate SMTP fields
                 document.getElementById('config-smtp-host').value = config.smtp.host || '';
                 document.getElementById('config-smtp-port').value = config.smtp.port || '587';
@@ -1467,6 +1552,12 @@
             
             try {
                 const config = {
+                    timing: {
+                        initial_delay_minutes: parseInt(document.getElementById('config-initial-delay').value),
+                        extension_delay_minutes: parseInt(document.getElementById('config-extension-delay').value),
+                        max_wait_minutes: parseInt(document.getElementById('config-max-wait').value),
+                        check_frequency_seconds: parseInt(document.getElementById('config-check-frequency').value)
+                    },
                     smtp: {
                         host: document.getElementById('config-smtp-host').value,
                         port: document.getElementById('config-smtp-port').value,
