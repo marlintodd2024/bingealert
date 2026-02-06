@@ -1228,3 +1228,56 @@ async def mark_old_notifications_as_sent(hours_old: int = 24, db: Session = Depe
         logger.error(f"Failed to mark old notifications: {e}")
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/notifications/clear-all-pending")
+async def clear_all_pending_notifications(db: Session = Depends(get_db)):
+    """Mark ALL pending notifications as sent without emailing them"""
+    try:
+        from datetime import datetime
+        
+        # Find ALL pending notifications
+        pending_notifications = db.query(Notification).filter(
+            Notification.sent == False
+        ).all()
+        
+        count = len(pending_notifications)
+        
+        # Mark them as sent
+        for notif in pending_notifications:
+            notif.sent = True
+            notif.sent_at = datetime.utcnow()
+        
+        db.commit()
+        
+        logger.info(f"Marked {count} pending notifications as sent (admin override)")
+        
+        return {
+            "success": True,
+            "message": f"Marked {count} pending notifications as sent",
+            "count": count
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to clear pending notifications: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/send-weekly-summary")
+async def send_weekly_summary_now():
+    """Manually trigger weekly summary email"""
+    try:
+        from app.background.weekly_summary import send_weekly_summary
+        import asyncio
+        
+        # Run summary in background
+        asyncio.create_task(send_weekly_summary())
+        
+        return {
+            "success": True,
+            "message": "Weekly summary email will be sent shortly - check your inbox!"
+        }
+    except Exception as e:
+        logger.error(f"Failed to send weekly summary: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

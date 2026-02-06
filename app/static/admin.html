@@ -134,6 +134,21 @@
             color: #e4e4e4;
         }
 
+        button.secondary:hover {
+            background: rgba(255, 255, 255, 0.15);
+            box-shadow: 0 5px 20px rgba(255, 255, 255, 0.2);
+        }
+
+        button.danger {
+            background: #f44336;
+            color: white;
+        }
+
+        button.danger:hover {
+            background: #d32f2f;
+            box-shadow: 0 5px 20px rgba(244, 67, 54, 0.4);
+        }
+
         .tabs {
             display: flex;
             gap: 10px;
@@ -461,20 +476,27 @@
         </div>
 
         <div class="actions">
+            <!-- Primary Actions (Yellow/Orange) -->
             <button onclick="syncUsers()" id="syncUsersBtn">🔄 Sync Users</button>
             <button onclick="syncRequests()" id="syncRequestsBtn">🔄 Sync Requests</button>
             <button onclick="importAllEpisodes()" id="importEpisodesBtn">📥 Import All Episodes</button>
             <button onclick="processNotifications()" id="processNotifBtn">📧 Process Notifications</button>
-            <button onclick="clearOldNotifications()" id="clearOldBtn" style="background: #f44336;">🗑️ Clear Old (24h+)</button>
+            
+            <!-- Secondary Actions (Gray) -->
             <button onclick="runReconciliation()" id="reconcileBtn" class="secondary">🔍 Check Missed</button>
+            <button onclick="sendWeeklySummary()" id="summaryBtn" class="secondary">📊 Send Summary</button>
             <button onclick="showTestEmailModal()" class="secondary">✉️ Send Test Email</button>
             <button onclick="refreshData()" class="secondary">♻️ Refresh Data</button>
+            
+            <!-- Danger Actions (Red) -->
+            <button onclick="clearOldNotifications()" id="clearOldBtn" class="danger">🗑️ Clear Old (24h+)</button>
+            <button onclick="clearAllPending()" id="clearAllBtn" class="danger" style="background: #c62828;">⚠️ Clear ALL Pending</button>
         </div>
 
         <div class="tabs">
-            <div class="tab active" onclick="switchTab('users')">Users</div>
-            <div class="tab" onclick="switchTab('requests')">Requests</div>
-            <div class="tab" onclick="switchTab('notifications')">Notifications</div>
+            <div class="tab active" onclick="switchTab('users')">👥 Users</div>
+            <div class="tab" onclick="switchTab('requests')">📋 Requests</div>
+            <div class="tab" onclick="switchTab('notifications')">📧 Notifications</div>
             <div class="tab" onclick="switchTab('upcoming')">📅 Upcoming Episodes</div>
             <div class="tab" onclick="switchTab('backup')">💾 Backup</div>
             <div class="tab" onclick="switchTab('settings')">⚙️ Settings</div>
@@ -1214,6 +1236,59 @@
             } finally {
                 btn.disabled = false;
                 btn.textContent = '🗑️ Clear Old (24h+)';
+            }
+        }
+
+        async function clearAllPending() {
+            if (!confirm('⚠️ WARNING: Mark ALL pending notifications as sent WITHOUT emailing?\n\nThis will clear EVERYTHING in the queue!\n\nThis cannot be undone!')) {
+                return;
+            }
+            
+            const btn = document.getElementById('clearAllBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Clearing ALL...';
+            
+            try {
+                const response = await fetch(`${API_BASE}/admin/notifications/clear-all-pending`, { 
+                    method: 'POST' 
+                });
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showSuccess(`✅ Marked ${data.count} pending notifications as sent (no emails sent)`);
+                    await refreshData();
+                } else {
+                    showError(data.detail || 'Failed to clear pending notifications');
+                }
+            } catch (error) {
+                showError('Failed to clear pending notifications: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '⚠️ Clear ALL Pending';
+            }
+        }
+
+        async function sendWeeklySummary() {
+            const btn = document.getElementById('summaryBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Sending...';
+            
+            try {
+                const response = await fetch(`${API_BASE}/admin/send-weekly-summary`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showSuccess(data.message || 'Weekly summary sent! Check your email.');
+                } else {
+                    showError(data.detail || 'Failed to send summary');
+                }
+            } catch (error) {
+                showError('Failed to send summary: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '📊 Send Summary';
             }
         }
 

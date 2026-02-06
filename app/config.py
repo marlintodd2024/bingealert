@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     smtp_password: Optional[str] = None
     smtp_from: str
     
+    # Admin (for weekly summaries and alerts)
+    admin_email: Optional[str] = None  # If not set, uses smtp_from
+    
     # Application
     app_secret_key: str
     

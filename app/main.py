@@ -91,6 +91,15 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Failed to start reconciliation worker: {e}")
         reconciliation_task = None
     
+    # Start weekly summary worker (sends summary every Sunday at 9 AM UTC)
+    try:
+        from app.background.weekly_summary import weekly_summary_worker
+        weekly_summary_task = asyncio.create_task(weekly_summary_worker())
+        logger.info("Started weekly summary worker (runs Sundays at 9 AM UTC)")
+    except Exception as e:
+        logger.warning(f"Failed to start weekly summary worker: {e}")
+        weekly_summary_task = None
+    
     logger.info("Using Jellyseerr webhooks for real-time request tracking")
     
     yield
@@ -99,6 +108,8 @@ async def lifespan(app: FastAPI):
     notification_task.cancel()
     if reconciliation_task:
         reconciliation_task.cancel()
+    if weekly_summary_task:
+        weekly_summary_task.cancel()
     try:
         await notification_task
     except asyncio.CancelledError:
@@ -108,6 +119,11 @@ async def lifespan(app: FastAPI):
             await reconciliation_task
         except asyncio.CancelledError:
             logger.info("Reconciliation worker cancelled")
+    if weekly_summary_task:
+        try:
+            await weekly_summary_task
+        except asyncio.CancelledError:
+            logger.info("Weekly summary worker cancelled")
     
     # Cancel background task on shutdown (if enabled)
     # sync_task.cancel()
