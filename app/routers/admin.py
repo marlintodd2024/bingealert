@@ -1125,3 +1125,68 @@ async def trigger_reconciliation():
     except Exception as e:
         logger.error(f"Failed to start reconciliation: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/logs")
+async def get_logs(lines: int = 100):
+    """Get recent application logs"""
+    try:
+        import subprocess
+        
+        # Get logs from Docker container
+        result = subprocess.run(
+            ["docker", "logs", "--tail", str(lines), os.environ.get("HOSTNAME", "self")],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        # Combine stdout and stderr
+        logs = result.stdout + result.stderr
+        
+        return {
+            "success": True,
+            "logs": logs,
+            "lines": len(logs.split('\n'))
+        }
+        
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=500, detail="Timeout reading logs")
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="Docker CLI not available")
+    except Exception as e:
+        logger.error(f"Failed to read logs: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/logs/stream")
+async def stream_logs():
+    """Stream logs in real-time (SSE)"""
+    try:
+        import subprocess
+        from fastapi.responses import StreamingResponse
+        
+        async def log_generator():
+            process = subprocess.Popen(
+                ["docker", "logs", "-f", "--tail", "50", os.environ.get("HOSTNAME", "self")],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1
+            )
+            
+            try:
+                for line in process.stdout:
+                    yield f"data: {line}\n\n"
+            finally:
+                process.terminate()
+                process.wait()
+        
+        return StreamingResponse(
+            log_generator(),
+            media_type="text/event-stream"
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to stream logs: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

@@ -477,6 +477,7 @@
             <div class="tab" onclick="switchTab('upcoming')">📅 Upcoming Episodes</div>
             <div class="tab" onclick="switchTab('backup')">💾 Backup</div>
             <div class="tab" onclick="switchTab('settings')">⚙️ Settings</div>
+            <div class="tab" onclick="switchTab('logs')">📋 Logs</div>
         </div>
 
         <div id="usersTab" class="tab-content active">
@@ -720,6 +721,26 @@
                 <button onclick="loadConfig()" class="secondary" style="margin-right: 10px;">↻ Reload</button>
                 <button onclick="restartContainer()" style="background: #ff9800; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; margin-right: 10px;">🔄 Restart</button>
                 <button onclick="saveConfig()" id="saveConfigBtn">💾 Save</button>
+            </div>
+        </div>
+
+        <div id="logsTab" class="tab-content">
+            <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
+                <button onclick="loadLogs()" id="refreshLogsBtn" class="secondary">🔄 Refresh</button>
+                <button onclick="toggleAutoRefresh()" id="autoRefreshBtn" class="secondary">▶️ Auto-Refresh</button>
+                <select id="logLines" onchange="loadLogs()" style="padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
+                    <option value="50">Last 50 lines</option>
+                    <option value="100" selected>Last 100 lines</option>
+                    <option value="200">Last 200 lines</option>
+                    <option value="500">Last 500 lines</option>
+                </select>
+                <input type="text" id="logSearch" placeholder="Filter logs..." oninput="filterLogs()" style="flex: 1; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
+            </div>
+            
+            <div style="background: #000; padding: 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); max-height: 600px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.5;" id="logsContainer">
+                <div style="color: #999; text-align: center; padding: 40px;">
+                    Click "Refresh" to load logs
+                </div>
             </div>
         </div>
     </div>
@@ -1070,6 +1091,7 @@
             if (tabName === 'upcoming' && allUpcoming.length === 0) loadUpcoming();
             if (tabName === 'backup') loadBackups();
             if (tabName === 'settings') loadConfig();
+            if (tabName === 'logs' && !allLogs) loadLogs();
         }
 
         async function syncUsers() {
@@ -1200,6 +1222,98 @@
             }
         }
 
+        // Logs functionality
+        let allLogs = '';
+        let autoRefreshInterval = null;
+
+        async function loadLogs() {
+            const lines = document.getElementById('logLines').value;
+            const container = document.getElementById('logsContainer');
+            
+            try {
+                container.innerHTML = '<div style="color: #999; text-align: center; padding: 20px;">Loading logs...</div>';
+                
+                const response = await fetch(`${API_BASE}/admin/logs?lines=${lines}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    allLogs = data.logs;
+                    renderLogs();
+                    // Auto-scroll to bottom
+                    container.scrollTop = container.scrollHeight;
+                } else {
+                    container.innerHTML = `<div style="color: #f44336;">Failed to load logs: ${data.detail || 'Unknown error'}</div>`;
+                }
+            } catch (error) {
+                container.innerHTML = `<div style="color: #f44336;">Error loading logs: ${error.message}</div>`;
+            }
+        }
+
+        function renderLogs() {
+            const container = document.getElementById('logsContainer');
+            const search = document.getElementById('logSearch').value.toLowerCase();
+            
+            let logs = allLogs;
+            
+            // Filter logs if search term provided
+            if (search) {
+                logs = allLogs.split('\n')
+                    .filter(line => line.toLowerCase().includes(search))
+                    .join('\n');
+            }
+            
+            if (!logs.trim()) {
+                container.innerHTML = '<div style="color: #999;">No logs found</div>';
+                return;
+            }
+            
+            // Colorize logs
+            const colorized = logs.split('\n').map(line => {
+                let color = '#e4e4e4'; // default
+                
+                if (line.includes('ERROR') || line.includes('CRITICAL')) {
+                    color = '#f44336'; // red
+                } else if (line.includes('WARNING')) {
+                    color = '#ff9800'; // orange
+                } else if (line.includes('INFO')) {
+                    color = '#4caf50'; // green
+                } else if (line.includes('DEBUG')) {
+                    color = '#2196f3'; // blue
+                }
+                
+                return `<div style="color: ${color};">${escapeHtml(line)}</div>`;
+            }).join('');
+            
+            container.innerHTML = colorized || '<div style="color: #999;">No logs available</div>';
+        }
+
+        function filterLogs() {
+            renderLogs();
+        }
+
+        function toggleAutoRefresh() {
+            const btn = document.getElementById('autoRefreshBtn');
+            
+            if (autoRefreshInterval) {
+                // Stop auto-refresh
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+                btn.textContent = '▶️ Auto-Refresh';
+                btn.style.background = 'transparent';
+            } else {
+                // Start auto-refresh
+                autoRefreshInterval = setInterval(loadLogs, 5000); // Refresh every 5 seconds
+                btn.textContent = '⏸️ Stop';
+                btn.style.background = '#e5a00d';
+                loadLogs(); // Load immediately
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
 
         function showSuccess(message) {
             const el = document.getElementById('successMessage');
