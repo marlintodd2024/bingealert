@@ -605,120 +605,114 @@
                 </table>
             </div>
         </div>
+        <div id="settingsTab" class="tab-content">
+            <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 12px; margin-bottom: 20px;">
+                <h3 style="margin-bottom: 15px; color: #e5a00d;">⏱️ Notification Timing</h3>
+                <p style="color: #999; margin-bottom: 15px; font-size: 13px;">Control how the smart batching system works.</p>
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">Initial Delay (min)</label>
+                        <input type="number" id="config-initial-delay" value="7" min="1" max="30" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">Extension (min)</label>
+                        <input type="number" id="config-extension-delay" value="3" min="1" max="10" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">Max Wait (min)</label>
+                        <input type="number" id="config-max-wait" value="15" min="5" max="60" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">Check Freq (sec)</label>
+                        <input type="number" id="config-check-frequency" value="60" min="30" max="300" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
+                    </div>
+                </div>
+            </div>
+
+            <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 12px; margin-bottom: 20px;">
+                <h3 style="margin-bottom: 15px; color: #e5a00d;">📧 SMTP Settings</h3>
+                <div style="margin-bottom: 12px;">
+                    <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">Host</label>
+                    <input type="text" id="config-smtp-host" placeholder="smtp.gmail.com" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
+                </div>
+                <div style="display: grid; grid-template-columns: 150px 1fr; gap: 12px; margin-bottom: 12px;">
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">Port</label>
+                        <input type="number" id="config-smtp-port" placeholder="587" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">From Address</label>
+                        <input type="email" id="config-smtp-from" placeholder="noreply@example.com" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
+                    </div>
+                </div>
+                <div style="margin-bottom: 12px;">
+                    <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">Username</label>
+                    <input type="text" id="config-smtp-user" placeholder="user@gmail.com" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
+                </div>
+                <div>
+                    <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">Password</label>
+                    <input type="password" id="config-smtp-password" placeholder="••••••••" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 12px;">
+                    <h3 style="margin-bottom: 15px; color: #e5a00d;">🎬 Jellyseerr</h3>
+                    <div style="margin-bottom: 12px;">
+                        <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">URL</label>
+                        <input type="url" id="config-jellyseerr-url" placeholder="http://jellyseerr:5055" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">API Key</label>
+                        <input type="password" id="config-jellyseerr-api" placeholder="••••••••" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
+                    </div>
+                </div>
+
+                <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 12px;">
+                    <h3 style="margin-bottom: 15px; color: #e5a00d;">📺 Sonarr</h3>
+                    <div style="margin-bottom: 12px;">
+                        <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">URL</label>
+                        <input type="url" id="config-sonarr-url" placeholder="http://sonarr:8989" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">API Key</label>
+                        <input type="password" id="config-sonarr-api" placeholder="••••••••" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
+                    </div>
+                </div>
+
+                <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 12px;">
+                    <h3 style="margin-bottom: 15px; color: #e5a00d;">🎥 Radarr</h3>
+                    <div style="margin-bottom: 12px;">
+                        <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">URL</label>
+                        <input type="url" id="config-radarr-url" placeholder="http://radarr:7878" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">API Key</label>
+                        <input type="password" id="config-radarr-api" placeholder="••••••••" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
+                    </div>
+                </div>
+
+                <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 12px;">
+                    <h3 style="margin-bottom: 15px; color: #e5a00d;">🍿 Plex</h3>
+                    <div style="margin-bottom: 12px;">
+                        <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">URL</label>
+                        <input type="url" id="config-plex-url" placeholder="http://plex:32400" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">Token</label>
+                        <input type="password" id="config-plex-token" placeholder="••••••••" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
+                    </div>
+                </div>
+            </div>
+
+            <div style="text-align: right;">
+                <button onclick="loadConfig()" class="secondary" style="margin-right: 10px;">↻ Reload</button>
+                <button onclick="restartContainer()" style="background: #ff9800; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; margin-right: 10px;">🔄 Restart</button>
+                <button onclick="saveConfig()" id="saveConfigBtn">💾 Save</button>
+            </div>
+        </div>
     </div>
-    <!-- Settings Tab -->
-    <div id="settingsTab" class="tab-content">
-        <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 12px; margin-bottom: 20px;">
-            <h3 style="margin-bottom: 15px; color: #e5a00d;">⏱️ Notification Timing</h3>
-            <p style="color: #999; margin-bottom: 15px; font-size: 13px;">Control how the smart batching system works.</p>
-            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
-                <div>
-                    <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">Initial Delay (min)</label>
-                    <input type="number" id="config-initial-delay" value="7" min="1" max="30" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
-                </div>
-                <div>
-                    <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">Extension (min)</label>
-                    <input type="number" id="config-extension-delay" value="3" min="1" max="10" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
-                </div>
-                <div>
-                    <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">Max Wait (min)</label>
-                    <input type="number" id="config-max-wait" value="15" min="5" max="60" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
-                </div>
-                <div>
-                    <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">Check Freq (sec)</label>
-                    <input type="number" id="config-check-frequency" value="60" min="30" max="300" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
-                </div>
-            </div>
-        </div>
 
-        <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 12px; margin-bottom: 20px;">
-            <h3 style="margin-bottom: 15px; color: #e5a00d;">📧 SMTP Settings</h3>
-            <div style="margin-bottom: 12px;">
-                <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">Host</label>
-                <input type="text" id="config-smtp-host" placeholder="smtp.gmail.com" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
-            </div>
-            <div style="display: grid; grid-template-columns: 150px 1fr; gap: 12px; margin-bottom: 12px;">
-                <div>
-                    <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">Port</label>
-                    <input type="number" id="config-smtp-port" placeholder="587" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
-                </div>
-                <div>
-                    <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">From Address</label>
-                    <input type="email" id="config-smtp-from" placeholder="noreply@example.com" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
-                </div>
-            </div>
-            <div style="margin-bottom: 12px;">
-                <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">Username</label>
-                <input type="text" id="config-smtp-user" placeholder="user@gmail.com" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
-            </div>
-            <div>
-                <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">Password</label>
-                <input type="password" id="config-smtp-password" placeholder="••••••••" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
-            </div>
-        </div>
-
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
-            <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 12px;">
-                <h3 style="margin-bottom: 15px; color: #e5a00d;">🎬 Jellyseerr</h3>
-                <div style="margin-bottom: 12px;">
-                    <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">URL</label>
-                    <input type="url" id="config-jellyseerr-url" placeholder="http://jellyseerr:5055" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
-                </div>
-                <div>
-                    <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">API Key</label>
-                    <input type="password" id="config-jellyseerr-api" placeholder="••••••••" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
-                </div>
-            </div>
-
-            <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 12px;">
-                <h3 style="margin-bottom: 15px; color: #e5a00d;">📺 Sonarr</h3>
-                <div style="margin-bottom: 12px;">
-                    <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">URL</label>
-                    <input type="url" id="config-sonarr-url" placeholder="http://sonarr:8989" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
-                </div>
-                <div>
-                    <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">API Key</label>
-                    <input type="password" id="config-sonarr-api" placeholder="••••••••" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
-                </div>
-            </div>
-
-            <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 12px;">
-                <h3 style="margin-bottom: 15px; color: #e5a00d;">🎥 Radarr</h3>
-                <div style="margin-bottom: 12px;">
-                    <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">URL</label>
-                    <input type="url" id="config-radarr-url" placeholder="http://radarr:7878" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
-                </div>
-                <div>
-                    <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">API Key</label>
-                    <input type="password" id="config-radarr-api" placeholder="••••••••" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
-                </div>
-            </div>
-
-            <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 12px;">
-                <h3 style="margin-bottom: 15px; color: #e5a00d;">🍿 Plex</h3>
-                <div style="margin-bottom: 12px;">
-                    <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">URL</label>
-                    <input type="url" id="config-plex-url" placeholder="http://plex:32400" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
-                </div>
-                <div>
-                    <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">Token</label>
-                    <input type="password" id="config-plex-token" placeholder="••••••••" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
-                </div>
-            </div>
-        </div>
-
-        <div style="text-align: right;">
-            <button onclick="loadConfig()" class="secondary" style="margin-right: 10px;">↻ Reload</button>
-            <button onclick="restartContainer()" style="background: #ff9800; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; margin-right: 10px;">🔄 Restart</button>
-            <button onclick="saveConfig()" id="saveConfigBtn">💾 Save</button>
-        </div>
-    </div>
-    <!-- Shared Users Modal -->
-    <div id="sharedUsersModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center;">
-        <div style="background: #1a1a2e; border-radius: 12px; padding: 30px; max-width: 600px; width: 90%; border: 1px solid rgba(255,255,255,0.1); max-height: 80vh; overflow-y: auto;">
-            <h2 style="margin-bottom: 10px; color: #e5a00d;">👥 Manage Shared Users</h2>
-            <p style="color: #999; margin-bottom: 20px; font-size: 14px;" id="sharedUsersTitle"></p>
-            
 
     <!-- Test Email Modal -->
     <div id="testEmailModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center;">
@@ -745,6 +739,12 @@
         </div>
     </div>
 
+    <!-- Shared Users Modal -->
+    <div id="sharedUsersModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center;">
+        <div style="background: #1a1a2e; border-radius: 12px; padding: 30px; max-width: 600px; width: 90%; border: 1px solid rgba(255,255,255,0.1); max-height: 80vh; overflow-y: auto;">
+            <h2 style="margin-bottom: 10px; color: #e5a00d;">👥 Manage Shared Users</h2>
+            <p style="color: #999; margin-bottom: 20px; font-size: 14px;" id="sharedUsersTitle"></p>
+            
             <div style="margin-bottom: 20px;">
                 <h3 style="color: #e5a00d; font-size: 16px; margin-bottom: 10px;">Current Users</h3>
                 <div id="sharedUsersList" style="max-height: 200px; overflow-y: auto;">
@@ -758,7 +758,7 @@
                     <select id="addUserSelect" style="flex: 1; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
                         <option value="">Select a user...</option>
                     </select>
-                    <button onclick="addSharedUser()" id="addUserBtn">➕ Add</button>
+                    <button onclick="addSharedUser()" style="padding: 10px 20px; background: #e5a00d; color: white; border: none; border-radius: 8px; cursor: pointer;">Add</button>
                 </div>
             </div>
             
