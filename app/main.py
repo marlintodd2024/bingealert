@@ -82,16 +82,26 @@ async def lifespan(app: FastAPI):
     notification_task = asyncio.create_task(process_notifications_periodically())
     logger.info("Started notification processor (checks every 60 seconds)")
     
+    # Start reconciliation worker (checks every 2 hours for missed webhooks)
+    from app.background.reconciliation import reconciliation_worker
+    reconciliation_task = asyncio.create_task(reconciliation_worker())
+    logger.info("Started reconciliation worker (checks every 2 hours)")
+    
     logger.info("Using Jellyseerr webhooks for real-time request tracking")
     
     yield
     
     # Cancel background tasks on shutdown
     notification_task.cancel()
+    reconciliation_task.cancel()
     try:
         await notification_task
     except asyncio.CancelledError:
         logger.info("Notification processor cancelled")
+    try:
+        await reconciliation_task
+    except asyncio.CancelledError:
+        logger.info("Reconciliation worker cancelled")
     
     # Cancel background task on shutdown (if enabled)
     # sync_task.cancel()

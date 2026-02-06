@@ -465,6 +465,7 @@
             <button onclick="syncRequests()" id="syncRequestsBtn">🔄 Sync Requests</button>
             <button onclick="importAllEpisodes()" id="importEpisodesBtn">📥 Import All Episodes</button>
             <button onclick="processNotifications()" id="processNotifBtn">📧 Process Notifications</button>
+            <button onclick="runReconciliation()" id="reconcileBtn" class="secondary">🔍 Check Missed</button>
             <button onclick="showTestEmailModal()" class="secondary">✉️ Send Test Email</button>
             <button onclick="refreshData()" class="secondary">♻️ Refresh Data</button>
         </div>
@@ -1172,6 +1173,33 @@
             await loadUpcoming();
             document.getElementById('lastSync').textContent = 'Last sync: ' + new Date().toLocaleString();
         }
+
+        async function runReconciliation() {
+            const btn = document.getElementById('reconcileBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Checking...';
+            
+            try {
+                const response = await fetch(`${API_BASE}/admin/reconcile`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showSuccess(data.message || 'Reconciliation check started! Check logs for results.');
+                    // Refresh data after a few seconds
+                    setTimeout(() => refreshData(), 5000);
+                } else {
+                    showError(data.detail || 'Reconciliation failed');
+                }
+            } catch (error) {
+                showError('Failed to start reconciliation: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🔍 Check Missed';
+            }
+        }
+
 
         function showSuccess(message) {
             const el = document.getElementById('successMessage');

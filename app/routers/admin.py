@@ -1106,3 +1106,22 @@ async def restart_container():
         raise HTTPException(status_code=500, detail=str(e))
         logger.error(f"Failed to update config: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/reconcile")
+async def trigger_reconciliation():
+    """Manually trigger reconciliation check"""
+    try:
+        from app.background.reconciliation import run_reconciliation
+        import asyncio
+        
+        # Run reconciliation in background
+        asyncio.create_task(run_reconciliation())
+        
+        return {
+            "success": True,
+            "message": "Reconciliation started - check logs for results"
+        }
+    except Exception as e:
+        logger.error(f"Failed to start reconciliation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
