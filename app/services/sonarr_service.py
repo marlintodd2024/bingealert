@@ -24,6 +24,14 @@ class SonarrService:
             response.raise_for_status()
             return response.json()
     
+    async def _post(self, endpoint: str, data: dict) -> dict:
+        """Make POST request to Sonarr API"""
+        url = f"{self.base_url}/api/v3{endpoint}"
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, headers=self.headers, json=data)
+            response.raise_for_status()
+            return response.json()
+    
     async def get_series(self, series_id: int) -> Optional[Dict]:
         """Get series details from Sonarr"""
         try:
@@ -118,3 +126,70 @@ class SonarrService:
         except Exception as e:
             logger.error(f"Failed to fetch Sonarr calendar: {e}")
             return None
+    
+    async def get_all_series(self) -> Optional[list]:
+        """Get all series from Sonarr"""
+        try:
+            series_list = await self._get("/series")
+            return series_list
+        except Exception as e:
+            logger.error(f"Failed to fetch all series from Sonarr: {e}")
+            return None
+    
+    async def get_quality_profiles(self) -> list:
+        """Get all quality profiles from Sonarr"""
+        try:
+            profiles = await self._get("/qualityProfile")
+            return profiles
+        except Exception as e:
+            logger.error(f"Failed to fetch quality profiles from Sonarr: {e}")
+            return []
+    
+    async def _delete(self, endpoint: str, params: dict = None) -> bool:
+        """Make DELETE request to Sonarr API"""
+        url = f"{self.base_url}/api/v3{endpoint}"
+        async with httpx.AsyncClient() as client:
+            response = await client.delete(url, headers=self.headers, params=params)
+            response.raise_for_status()
+            return True
+    
+    async def blacklist_and_research_series(self, tmdb_id: int) -> dict:
+        """Blacklist current episode files for a series and trigger a new search.
+        Returns dict with 'success', 'message', and optionally 'details'."""
+        try:
+            # Step 1: Find the series in Sonarr by TMDB ID
+            series = await self.get_series_by_tmdb(tmdb_id)
+            if not series:
+                return {"success": False, "message": f"Series with TMDB ID {tmdb_id} not found in Sonarr"}
+            
+            series_id = series.get("id")
+            
+            # Step 2: Get episode files for this series
+            try:
+                episode_files = await self._get(f"/episodefile?seriesId={series_id}")
+            except Exception:
+                episode_files = []
+            
+            blacklisted_count = 0
+            if episode_files:
+                # Blacklist each episode file
+                for ef in episode_files:
+                    try:
+                        await self._delete(f"/episodefile/{ef['id']}", params={"addImportExclusion": "true"})
+                        blacklisted_count += 1
+                    except Exception as e:
+                        logger.warning(f"Failed to blacklist episode file {ef['id']}: {e}")
+            
+            # Step 3: Trigger a series search
+            logger.info(f"Triggering new search for series {series.get('title')}")
+            await self._post("/command", {"name": "SeriesSearch", "seriesId": series_id})
+            
+            return {
+                "success": True,
+                "message": f"Blacklisted {blacklisted_count} file(s) and triggered re-search for {series.get('title')}",
+                "details": {"series_id": series_id, "blacklisted_files": blacklisted_count}
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to blacklist and re-search series TMDB {tmdb_id}: {e}")
+            return {"success": False, "message": f"Error: {str(e)}"}

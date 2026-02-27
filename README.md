@@ -1,434 +1,329 @@
-# Plex Notification Portal
+# 📬 Plex Notification Portal
 
-A notification service that monitors Sonarr/Radarr downloads and sends email notifications to users when their requested content becomes available in Plex.
+A self-hosted notification system for Plex media servers that integrates with **Seerr** (Jellyseerr/Overseerr), **Sonarr**, and **Radarr** to send intelligent email notifications when requested content is ready to watch.
+
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Docker](https://img.shields.io/badge/docker-ready-brightgreen.svg)
+![GHCR](https://img.shields.io/badge/ghcr.io-published-blue.svg)
+![Python](https://img.shields.io/badge/python-3.11-blue.svg)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.109-009688.svg)
+
+---
+
+## Why?
+
+Plex and Seerr don't do a great job of telling users when their requested content is actually ready. This portal bridges that gap — when someone requests a movie or show, they get a polished email the moment it's available in Plex. No more "is my show ready yet?" messages.
+
+---
 
 ## Features
 
-- 📺 **Episode-by-episode notifications** - Get notified as each new TV episode becomes available
-- 🎬 **Movie notifications** - Instant alerts when requested movies are ready
-- 👥 **User management** - Automatically syncs users from Jellyseerr
-- 📧 **Email notifications** - Beautiful HTML email templates
-- 🔄 **Automatic syncing** - Keeps track of all user requests and content availability
-- 🎯 **Smart tracking** - Prevents duplicate notifications and tracks notification history
-- 📥 **Existing episode import** - Automatically imports already-downloaded episodes from Sonarr to prevent notification spam for old episodes
-- 🎛️ **Web Admin Dashboard** - Beautiful web interface to manage users, requests, and notifications
+**Smart Notifications** — Episodes are batched into a single email (no spam), with a configurable delay to let Plex index the content first. Movies and TV are handled separately with beautiful HTML emails that include posters and direct Plex links.
 
-## How It Works
+**Quality & Release Monitoring** — Automatically detects when requested content isn't released yet ("Coming Soon" emails) or isn't available in the requested quality ("Quality Waiting" emails). Grab webhooks cancel quality alerts when downloads begin.
 
-1. **Jellyseerr** provides user data and tracks content requests
-2. **Sonarr** sends webhooks when TV episodes are downloaded
-3. **Radarr** sends webhooks when movies are downloaded
-4. **Notification Portal** matches downloads to user requests and sends email notifications
+**Issue Auto-Fix** — When users report issues in Seerr (bad audio, wrong subtitles, etc.), the portal can automatically blacklist the file, trigger a new search, and notify the user when the replacement downloads.
 
-### Existing Episode Import
+**Shared Requests** — Multiple users can be attached to the same request. Everyone gets notified when the content is ready.
 
-When you sync requests from Jellyseerr, the system automatically:
+**Reconciliation** — A background worker catches missed webhooks by periodically scanning Sonarr/Radarr for content that downloaded but never triggered a notification. Also cleans up stale issues.
 
-1. **Checks Sonarr** for each TV show request to see what episodes are already downloaded
-2. **Creates tracking records** for existing episodes marked as "already notified" 
-3. **Prevents spam** by not sending notifications for episodes that were downloaded before the portal was set up
-4. **Only notifies** about NEW episodes that download after the sync
+**Authentication** — Optional password protection for external access with Cloudflare Turnstile bot protection. Local network connections bypass login automatically.
 
-**Example scenario:**
-- User requests "Breaking Bad" Season 1 in Jellyseerr (6 months ago)
-- Episodes 1-8 are already in Sonarr/Plex
-- You set up the notification portal today
-- Portal imports episodes 1-8 as "already notified"
-- Episode 9 downloads tomorrow → User gets an email notification ✅
-- No spam about old episodes 1-8 ❌
+**Admin Dashboard** — Full web UI for managing users, requests, notifications, issues, upcoming episodes, backups, settings, and real-time logs.
 
-## Architecture
+**Setup Wizard** — A guided 6-step setup for new installations that tests each connection as you go.
 
-```
-Jellyseerr (Users & Requests) 
-    ↓
-Notification Portal API
-    ↓
-PostgreSQL Database
-    ↑
-Sonarr/Radarr (Webhooks)
-    ↓
-Email Notifications → Users
-```
-
-## Prerequisites
-
-- Docker & Docker Compose
-- Jellyseerr instance (with API access)
-- Sonarr instance (with API access)
-- Radarr instance (with API access)
-- SMTP email server (Gmail, Outlook, etc.)
+---
 
 ## Quick Start
 
-### 1. Clone and Configure
+### Prerequisites
+
+- Docker & Docker Compose
+- Seerr (Jellyseerr or Overseerr)
+- Sonarr and Radarr
+- Plex Media Server
+- SMTP email credentials (Gmail App Password, SMTP2GO, etc.)
+
+### Option A: Docker Pull (Recommended)
+
+No cloning needed — just download two files and go:
 
 ```bash
-# Clone the repository
-git clone <your-repo-url>
-cd plex-notification-portal
+# Download the compose file and config template
+curl -O https://raw.githubusercontent.com/marlintodd/plex-notification-portal/main/docker-compose.ghcr.yml
+curl -O https://raw.githubusercontent.com/marlintodd/plex-notification-portal/main/.env.example
 
-# Copy environment template
+# Configure
 cp .env.example .env
+nano .env   # Fill in your settings
 
-# Edit .env with your configuration
-nano .env
+# Start
+docker compose -f docker-compose.ghcr.yml up -d
 ```
 
-### 2. Configure Environment Variables
+### Option B: Build from Source
 
-Edit `.env` with your settings:
+```bash
+git clone https://github.com/marlintodd/plex-notification-portal.git
+cd plex-notification-portal
+cp .env.example .env
+nano .env   # Fill in your settings
+docker compose up -d
+```
+
+### Setup Wizard
+
+Navigate to `http://your-server:8000` — the setup wizard walks you through connecting all your services and verifying everything works.
+
+### Configure Webhooks
+
+Set up webhooks in each service pointing to your portal:
+
+#### Seerr (Jellyseerr / Overseerr)
+- **Settings → Notifications → Webhook**
+- URL: `http://your-server:8000/webhooks/jellyseerr`
+- Enable: Media Requested, Media Approved, Media Auto-Approved, Issue Created, Issue Resolved
+
+#### Sonarr
+- **Settings → Connect → Add → Webhook**
+- URL: `http://your-server:8000/webhooks/sonarr`
+- Enable: **On Grab** ✅ and **On Import Complete** ✅
+
+#### Radarr
+- **Settings → Connect → Add → Webhook**
+- URL: `http://your-server:8000/webhooks/radarr`
+- Enable: **On Grab** ✅ and **On File Import** ✅ (not "On Import Complete")
+
+> **Important:** The "On Grab" webhook is required for quality monitoring to work properly — it cancels "Quality Waiting" notifications when a download starts.
+
+### Sync & Test
+
+From the dashboard:
+1. Click **Sync Users** and **Sync Requests** to import your existing data
+2. Click **Send Test Email** to verify SMTP
+3. Request something in Seerr and watch it flow through
+
+### Updating
+
+**Docker Pull users:**
+```bash
+docker compose -f docker-compose.ghcr.yml pull
+docker compose -f docker-compose.ghcr.yml up -d
+```
+
+**Build from Source users:**
+```bash
+git pull
+docker compose up -d --build
+```
+
+---
+
+## How It Works
+
+```
+User requests content in Seerr
+        │
+        ▼
+   Seerr webhook ──→ Portal stores request
+        │                    │
+        │              Quality check (10s delay)
+        │              ├─ Not released → "Coming Soon" email
+        │              └─ Wrong quality → "Quality Waiting" email (cancelable)
+        │
+   Content downloads in Sonarr/Radarr
+        │
+        ├─ Grab webhook ──→ Cancel quality waiting notification
+        │
+        └─ Import webhook ──→ Create notification
+                                  │
+                            7-min batch window
+                            (groups episodes)
+                                  │
+                            Check Plex availability
+                                  │
+                            Send email ✉️
+```
+
+---
+
+## Architecture
+
+| Component | Technology |
+|-----------|-----------|
+| Backend | FastAPI (Python 3.11) |
+| Database | PostgreSQL 15 |
+| Frontend | Vanilla HTML/CSS/JS |
+| Deployment | Docker + Docker Compose |
+| Email | SMTP (any provider) |
+
+---
+
+## Configuration
+
+All settings are configurable from the **Settings** tab in the admin dashboard. Changes are saved to `.env` (for service connections) or the database (for auth, reconciliation, etc.).
+
+### Settings Sections
+
+- **Smart Batching** — Initial delay, extension delay, max wait, check frequency
+- **Email / SMTP** — Server, port, credentials, sender info
+- **Quality Monitoring** — Enable/disable, check interval, waiting delay
+- **Issue Auto-Fix** — Manual, auto, or auto + notify modes
+- **Reconciliation** — Check interval, issue fixing/reported/abandon cutoffs
+- **Authentication** — Enable/disable, admin password, local network CIDR, session timeout, Cloudflare Turnstile
+- **Connected Services** — Seerr, Sonarr, Radarr, Plex URLs and API keys
+
+### Environment Variables
+
+See [`.env.example`](.env.example) for all available options. The minimum required:
 
 ```env
-# Database
-DB_PASSWORD=your_secure_password
-
-# Jellyseerr
-JELLYSEERR_URL=http://jellyseerr:5055
-JELLYSEERR_API_KEY=your_api_key_here
-
-# Sonarr
-SONARR_URL=http://sonarr:8989
-SONARR_API_KEY=your_api_key_here
-
-# Radarr
-RADARR_URL=http://radarr:7878
-RADARR_API_KEY=your_api_key_here
-
-# Email (Gmail example)
+DB_PASSWORD=your_password
+JELLYSEERR_URL=http://your-seerr:5055
+JELLYSEERR_API_KEY=your_key
+SONARR_URL=http://your-sonarr:8989
+SONARR_API_KEY=your_key
+RADARR_URL=http://your-radarr:7878
+RADARR_API_KEY=your_key
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
-SMTP_USER=your_email@gmail.com
+SMTP_USER=you@gmail.com
 SMTP_PASSWORD=your_app_password
-SMTP_FROM=Plex Notifications <your_email@gmail.com>
-
-# Application
-APP_SECRET_KEY=generate_a_long_random_string
+SMTP_FROM=Plex Notifications <you@gmail.com>
+APP_SECRET_KEY=random_string_here
 ```
 
-#### Getting API Keys
+---
 
-**Jellyseerr:**
-1. Go to Settings → General
-2. Copy your API Key
+## Authentication
 
-**Sonarr:**
-1. Go to Settings → General → Security
-2. Copy your API Key
+Authentication is **off by default**. Enable it in Settings → Authentication & Security.
 
-**Radarr:**
-1. Go to Settings → General → Security
-2. Copy your API Key
+- **Local network bypass** — Connections from your LAN (e.g. `192.168.1.0/24`) skip login entirely
+- **External access** — Requires admin password via a login page
+- **Cloudflare Turnstile** — Optional bot protection on the login page (free)
+- **Session timeout** — Configurable from 1 hour to 7 days
+- **Always public** — Webhook endpoints, health checks, and the setup wizard never require auth
 
-**Gmail App Password:**
-1. Enable 2-Factor Authentication on your Google account
-2. Go to https://myaccount.google.com/apppasswords
-3. Generate an app password for "Mail"
-4. Use this password in SMTP_PASSWORD
+---
 
-### 3. Start the Application
+## Background Workers
 
-```bash
-# Build and start services
-docker-compose up -d
+| Worker | Interval | Purpose |
+|--------|----------|---------|
+| Notification Processor | 60 seconds | Sends queued emails when `send_after` time is reached |
+| Reconciliation | 2 hours (configurable) | Catches missed webhooks, resolves stale issues |
+| Quality Monitor | 24 hours (configurable) | Checks pending requests for release/quality status |
+| Stuck Download Monitor | 30 minutes | Detects TBA titles and stuck downloads |
+| Weekly Summary | Sundays 9 AM UTC | Sends activity summary to admin |
 
-# Check logs
-docker-compose logs -f api
+---
 
-# Check health
-curl http://localhost:8000/health
-```
+## API Documentation
 
-### 4. Configure Webhooks in Sonarr/Radarr
+Interactive API docs are available at:
+- Swagger UI: `http://your-server:8000/docs`
+- ReDoc: `http://your-server:8000/redoc`
 
-#### Sonarr Webhook Setup
-
-1. Go to **Settings → Connect**
-2. Click the **+** button
-3. Select **Webhook**
-4. Configure:
-   - **Name:** Plex Notification Portal
-   - **Notification Triggers:** ✅ On Download
-   - **URL:** `http://your-server-ip:8000/webhooks/sonarr`
-   - **Method:** POST
-5. Click **Test** then **Save**
-
-#### Radarr Webhook Setup
-
-1. Go to **Settings → Connect**
-2. Click the **+** button
-3. Select **Webhook**
-4. Configure:
-   - **Name:** Plex Notification Portal
-   - **Notification Triggers:** ✅ On Download
-   - **URL:** `http://your-server-ip:8000/webhooks/radarr`
-   - **Method:** POST
-5. Click **Test** then **Save**
-
-## API Endpoints
-
-### Webhooks (Automatic)
-- `POST /webhooks/sonarr` - Receives Sonarr download events
-- `POST /webhooks/radarr` - Receives Radarr download events
-
-### Admin (Manual Operations)
-- `POST /admin/sync/users` - Manually sync users from Jellyseerr
-- `POST /admin/sync/requests` - Manually sync requests from Jellyseerr (also imports existing episodes)
-- `POST /admin/requests/{request_id}/import-episodes` - Import existing episodes for a specific TV show request
-- `POST /admin/import-all-existing-episodes` - Import existing episodes for ALL TV show requests
-- `POST /admin/notifications/process` - Process pending notifications
-- `GET /admin/stats` - Get system statistics
-- `GET /admin/users` - List all users
-- `GET /admin/requests` - List all media requests
-- `GET /admin/notifications` - List notifications
-
-### Health
-- `GET /health` - Health check and service status
-
-### Documentation
-- `GET /docs` - Interactive API documentation (Swagger UI)
-- `GET /redoc` - Alternative API documentation (ReDoc)
-
-## Usage Examples
-
-### Access the Admin Dashboard
-
-Open your browser and go to:
-```
-http://localhost:8000
-```
-
-Or from another machine:
-```
-http://your-server-ip:8000
-```
-
-The dashboard provides:
-- Real-time statistics (users, requests, episodes, notifications)
-- User management and search
-- Request tracking with import episode buttons
-- Notification queue monitoring
-- One-click sync and import actions
-- Search and filter capabilities
-
-### Manual Sync
-
-```bash
-# Sync users from Jellyseerr
-curl -X POST http://localhost:8000/admin/sync/users
-
-# Sync requests from Jellyseerr (automatically imports existing episodes)
-curl -X POST http://localhost:8000/admin/sync/requests
-
-# Import existing episodes for ALL TV shows (useful for initial setup)
-curl -X POST http://localhost:8000/admin/import-all-existing-episodes
-
-# Import existing episodes for a specific request (replace 123 with request ID)
-curl -X POST http://localhost:8000/admin/requests/123/import-episodes
-
-# Process pending notifications
-curl -X POST http://localhost:8000/admin/notifications/process
-```
-
-### View Statistics
-
-```bash
-curl http://localhost:8000/admin/stats
-```
-
-### Test Webhooks
-
-```bash
-# Test Sonarr webhook
-curl -X POST http://localhost:8000/webhooks/sonarr \
-  -H "Content-Type: application/json" \
-  -d '{
-    "eventType": "Test",
-    "series": {"id": 1, "title": "Test Series", "tmdbId": 12345}
-  }'
-
-# Test Radarr webhook
-curl -X POST http://localhost:8000/webhooks/radarr \
-  -H "Content-Type: application/json" \
-  -d '{
-    "eventType": "Test",
-    "movie": {"id": 1, "title": "Test Movie", "tmdbId": 12345}
-  }'
-```
-
-## Docker Compose Services
-
-- **postgres** - PostgreSQL database (port 5432, internal only)
-- **api** - FastAPI application (port 8000)
-
-## Database Schema
-
-### Tables
-- **users** - User information from Jellyseerr
-- **media_requests** - Content requests from Jellyseerr
-- **episode_tracking** - Tracks individual episodes and notification status
-- **notifications** - Queue of email notifications
-
-## Monitoring
-
-### View Logs
-
-```bash
-# All logs
-docker-compose logs -f
-
-# API only
-docker-compose logs -f api
-
-# Database only
-docker-compose logs -f postgres
-```
-
-### Check Service Status
-
-```bash
-# Container status
-docker-compose ps
-
-# Health check
-curl http://localhost:8000/health
-```
-
-## Troubleshooting
-
-### Users not syncing
-1. Check Jellyseerr URL and API key in `.env`
-2. Manually trigger sync: `curl -X POST http://localhost:8000/admin/sync/users`
-3. Check logs: `docker-compose logs -f api`
-
-### Webhooks not working
-1. Verify webhook URL in Sonarr/Radarr settings
-2. Test webhook from Sonarr/Radarr UI
-3. Check firewall rules (port 8000 must be accessible)
-4. Review logs for webhook events
-
-### Emails not sending
-1. Verify SMTP settings in `.env`
-2. For Gmail, ensure you're using an App Password (not your regular password)
-3. Check SMTP port (587 for TLS, 465 for SSL)
-4. Manually trigger: `curl -X POST http://localhost:8000/admin/notifications/process`
-
-### Database issues
-1. Check database password in `.env`
-2. Ensure postgres container is healthy: `docker-compose ps`
-3. Reset database: `docker-compose down -v` (⚠️ deletes all data)
-
-## Backup and Restore
-
-### Backup Database
-
-```bash
-docker exec notification-portal-db pg_dump -U notifyuser notifications > backup.sql
-```
-
-### Restore Database
-
-```bash
-docker exec -i notification-portal-db psql -U notifyuser notifications < backup.sql
-```
+---
 
 ## Updating
 
 ```bash
-# Pull latest changes
-git pull
-
-# Rebuild containers
 docker-compose down
-docker-compose up -d --build
-
-# Check status
-docker-compose logs -f api
+git pull
+docker-compose build --no-cache
+docker-compose up -d
 ```
 
-## Advanced Configuration
-
-### Custom Email Templates
-
-Email templates are in `app/services/email_service.py`. You can customize:
-- HTML/CSS styling
-- Email content
-- Subject lines
-
-### Running Behind a Reverse Proxy
-
-If using nginx or Traefik:
-
-```yaml
-# docker-compose.yml
-services:
-  api:
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.notifications.rule=Host(`notifications.yourdomain.com`)"
-```
-
-### Database Connection Pooling
-
-For high-traffic deployments, adjust in `app/database.py`:
-
-```python
-engine = create_engine(
-    settings.database_url,
-    pool_size=20,
-    max_overflow=10
-)
-```
-
-## Development
-
-### Local Development Setup
-
-```bash
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # or `venv\Scripts\activate` on Windows
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Set up environment
-cp .env.example .env
-# Edit .env with local values
-
-# Run database
-docker-compose up -d postgres
-
-# Run API locally
-uvicorn app.main:app --reload
-```
-
-### Running Tests
-
-```bash
-# Install test dependencies
-pip install pytest pytest-asyncio httpx
-
-# Run tests
-pytest tests/
-```
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-## License
-
-MIT License - feel free to use and modify as needed!
-
-## Support
-
-For issues, questions, or feature requests, please open an issue on GitHub.
+Database migrations run automatically on startup.
 
 ---
 
-**Enjoy your automated Plex notifications!** 🎉
+## Troubleshooting
+
+**No notifications sending?**
+Check Settings → Send Test Email. Verify SMTP credentials. Check the Notifications tab for error messages.
+
+**Webhooks not arriving?**
+Check that the portal is reachable from Sonarr/Radarr/Seerr (same Docker network or correct IP). Check logs in the Logs tab.
+
+**Quality notifications not canceling?**
+Verify "On Grab" is enabled in both Sonarr and Radarr webhook settings.
+
+**Users not appearing?**
+Click Sync Users on the dashboard. Check the Seerr API key in Settings.
+
+**Stale issues not resolving?**
+The reconciliation worker handles this. Check Settings → Reconciliation to see/adjust the intervals. You can also trigger it manually from the dashboard.
+
+---
+
+## Security
+
+- API keys and passwords stored in `.env` (not in database)
+- Passwords displayed as masked values in the settings UI — saving preserves originals
+- Auth passwords hashed with bcrypt in the database
+- Session tokens are HMAC-signed with your `APP_SECRET_KEY`
+- Docker socket mounted read-only (for container restart feature)
+- Webhook endpoints are always public (required for Sonarr/Radarr/Seerr)
+
+For production, consider placing the portal behind a reverse proxy (nginx, Traefik, Cloudflare Tunnel) for HTTPS.
+
+---
+
+## Project Structure
+
+```
+plex-notification-portal/
+├── app/
+│   ├── main.py              # FastAPI app, lifespan, auth routes
+│   ├── auth.py              # Authentication middleware & helpers
+│   ├── config.py            # Pydantic settings from .env
+│   ├── database.py          # SQLAlchemy models
+│   ├── schemas.py           # Pydantic request/response schemas
+│   ├── routers/
+│   │   ├── webhooks.py      # Seerr/Sonarr/Radarr webhook handlers
+│   │   ├── admin.py         # Admin API + config endpoints
+│   │   ├── health.py        # Health check
+│   │   └── sse.py           # Server-sent events for live updates
+│   ├── services/
+│   │   ├── email_service.py # Email rendering + SMTP
+│   │   ├── jellyseerr_sync.py
+│   │   ├── seerr_service.py # Seerr issue resolution API
+│   │   ├── sonarr_service.py
+│   │   ├── radarr_service.py
+│   │   ├── plex_service.py
+│   │   └── tmdb_service.py  # Poster fetching via Seerr
+│   ├── background/
+│   │   ├── reconciliation.py
+│   │   ├── quality_monitor.py
+│   │   ├── stuck_monitor.py
+│   │   └── weekly_summary.py
+│   └── static/
+│       ├── admin.html       # Admin dashboard
+│       ├── login.html       # Login page
+│       └── setup.html       # Setup wizard
+├── alembic/                 # Database migrations
+├── docker-compose.yml
+├── Dockerfile
+├── requirements.txt
+├── .env.example
+└── .gitignore
+```
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE) for details.
+
+---
+
+## Acknowledgments
+
+Built with [FastAPI](https://fastapi.tiangolo.com/), [SQLAlchemy](https://www.sqlalchemy.org/), and [PostgreSQL](https://www.postgresql.org/).
+
+Integrates with [Jellyseerr](https://github.com/Fallenbagel/jellyseerr) / [Overseerr](https://overseerr.dev/), [Sonarr](https://sonarr.tv/), [Radarr](https://radarr.video/), and [Plex](https://www.plex.tv/).

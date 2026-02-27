@@ -14,7 +14,7 @@ class BackupService:
     """Service to backup and restore database and configuration"""
     
     def __init__(self):
-        self.backup_dir = "/home/claude/backups"
+        self.backup_dir = "/data/backups"
         os.makedirs(self.backup_dir, exist_ok=True)
     
     def create_backup(self, include_config: bool = True) -> Optional[str]:

@@ -19,6 +19,16 @@ def get_db():
         db.close()
 
 
+class SystemConfig(Base):
+    """System-wide configuration and state tracking"""
+    __tablename__ = "system_config"
+    
+    id = Column(Integer, primary_key=True)
+    key = Column(String, unique=True, nullable=False, index=True)
+    value = Column(String, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class User(Base):
     __tablename__ = "users"
     
@@ -98,6 +108,31 @@ class EpisodeTracking(Base):
     __table_args__ = (
         UniqueConstraint('request_id', 'series_id', 'season_number', 'episode_number', name='_request_series_season_episode_uc'),
     )
+
+
+class ReportedIssue(Base):
+    """Tracks issues reported by users via Seerr"""
+    __tablename__ = "reported_issues"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    seerr_issue_id = Column(Integer, nullable=True, index=True)  # Seerr's issue ID for API callbacks
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # Who reported it
+    request_id = Column(Integer, ForeignKey("media_requests.id"), nullable=True)
+    media_type = Column(String, nullable=False)  # 'movie' or 'tv'
+    tmdb_id = Column(Integer, nullable=False)
+    title = Column(String, nullable=False)
+    issue_type = Column(String, nullable=True)  # 'video', 'audio', 'subtitle', 'other'
+    issue_message = Column(Text, nullable=True)  # User's description
+    status = Column(String, nullable=False, default="reported")  # 'reported', 'fixing', 'resolved', 'failed'
+    action_taken = Column(String, nullable=True)  # 'blacklist_research', 'manual', None
+    resolved_at = Column(DateTime, nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    user = relationship("User", foreign_keys=[user_id])
+    request = relationship("MediaRequest")
 
 
 class Notification(Base):

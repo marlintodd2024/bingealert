@@ -5,7 +5,7 @@ Runs periodically to check if downloads completed but notifications weren't sent
 import asyncio
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
-from app.database import SessionLocal, MediaRequest, EpisodeTracking, Notification
+from app.database import SessionLocal, MediaRequest, EpisodeTracking, Notification, User
 from app.services.sonarr_service import SonarrService
 from app.services.radarr_service import RadarrService
 from app.services.plex_service import PlexService
@@ -360,6 +360,168 @@ async def reconcile_movies(db: Session):
     return notifications_created
 
 
+def get_reconciliation_settings():
+    """Load reconciliation settings from database, with defaults"""
+    try:
+        from app.database import SessionLocal, SystemConfig
+        db = SessionLocal()
+        try:
+            settings_map = {}
+            for config in db.query(SystemConfig).filter(
+                SystemConfig.key.like('reconciliation_%')
+            ).all():
+                settings_map[config.key] = config.value
+            return {
+                'interval_hours': int(settings_map.get('reconciliation_interval_hours', '2')),
+                'issue_fixing_cutoff_hours': int(settings_map.get('reconciliation_issue_fixing_cutoff_hours', '1')),
+                'issue_reported_cutoff_hours': int(settings_map.get('reconciliation_issue_reported_cutoff_hours', '24')),
+                'issue_abandon_days': int(settings_map.get('reconciliation_issue_abandon_days', '7')),
+            }
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"Failed to load reconciliation settings, using defaults: {e}")
+        return {
+            'interval_hours': 2,
+            'issue_fixing_cutoff_hours': 1,
+            'issue_reported_cutoff_hours': 24,
+            'issue_abandon_days': 7,
+        }
+
+
+async def reconcile_issues(db: Session):
+    """Check for issues stuck in 'fixing' or 'reported' status and resolve if content now available"""
+    from app.database import ReportedIssue
+    
+    logger.info("Starting issue reconciliation...")
+    
+    radarr = RadarrService()
+    sonarr = SonarrService()
+    email_service = EmailService()
+    tmdb_service = TMDBService(settings.jellyseerr_url, settings.jellyseerr_api_key)
+    
+    # Load configurable cutoffs
+    recon_settings = get_reconciliation_settings()
+    
+    fixing_cutoff = datetime.utcnow() - timedelta(hours=recon_settings['issue_fixing_cutoff_hours'])
+    reported_cutoff = datetime.utcnow() - timedelta(hours=recon_settings['issue_reported_cutoff_hours'])
+    stale_cutoff = datetime.utcnow() - timedelta(days=recon_settings['issue_abandon_days'])
+    
+    fixing_issues = db.query(ReportedIssue).filter(
+        ReportedIssue.status == "fixing",
+        ReportedIssue.updated_at < fixing_cutoff
+    ).all()
+    
+    reported_issues = db.query(ReportedIssue).filter(
+        ReportedIssue.status == "reported",
+        ReportedIssue.updated_at < reported_cutoff
+    ).all()
+    
+    all_stale = fixing_issues + reported_issues
+    
+    if not all_stale:
+        logger.info("No stale issues found")
+        return 0
+    
+    logger.info(f"Found {len(fixing_issues)} fixing + {len(reported_issues)} reported stale issues to check")
+    
+    resolved_count = 0
+    failed_count = 0
+    
+    for issue in all_stale:
+        try:
+            has_file = False
+            
+            if issue.media_type == "movie":
+                # Check Radarr for the movie file
+                movies = await radarr._get("/movie")
+                for m in movies:
+                    if m.get("tmdbId") == issue.tmdb_id and m.get("hasFile"):
+                        has_file = True
+                        break
+            else:
+                # For TV, check if any recent episode file exists
+                # This is a simpler check — if the series has files, the re-download likely worked
+                series_list = await sonarr._get("/series")
+                for s in series_list:
+                    if s.get("tvdbId") == issue.tmdb_id or s.get("title", "").lower() == issue.title.lower():
+                        # Check episode files
+                        episodes = await sonarr._get(f"/episode?seriesId={s['id']}")
+                        for ep in episodes:
+                            if ep.get("hasFile"):
+                                has_file = True
+                                break
+                        break
+            
+            if has_file:
+                # Content is available — resolve the issue
+                logger.info(f"✅ Issue #{issue.seerr_issue_id} '{issue.title}' now has file — resolving")
+                
+                issue.status = "resolved"
+                issue.resolved_at = datetime.utcnow()
+                issue.action_taken = issue.action_taken or "resolved_by_reconciliation"
+                
+                # Close in Seerr
+                if issue.seerr_issue_id:
+                    try:
+                        from app.services.seerr_service import SeerrService
+                        seerr = SeerrService()
+                        result = await seerr.resolve_issue(issue.seerr_issue_id)
+                        if result["success"]:
+                            logger.info(f"Closed issue #{issue.seerr_issue_id} in Seerr")
+                        else:
+                            logger.warning(f"Could not close issue in Seerr: {result['message']}")
+                    except Exception as e:
+                        logger.warning(f"Failed to close issue in Seerr: {e}")
+                
+                # Send resolved email to user
+                if issue.user_id:
+                    try:
+                        user = db.query(User).filter(User.id == issue.user_id).first()
+                        if user:
+                            if issue.media_type == "movie":
+                                poster_url = await tmdb_service.get_movie_poster(issue.tmdb_id)
+                            else:
+                                poster_url = await tmdb_service.get_tv_poster(issue.tmdb_id)
+                            
+                            html_body = email_service.render_issue_resolved_notification(
+                                title=issue.title,
+                                media_type=issue.media_type,
+                                issue_type=issue.issue_type,
+                                poster_url=poster_url
+                            )
+                            
+                            notification = Notification(
+                                user_id=issue.user_id,
+                                request_id=issue.request_id or 0,
+                                notification_type="issue_resolved",
+                                subject=f"✅ Issue Resolved: {issue.title}",
+                                body=html_body,
+                                send_after=datetime.utcnow() + timedelta(seconds=300)
+                            )
+                            db.add(notification)
+                            logger.info(f"Queued 'Issue Resolved' notification for {user.email}")
+                    except Exception as e:
+                        logger.warning(f"Failed to send resolved notification: {e}")
+                
+                resolved_count += 1
+            
+            elif issue.updated_at < stale_cutoff:
+                # Issue has been stuck too long with no file — mark as failed
+                logger.warning(f"⚠️ Issue #{issue.seerr_issue_id} '{issue.title}' stuck for {recon_settings['issue_abandon_days']}+ days — marking failed")
+                issue.status = "failed"
+                issue.error_message = f"No replacement file found after {recon_settings['issue_abandon_days']} days"
+                failed_count += 1
+            
+        except Exception as e:
+            logger.error(f"Error reconciling issue {issue.id} '{issue.title}': {e}")
+            continue
+    
+    db.commit()
+    logger.info(f"Issue reconciliation complete: {resolved_count} resolved, {failed_count} failed")
+    return resolved_count
+
+
 async def run_reconciliation():
     """Main reconciliation task - runs periodically"""
     logger.info("=" * 60)
@@ -370,12 +532,15 @@ async def run_reconciliation():
     try:
         tv_count = await reconcile_tv_episodes(db)
         movie_count = await reconcile_movies(db)
+        issue_count = await reconcile_issues(db)
         
         total = tv_count + movie_count
         if total > 0:
             logger.info(f"✅ Reconciliation found {total} missed notifications!")
-        else:
-            logger.info("✅ Reconciliation complete - no missed notifications found")
+        if issue_count > 0:
+            logger.info(f"✅ Reconciliation resolved {issue_count} stale issues!")
+        if total == 0 and issue_count == 0:
+            logger.info("✅ Reconciliation complete - nothing missed")
         
     except Exception as e:
         logger.error(f"Reconciliation error: {e}")
@@ -384,15 +549,17 @@ async def run_reconciliation():
 
 
 async def reconciliation_worker():
-    """Background worker that runs reconciliation every 2 hours"""
-    logger.info("🔄 Reconciliation worker started - will check every 2 hours")
+    """Background worker that runs reconciliation periodically"""
+    logger.info("🔄 Reconciliation worker started")
     
     while True:
         try:
+            recon_settings = get_reconciliation_settings()
+            interval_hours = recon_settings['interval_hours']
             await run_reconciliation()
         except Exception as e:
             logger.error(f"Reconciliation worker error: {e}")
+            interval_hours = 2  # fallback
         
-        # Wait 2 hours
-        logger.info("💤 Sleeping for 2 hours until next reconciliation check...")
-        await asyncio.sleep(2 * 60 * 60)  # 2 hours
+        logger.info(f"💤 Sleeping for {interval_hours} hours until next reconciliation check...")
+        await asyncio.sleep(interval_hours * 60 * 60)

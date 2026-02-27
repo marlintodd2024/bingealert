@@ -37,6 +37,14 @@ class Settings(BaseSettings):
     # Admin (for weekly summaries and alerts)
     admin_email: Optional[str] = None  # If not set, uses smtp_from
     
+    # Feature Toggles
+    quality_monitor_enabled: bool = True  # Monitor for unreleased content and quality mismatches
+    quality_monitor_interval_hours: int = 24  # How often to check (in hours)
+    quality_waiting_delay_seconds: int = 300  # Delay before sending quality waiting emails (allows cancellation)
+    
+    # Issue Auto-fix: 'manual', 'auto', 'auto_notify'
+    issue_autofix_mode: str = "manual"  # manual = admin reviews, auto = auto blacklist+research, auto_notify = auto + email admin
+    
     # Application
     app_secret_key: str
     

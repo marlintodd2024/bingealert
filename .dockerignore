@@ -1,0 +1,14 @@
+.git
+.github
+.gitignore
+.env
+.env.example
+data/
+docker-compose*.yml
+*.sh
+LICENSE
+CONTRIBUTING.md
+__pycache__
+*.pyc
+.vscode
+.idea

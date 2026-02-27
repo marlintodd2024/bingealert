@@ -8,7 +8,7 @@
 version: '3.8'
 
 services:
-  api:
+  portal-api:
     # Example: Expose on different port
     # ports:
     #   - "9000:8000"

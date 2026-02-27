@@ -3,8 +3,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 import logging
 import os
+from datetime import datetime
 
-from app.database import get_db, User, MediaRequest, EpisodeTracking, Notification, SharedRequest
+from app.database import get_db, User, MediaRequest, EpisodeTracking, Notification, SharedRequest, SystemConfig
 from app.services.jellyseerr_sync import JellyseerrSyncService
 from app.services.email_service import EmailService
 
@@ -76,7 +77,7 @@ async def get_stats(db: Session = Depends(get_db)):
 @router.get("/users")
 async def list_users(skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
     """List all users"""
-    users = db.query(User).offset(skip).limit(limit).all()
+    users = db.query(User).order_by(User.created_at.desc()).offset(skip).limit(limit).all()
     return {
         "users": [
             {
@@ -94,7 +95,7 @@ async def list_users(skip: int = 0, limit: int = 50, db: Session = Depends(get_d
 @router.get("/requests")
 async def list_requests(skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
     """List all media requests"""
-    requests = db.query(MediaRequest).offset(skip).limit(limit).all()
+    requests = db.query(MediaRequest).order_by(MediaRequest.created_at.desc()).offset(skip).limit(limit).all()
     return {
         "requests": [
             {
@@ -123,7 +124,7 @@ async def list_notifications(
     if sent is not None:
         query = query.filter(Notification.sent == sent)
     
-    notifications = query.offset(skip).limit(limit).all()
+    notifications = query.order_by(Notification.created_at.desc()).offset(skip).limit(limit).all()
     
     return {
         "notifications": [
@@ -134,6 +135,7 @@ async def list_notifications(
                 "subject": n.subject,
                 "sent": n.sent,
                 "sent_at": n.sent_at.isoformat() + 'Z' if n.sent_at else None,
+                "send_after": n.send_after.isoformat() + 'Z' if n.send_after else None,
                 "created_at": n.created_at.isoformat() + 'Z' if n.created_at else None
             }
             for n in notifications
@@ -946,8 +948,59 @@ async def get_config():
             "plex": {
                 "url": os.getenv("PLEX_URL", ""),
                 "token": mask_secret(os.getenv("PLEX_TOKEN", ""))
-            }
+            },
+            "quality_monitor": {
+                "enabled": os.getenv("QUALITY_MONITOR_ENABLED", "true").lower() == "true",
+                "interval_hours": int(os.getenv("QUALITY_MONITOR_INTERVAL_HOURS", "24")),
+                "waiting_delay_seconds": int(os.getenv("QUALITY_WAITING_DELAY_SECONDS", "300"))
+            },
+            "issue_autofix": {
+                "mode": os.getenv("ISSUE_AUTOFIX_MODE", "manual")
+            },
+            "admin_email": os.getenv("ADMIN_EMAIL", "")
         }
+        
+        # Load auth settings from database
+        try:
+            from app.auth import get_auth_settings
+            from app.database import get_db
+            db = next(get_db())
+            try:
+                auth_settings = get_auth_settings(db)
+                config["auth"] = {
+                    "enabled": auth_settings.get("auth_enabled", "false").lower() == "true",
+                    "has_password": bool(auth_settings.get("auth_password_hash", "")),
+                    "local_network_cidr": auth_settings.get("local_network_cidr", ""),
+                    "session_timeout_hours": int(auth_settings.get("session_timeout_hours", "24")),
+                    "turnstile_enabled": auth_settings.get("turnstile_enabled", "false").lower() == "true",
+                    "turnstile_site_key": auth_settings.get("turnstile_site_key", ""),
+                    "turnstile_secret_key": mask_secret(auth_settings.get("turnstile_secret_key", "")) if auth_settings.get("turnstile_secret_key") else ""
+                }
+                
+                # Reconciliation settings
+                from app.background.reconciliation import get_reconciliation_settings
+                recon = get_reconciliation_settings()
+                config["reconciliation"] = recon
+            finally:
+                db.close()
+        except Exception as e:
+            logger.warning(f"Failed to load auth settings: {e}")
+            config["auth"] = {
+                "enabled": False,
+                "has_password": False,
+                "local_network_cidr": "",
+                "session_timeout_hours": 24,
+                "turnstile_enabled": False,
+                "turnstile_site_key": "",
+                "turnstile_secret_key": ""
+            }
+            config["reconciliation"] = {
+                "interval_hours": 2,
+                "issue_fixing_cutoff_hours": 1,
+                "issue_reported_cutoff_hours": 24,
+                "issue_abandon_days": 7,
+            }
+        
         return config
     except Exception as e:
         logger.error(f"Failed to get config: {e}")
@@ -961,13 +1014,32 @@ async def update_config(config: dict):
     from pathlib import Path
     
     try:
-        env_path = Path("/app/.env")
+        # Try multiple possible .env locations
+        possible_paths = [
+            Path("/app/.env"),
+            Path("/data/.env"),
+            Path(".env"),
+            Path(os.getcwd()) / ".env"
+        ]
+        
+        env_path = None
+        for path in possible_paths:
+            if path.exists():
+                env_path = path
+                logger.info(f"Found .env at: {env_path}")
+                break
+        
+        if not env_path:
+            logger.error(f".env not found in any of: {[str(p) for p in possible_paths]}")
+            raise HTTPException(
+                status_code=500, 
+                detail=".env file not found. Configuration cannot be saved."
+            )
         
         # Read existing .env
         env_lines = []
-        if env_path.exists():
-            with open(env_path, 'r') as f:
-                env_lines = f.readlines()
+        with open(env_path, 'r') as f:
+            env_lines = f.readlines()
         
         # Build new env dict
         env_dict = {}
@@ -979,6 +1051,30 @@ async def update_config(config: dict):
         
         # Update with new values (only if not masked)
         updates = []
+        
+        def is_masked_value(value: str) -> bool:
+            """Check if a value is a masked/redacted secret that should NOT be saved.
+            Catches all variants of bullet masking regardless of encoding."""
+            if not value:
+                return False
+            # Check for actual bullet character (U+2022)
+            if '\u2022' in value:
+                return True
+            # Check for common mojibake patterns of U+2022
+            # UTF-8 bytes of • are 0xE2 0x80 0xA2
+            # When read as Latin-1: â€¢  When read as Windows-1252: â€¢
+            if '\xe2\x80\xa2' in value.encode('latin-1', errors='ignore').decode('latin-1', errors='ignore'):
+                return True
+            # Catch any non-ASCII in what should be ASCII-only API keys/passwords
+            # If the value has non-ASCII chars mixed with ASCII, it's likely masked
+            import re
+            non_ascii_count = len(re.findall(r'[^\x00-\x7F]', value))
+            if non_ascii_count >= 3:
+                return True
+            # Check for placeholder patterns
+            if value.strip() in ('********',):
+                return True
+            return False
         
         # Notification Timing
         if 'timing' in config:
@@ -1009,16 +1105,21 @@ async def update_config(config: dict):
             if config['smtp'].get('user'):
                 env_dict['SMTP_USER'] = config['smtp']['user']
                 updates.append('SMTP_USER')
-            if config['smtp'].get('password') and not config['smtp']['password'].startswith('••'):
+            if config['smtp'].get('password') and not is_masked_value(config['smtp']['password']):
                 env_dict['SMTP_PASSWORD'] = config['smtp']['password']
                 updates.append('SMTP_PASSWORD')
+        
+        # Admin email
+        if config.get('admin_email'):
+            env_dict['ADMIN_EMAIL'] = config['admin_email']
+            updates.append('ADMIN_EMAIL')
         
         # Jellyseerr
         if 'jellyseerr' in config:
             if config['jellyseerr'].get('url'):
                 env_dict['JELLYSEERR_URL'] = config['jellyseerr']['url']
                 updates.append('JELLYSEERR_URL')
-            if config['jellyseerr'].get('api_key') and not config['jellyseerr']['api_key'].startswith('••'):
+            if config['jellyseerr'].get('api_key') and not is_masked_value(config['jellyseerr']['api_key']):
                 env_dict['JELLYSEERR_API_KEY'] = config['jellyseerr']['api_key']
                 updates.append('JELLYSEERR_API_KEY')
         
@@ -1027,7 +1128,7 @@ async def update_config(config: dict):
             if config['sonarr'].get('url'):
                 env_dict['SONARR_URL'] = config['sonarr']['url']
                 updates.append('SONARR_URL')
-            if config['sonarr'].get('api_key') and not config['sonarr']['api_key'].startswith('••'):
+            if config['sonarr'].get('api_key') and not is_masked_value(config['sonarr']['api_key']):
                 env_dict['SONARR_API_KEY'] = config['sonarr']['api_key']
                 updates.append('SONARR_API_KEY')
         
@@ -1036,7 +1137,7 @@ async def update_config(config: dict):
             if config['radarr'].get('url'):
                 env_dict['RADARR_URL'] = config['radarr']['url']
                 updates.append('RADARR_URL')
-            if config['radarr'].get('api_key') and not config['radarr']['api_key'].startswith('••'):
+            if config['radarr'].get('api_key') and not is_masked_value(config['radarr']['api_key']):
                 env_dict['RADARR_API_KEY'] = config['radarr']['api_key']
                 updates.append('RADARR_API_KEY')
         
@@ -1045,14 +1146,123 @@ async def update_config(config: dict):
             if config['plex'].get('url'):
                 env_dict['PLEX_URL'] = config['plex']['url']
                 updates.append('PLEX_URL')
-            if config['plex'].get('token') and not config['plex']['token'].startswith('••'):
+            if config['plex'].get('token') and not is_masked_value(config['plex']['token']):
                 env_dict['PLEX_TOKEN'] = config['plex']['token']
                 updates.append('PLEX_TOKEN')
         
-        # Write back to .env
+        # Quality Monitor
+        if 'quality_monitor' in config:
+            env_dict['QUALITY_MONITOR_ENABLED'] = str(config['quality_monitor'].get('enabled', True)).lower()
+            updates.append('QUALITY_MONITOR_ENABLED')
+            if config['quality_monitor'].get('interval_hours'):
+                env_dict['QUALITY_MONITOR_INTERVAL_HOURS'] = str(config['quality_monitor']['interval_hours'])
+                updates.append('QUALITY_MONITOR_INTERVAL_HOURS')
+            if config['quality_monitor'].get('waiting_delay_seconds'):
+                env_dict['QUALITY_WAITING_DELAY_SECONDS'] = str(config['quality_monitor']['waiting_delay_seconds'])
+                updates.append('QUALITY_WAITING_DELAY_SECONDS')
+        
+        # Issue Auto-fix
+        if 'issue_autofix' in config:
+            mode = config['issue_autofix'].get('mode', 'manual')
+            if mode in ('manual', 'auto', 'auto_notify'):
+                env_dict['ISSUE_AUTOFIX_MODE'] = mode
+                updates.append('ISSUE_AUTOFIX_MODE')
+        
+        # Auth settings (stored in database, not .env)
+        if 'auth' in config:
+            try:
+                from app.auth import set_auth_setting, hash_password, get_auth_settings
+                from app.database import get_db
+                db = next(get_db())
+                try:
+                    auth = config['auth']
+                    
+                    if 'enabled' in auth:
+                        set_auth_setting(db, 'auth_enabled', str(auth['enabled']).lower())
+                        updates.append('AUTH_ENABLED')
+                    
+                    # Only set password if a new one is provided (not empty, not masked)
+                    new_password = auth.get('password', '')
+                    if new_password and not is_masked_value(new_password):
+                        set_auth_setting(db, 'auth_password_hash', hash_password(new_password))
+                        updates.append('AUTH_PASSWORD')
+                    
+                    if 'local_network_cidr' in auth:
+                        set_auth_setting(db, 'local_network_cidr', auth['local_network_cidr'])
+                        updates.append('LOCAL_NETWORK_CIDR')
+                    
+                    if 'session_timeout_hours' in auth:
+                        set_auth_setting(db, 'session_timeout_hours', str(auth['session_timeout_hours']))
+                        updates.append('SESSION_TIMEOUT_HOURS')
+                    
+                    if 'turnstile_enabled' in auth:
+                        set_auth_setting(db, 'turnstile_enabled', str(auth['turnstile_enabled']).lower())
+                        updates.append('TURNSTILE_ENABLED')
+                    
+                    if auth.get('turnstile_site_key') is not None:
+                        set_auth_setting(db, 'turnstile_site_key', auth['turnstile_site_key'])
+                        updates.append('TURNSTILE_SITE_KEY')
+                    
+                    turnstile_secret = auth.get('turnstile_secret_key', '')
+                    if turnstile_secret and not is_masked_value(turnstile_secret):
+                        set_auth_setting(db, 'turnstile_secret_key', turnstile_secret)
+                        updates.append('TURNSTILE_SECRET_KEY')
+                finally:
+                    db.close()
+            except Exception as e:
+                logger.error(f"Failed to save auth settings: {e}")
+        
+        # Reconciliation settings (stored in database)
+        if 'reconciliation' in config:
+            try:
+                from app.database import get_db, SystemConfig
+                db = next(get_db())
+                try:
+                    recon = config['reconciliation']
+                    recon_fields = {
+                        'reconciliation_interval_hours': ('interval_hours', 2),
+                        'reconciliation_issue_fixing_cutoff_hours': ('issue_fixing_cutoff_hours', 1),
+                        'reconciliation_issue_reported_cutoff_hours': ('issue_reported_cutoff_hours', 24),
+                        'reconciliation_issue_abandon_days': ('issue_abandon_days', 7),
+                    }
+                    for db_key, (json_key, default) in recon_fields.items():
+                        if json_key in recon:
+                            val = str(int(recon[json_key]))
+                            existing = db.query(SystemConfig).filter(SystemConfig.key == db_key).first()
+                            if existing:
+                                existing.value = val
+                                existing.updated_at = datetime.utcnow()
+                            else:
+                                db.add(SystemConfig(key=db_key, value=val))
+                            updates.append(db_key.upper())
+                    db.commit()
+                finally:
+                    db.close()
+            except Exception as e:
+                logger.error(f"Failed to save reconciliation settings: {e}")
+        
+        # Write back to .env - preserve comments and structure
+        new_lines = []
+        keys_written = set()
+        for line in env_lines:
+            stripped = line.strip()
+            if stripped and not stripped.startswith('#') and '=' in stripped:
+                key = stripped.split('=', 1)[0]
+                if key in env_dict:
+                    new_lines.append(f"{key}={env_dict[key]}\n")
+                    keys_written.add(key)
+                else:
+                    new_lines.append(line if line.endswith('\n') else line + '\n')
+            else:
+                new_lines.append(line if line.endswith('\n') else line + '\n')
+        
+        # Add any new keys not in original file
+        for key, value in env_dict.items():
+            if key not in keys_written:
+                new_lines.append(f"{key}={value}\n")
+        
         with open(env_path, 'w') as f:
-            for key, value in env_dict.items():
-                f.write(f"{key}={value}\n")
+            f.writelines(new_lines)
         
         logger.info(f"Configuration updated: {', '.join(updates)}")
         
@@ -1281,3 +1491,629 @@ async def send_weekly_summary_now():
     except Exception as e:
         logger.error(f"Failed to send weekly summary: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/check-stuck-downloads")
+async def check_stuck_downloads_now():
+    """Manually trigger stuck download check"""
+    try:
+        from app.background.stuck_monitor import check_and_alert_stuck_downloads
+        import asyncio
+        
+        # Run check in background
+        asyncio.create_task(check_and_alert_stuck_downloads())
+        
+        return {
+            "success": True,
+            "message": "Checking for stuck downloads - you'll get an email if any are found"
+        }
+    except Exception as e:
+        logger.error(f"Failed to check stuck downloads: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/check-quality-release")
+async def manual_quality_release_check():
+    """Manually trigger quality/release monitoring check"""
+    try:
+        from app.background.quality_monitor import run_quality_release_monitor
+        
+        logger.info("Manual quality/release check triggered")
+        
+        # Run the check
+        await run_quality_release_monitor()
+        
+        return {
+            "success": True,
+            "message": "Quality/release check completed! Notifications sent for unreleased content and quality mismatches."
+        }
+    except Exception as e:
+        logger.error(f"Failed to run quality/release check: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===== Issues Management =====
+
+@router.get("/issues")
+async def get_issues(db: Session = Depends(get_db)):
+    """Get all reported issues"""
+    try:
+        from app.database import ReportedIssue
+        
+        issues = db.query(ReportedIssue).order_by(ReportedIssue.created_at.desc()).all()
+        
+        result = []
+        for issue in issues:
+            result.append({
+                "id": issue.id,
+                "seerr_issue_id": issue.seerr_issue_id,
+                "title": issue.title,
+                "media_type": issue.media_type,
+                "tmdb_id": issue.tmdb_id,
+                "issue_type": issue.issue_type,
+                "issue_message": issue.issue_message,
+                "status": issue.status,
+                "action_taken": issue.action_taken,
+                "error_message": issue.error_message,
+                "reported_by": issue.user.username if issue.user else "Unknown",
+                "reported_by_email": issue.user.email if issue.user else None,
+                "created_at": issue.created_at.isoformat() if issue.created_at else None,
+                "resolved_at": issue.resolved_at.isoformat() if issue.resolved_at else None,
+            })
+        
+        return result
+    except Exception as e:
+        logger.error(f"Failed to get issues: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/issues/{issue_id}/fix")
+async def fix_issue(issue_id: int, db: Session = Depends(get_db)):
+    """Manually trigger blacklist + re-search for a reported issue"""
+    try:
+        from app.database import ReportedIssue
+        
+        issue = db.query(ReportedIssue).filter(ReportedIssue.id == issue_id).first()
+        if not issue:
+            raise HTTPException(status_code=404, detail="Issue not found")
+        
+        if issue.status == "resolved":
+            return {"success": False, "message": "Issue is already resolved"}
+        
+        issue.status = "fixing"
+        db.commit()
+        
+        # Trigger blacklist + re-search
+        if issue.media_type == "movie":
+            from app.services.radarr_service import RadarrService
+            radarr = RadarrService()
+            result = await radarr.blacklist_and_research_movie(issue.tmdb_id)
+        elif issue.media_type == "tv":
+            from app.services.sonarr_service import SonarrService
+            sonarr_svc = SonarrService()
+            result = await sonarr_svc.blacklist_and_research_series(issue.tmdb_id)
+        else:
+            result = {"success": False, "message": f"Unknown media type: {issue.media_type}"}
+        
+        if result["success"]:
+            issue.action_taken = "blacklist_research"
+            logger.info(f"Manual fix initiated for issue #{issue.id}: {result['message']}")
+        else:
+            issue.status = "failed"
+            issue.error_message = result["message"]
+            logger.error(f"Manual fix failed for issue #{issue.id}: {result['message']}")
+        
+        db.commit()
+        
+        return {
+            "success": result["success"],
+            "message": result["message"]
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to fix issue {issue_id}: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/issues/{issue_id}/resolve")
+async def resolve_issue(issue_id: int, db: Session = Depends(get_db)):
+    """Manually mark an issue as resolved (without re-downloading)"""
+    try:
+        from app.database import ReportedIssue
+        from datetime import datetime
+        
+        issue = db.query(ReportedIssue).filter(ReportedIssue.id == issue_id).first()
+        if not issue:
+            raise HTTPException(status_code=404, detail="Issue not found")
+        
+        issue.status = "resolved"
+        issue.action_taken = "manual"
+        issue.resolved_at = datetime.utcnow()
+        db.commit()
+        
+        # Close the issue in Seerr too
+        seerr_message = ""
+        if issue.seerr_issue_id:
+            try:
+                from app.services.seerr_service import SeerrService
+                seerr = SeerrService()
+                result = await seerr.resolve_issue(issue.seerr_issue_id)
+                if result["success"]:
+                    seerr_message = " (also closed in Seerr)"
+                else:
+                    seerr_message = f" (Seerr close failed: {result['message']})"
+            except Exception as e:
+                seerr_message = f" (Seerr close failed: {e})"
+        
+        return {"success": True, "message": f"Issue #{issue_id} marked as resolved{seerr_message}"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to resolve issue {issue_id}: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/issues/{issue_id}")
+async def delete_issue(issue_id: int, db: Session = Depends(get_db)):
+    """Delete a reported issue"""
+    try:
+        from app.database import ReportedIssue
+        
+        issue = db.query(ReportedIssue).filter(ReportedIssue.id == issue_id).first()
+        if not issue:
+            raise HTTPException(status_code=404, detail="Issue not found")
+        
+        db.delete(issue)
+        db.commit()
+        
+        return {"success": True, "message": f"Issue #{issue_id} deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete issue {issue_id}: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/restart")
+async def restart_container():
+    """Restart the Docker container"""
+    try:
+        import subprocess
+        import os
+        
+        # Get container ID/name from hostname or environment
+        container_id = os.environ.get("HOSTNAME", "self")
+        
+        logger.info(f"Attempting to restart container: {container_id}")
+        
+        # Check if docker socket is available
+        if not os.path.exists("/var/run/docker.sock"):
+            logger.error("Docker socket not mounted")
+            raise HTTPException(
+                status_code=500, 
+                detail="Docker socket not available. Mount /var/run/docker.sock to enable restart. See DOCKER_RESTART_SETUP.md"
+            )
+        
+        # Use docker restart command
+        result = subprocess.run(
+            ["docker", "restart", container_id],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        
+        if result.returncode == 0:
+            logger.info("Container restart command sent successfully")
+            return {"success": True, "message": "Container restarting..."}
+        else:
+            error = result.stderr or "Unknown error"
+            logger.error(f"Failed to restart container: {error}")
+            raise HTTPException(status_code=500, detail=f"Restart failed: {error}")
+            
+    except subprocess.TimeoutExpired:
+        # Timeout is expected as container restarts
+        logger.info("Restart command timed out (expected - container is restarting)")
+        return {"success": True, "message": "Container restarting..."}
+    except FileNotFoundError:
+        logger.error("Docker CLI not available in container")
+        raise HTTPException(
+            status_code=500, 
+            detail="Docker CLI not found. Restart container manually: docker restart <container-name>"
+        )
+    except Exception as e:
+        logger.error(f"Failed to restart container: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/requests/{request_id}/notify-shared-user/{user_id}")
+async def notify_shared_user_about_existing(request_id: int, user_id: int, db: Session = Depends(get_db)):
+    """Send notifications to a newly added shared user for already-downloaded episodes"""
+    try:
+        from app.services.email_service import EmailService
+        from app.database import EpisodeTracking, SharedRequest
+        
+        # Verify the share exists
+        shared = db.query(SharedRequest).filter(
+            SharedRequest.request_id == request_id,
+            SharedRequest.user_id == user_id
+        ).first()
+        
+        if not shared:
+            raise HTTPException(status_code=404, detail="User is not shared on this request")
+        
+        # Get the request
+        request = db.query(MediaRequest).filter(MediaRequest.id == request_id).first()
+        if not request:
+            raise HTTPException(status_code=404, detail="Request not found")
+        
+        # Get user
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Find all downloaded episodes for this request that haven't been notified to this user
+        email_service = EmailService()
+        episodes_sent = 0
+        
+        if request.media_type == 'tv':
+            # Get all tracked episodes that are downloaded
+            tracked_episodes = db.query(EpisodeTracking).filter(
+                EpisodeTracking.request_id == request_id,
+                EpisodeTracking.available == True
+            ).all()
+            
+            if tracked_episodes:
+                # Group by season for batch sending
+                from collections import defaultdict
+                episodes_by_season = defaultdict(list)
+                
+                for ep in tracked_episodes:
+                    episodes_by_season[ep.season_number].append({
+                        'season': ep.season_number,
+                        'episode': ep.episode_number,
+                        'title': ep.episode_title or 'TBA'
+                    })
+                
+                # Send notification for each season's episodes
+                for season, eps in episodes_by_season.items():
+                    try:
+                        await email_service.send_episode_notification(
+                            user_email=user.email,
+                            user_name=user.username,
+                            series_title=request.title,
+                            episodes=eps
+                        )
+                        episodes_sent += len(eps)
+                    except Exception as e:
+                        logger.error(f"Failed to send notification: {e}")
+        
+        elif request.media_type == 'movie' and request.status == 'available':
+            # Send movie notification
+            try:
+                await email_service.send_movie_notification(
+                    user_email=user.email,
+                    user_name=user.username,
+                    movie_title=request.title,
+                    movie_year=request.year
+                )
+                episodes_sent = 1
+            except Exception as e:
+                logger.error(f"Failed to send notification: {e}")
+        
+        if episodes_sent > 0:
+            return {
+                "success": True,
+                "message": f"Sent {episodes_sent} notification(s) to {user.username}",
+                "episodes_sent": episodes_sent
+            }
+        else:
+            return {
+                "success": True,
+                "message": "No downloaded content to notify about",
+                "episodes_sent": 0
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to notify shared user: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/requests/{request_id}/share")
+async def add_user_to_request(
+    request_id: int,
+    data: dict,
+    db: Session = Depends(get_db)
+):
+    """Add a user to an existing request's notifications"""
+    try:
+        user_id = data.get('user_id')
+        
+        if not user_id:
+            raise HTTPException(status_code=400, detail="user_id is required")
+        
+        # Check if request exists
+        request = db.query(MediaRequest).filter(MediaRequest.id == request_id).first()
+        if not request:
+            raise HTTPException(status_code=404, detail="Request not found")
+        
+        # Check if user exists
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Check if already shared
+        existing = db.query(SharedRequest).filter(
+            SharedRequest.request_id == request_id,
+            SharedRequest.user_id == user_id
+        ).first()
+        
+        if existing:
+            raise HTTPException(status_code=400, detail="User already added to this request")
+        
+        # Create shared request
+        from datetime import datetime
+        shared = SharedRequest(
+            request_id=request_id,
+            user_id=user_id,
+            shared_at=datetime.utcnow()
+        )
+        db.add(shared)
+        db.commit()
+        
+        logger.info(f"Added user {user.email} to request {request_id} ({request.title})")
+        
+        return {
+            "success": True,
+            "message": f"User {user.email} added to notifications for {request.title}"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to add user to request: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/request-on-behalf")
+async def request_on_behalf(
+    data: dict,
+    db: Session = Depends(get_db)
+):
+    """Create a request in Jellyseerr on behalf of a user"""
+    try:
+        jellyseerr_id = data.get('jellyseerr_user_id')  # Frontend sends jellyseerr_user_id
+        tmdb_id = data.get('tmdb_id')
+        media_type = data.get('media_type')  # 'movie' or 'tv'
+        
+        if not all([jellyseerr_id, tmdb_id, media_type]):
+            raise HTTPException(status_code=400, detail="jellyseerr_user_id, tmdb_id, and media_type are required")
+        
+        # Check if user exists (using jellyseerr_id field in database)
+        user = db.query(User).filter(User.jellyseerr_id == jellyseerr_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Create request in Jellyseerr
+        from app.config import settings
+        import httpx
+        
+        jellyseerr_url = settings.jellyseerr_url.rstrip('/')
+        api_key = settings.jellyseerr_api_key
+        
+        # First, get the media details
+        media_endpoint = f"{jellyseerr_url}/api/v1/{'movie' if media_type == 'movie' else 'tv'}/{tmdb_id}"
+        
+        async with httpx.AsyncClient() as client:
+            # Get media details
+            media_response = await client.get(
+                media_endpoint,
+                headers={"X-Api-Key": api_key}
+            )
+            media_response.raise_for_status()
+            media_data = media_response.json()
+            
+            # Create request
+            request_payload = {
+                "mediaType": media_type,
+                "mediaId": tmdb_id,
+                "userId": jellyseerr_id  # Use the jellyseerr_id
+            }
+            
+            if media_type == 'tv':
+                request_payload["seasons"] = "all"
+            
+            request_response = await client.post(
+                f"{jellyseerr_url}/api/v1/request",
+                headers={"X-Api-Key": api_key},
+                json=request_payload
+            )
+            request_response.raise_for_status()
+            request_data = request_response.json()
+        
+        logger.info(f"Created request for {media_data.get('title') or media_data.get('name')} on behalf of {user.email}")
+        
+        return {
+            "success": True,
+            "message": f"Request created successfully",
+            "jellyseerr_request_id": request_data.get('id')
+        }
+        
+    except httpx.HTTPError as e:
+        logger.error(f"Jellyseerr API error: {e}")
+        raise HTTPException(status_code=500, detail=f"Jellyseerr error: {str(e)}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create request on behalf: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/test-email")
+async def test_email_connection(data: dict):
+    """Test SMTP email connection"""
+    try:
+        from app.services.email_service import EmailService
+        import smtplib
+        from email.mime.text import MIMEText
+        
+        host = data.get('host')
+        port = data.get('port', 587)
+        user = data.get('user')
+        password = data.get('password')
+        from_addr = data.get('from')
+        
+        # Test connection
+        server = smtplib.SMTP(host, port)
+        server.starttls()
+        server.login(user, password)
+        server.quit()
+        
+        return {"success": True, "message": "SMTP connection successful!"}
+        
+    except Exception as e:
+        logger.error(f"SMTP test failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/test-jellyseerr")
+async def test_jellyseerr_connection(data: dict):
+    """Test Jellyseerr API connection"""
+    try:
+        import httpx
+        
+        url = data.get('url', '').rstrip('/')
+        api_key = data.get('api_key')
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{url}/api/v1/status",
+                headers={"X-Api-Key": api_key}
+            )
+            response.raise_for_status()
+            
+        return {"success": True, "message": "Jellyseerr connection successful!"}
+        
+    except Exception as e:
+        logger.error(f"Jellyseerr test failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/test-sonarr")
+async def test_sonarr_connection(data: dict):
+    """Test Sonarr API connection"""
+    try:
+        import httpx
+        
+        url = data.get('url', '').rstrip('/')
+        api_key = data.get('api_key')
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{url}/api/v3/system/status",
+                headers={"X-Api-Key": api_key}
+            )
+            response.raise_for_status()
+            
+        return {"success": True, "message": "Sonarr connection successful!"}
+        
+    except Exception as e:
+        logger.error(f"Sonarr test failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/test-radarr")
+async def test_radarr_connection(data: dict):
+    """Test Radarr API connection"""
+    try:
+        import httpx
+        
+        url = data.get('url', '').rstrip('/')
+        api_key = data.get('api_key')
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{url}/api/v3/system/status",
+                headers={"X-Api-Key": api_key}
+            )
+            response.raise_for_status()
+            
+        return {"success": True, "message": "Radarr connection successful!"}
+        
+    except Exception as e:
+        logger.error(f"Radarr test failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/setup-complete")
+async def mark_setup_complete(db: Session = Depends(get_db)):
+    """Mark initial setup as complete"""
+    try:
+        # Check if already exists
+        config = db.query(SystemConfig).filter(SystemConfig.key == "setup_complete").first()
+        
+        if config:
+            config.value = "true"
+            config.updated_at = datetime.utcnow()
+        else:
+            config = SystemConfig(key="setup_complete", value="true")
+            db.add(config)
+        
+        db.commit()
+        
+        logger.info("Setup marked as complete in database")
+        return {"success": True, "message": "Setup marked as complete"}
+        
+    except Exception as e:
+        logger.error(f"Failed to mark setup complete: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/setup-status")
+async def get_setup_status(db: Session = Depends(get_db)):
+    """Check if initial setup has been completed"""
+    try:
+        config = db.query(SystemConfig).filter(SystemConfig.key == "setup_complete").first()
+        setup_complete = config and config.value == "true"
+        
+        return {
+            "setup_complete": setup_complete,
+            "needs_setup": not setup_complete
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to check setup status: {e}")
+        # If there's an error, assume setup is not complete to be safe
+        return {"setup_complete": False, "needs_setup": True}
+
+
+@router.post("/skip-setup")
+async def skip_setup(db: Session = Depends(get_db)):
+    """Skip setup wizard for already configured instances"""
+    try:
+        # Check if already exists
+        config = db.query(SystemConfig).filter(SystemConfig.key == "setup_complete").first()
+        
+        if config:
+            config.value = "true"
+            config.updated_at = datetime.utcnow()
+        else:
+            config = SystemConfig(key="setup_complete", value="true")
+            db.add(config)
+        
+        db.commit()
+        
+        logger.info("Setup skipped - marked as complete in database")
+        return {"success": True, "message": "Setup skipped - marked as complete"}
+        
+    except Exception as e:
+        logger.error(f"Failed to skip setup: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
