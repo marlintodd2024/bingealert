@@ -26,7 +26,7 @@ services:
         max-file: "3"
 
   portal-api:
-    image: ghcr.io/marlintodd/plex-notification-portal:latest
+    image: ghcr.io/marlintodd2024/plex-notifier:latest
     container_name: plex-notification-portal
     depends_on:
       - postgres

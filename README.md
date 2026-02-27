@@ -52,8 +52,8 @@ No cloning needed — just download two files and go:
 
 ```bash
 # Download the compose file and config template
-curl -O https://raw.githubusercontent.com/marlintodd/plex-notification-portal/main/docker-compose.ghcr.yml
-curl -O https://raw.githubusercontent.com/marlintodd/plex-notification-portal/main/.env.example
+curl -O https://raw.githubusercontent.com/marlintodd2024/plex-notifier/main/docker-compose.ghcr.yml
+curl -O https://raw.githubusercontent.com/marlintodd2024/plex-notifier/main/.env.example
 
 # Configure
 cp .env.example .env
@@ -66,7 +66,7 @@ docker compose -f docker-compose.ghcr.yml up -d
 ### Option B: Build from Source
 
 ```bash
-git clone https://github.com/marlintodd/plex-notification-portal.git
+git clone https://github.com/marlintodd2024/plex-notifier.git
 cd plex-notification-portal
 cp .env.example .env
 nano .env   # Fill in your settings
