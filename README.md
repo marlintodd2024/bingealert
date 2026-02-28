@@ -10,29 +10,54 @@ A self-hosted notification system for Plex media servers that integrates with **
 
 ---
 
-## Why?
+## Why BingeAlert?
 
-Plex and Seerr don't do a great job of telling users when their requested content is actually ready. This portal bridges that gap — when someone requests a movie or show, they get a polished email the moment it's available in Plex. No more "is my show ready yet?" messages.
+You run a Plex server. Your friends and family request movies and shows through Seerr. Content downloads through Sonarr and Radarr. But nobody knows when their stuff is actually ready — Plex's built-in notifications are unreliable, Seerr's are basic, and your users keep asking "is my show ready yet?"
+
+BingeAlert fixes this. It sits between your media stack and your users, watching every webhook and sending polished, timely email notifications the moment content hits Plex. It handles the edge cases too — stuck downloads, failed imports, unreleased content, wrong quality files — so you're not babysitting your server.
 
 ---
 
 ## Features
 
-**Smart Notifications** — Episodes are batched into a single email (no spam), with a configurable delay to let Plex index the content first. Movies and TV are handled separately with beautiful HTML emails that include posters and direct Plex links.
+### 📧 Smart Email Notifications
+Beautiful HTML emails with movie posters and direct Plex deep links. Episodes from the same show are batched into a single email (no getting spammed with 10 emails for a season drop). A configurable delay lets Plex finish indexing before the notification goes out, so users never click a link to content that isn't ready yet.
 
-**Quality & Release Monitoring** — Automatically detects when requested content isn't released yet ("Coming Soon" emails) or isn't available in the requested quality ("Quality Waiting" emails). Grab webhooks cancel quality alerts when downloads begin.
+### 🎯 Quality & Release Monitoring
+Automatically tracks whether requested content is actually available. If a movie hasn't been released yet, users get a "Coming Soon" email with the release date. If content is available but not in the requested quality profile, users get a "Quality Waiting" email. When a download starts (Grab webhook), quality notifications are automatically cancelled so users aren't spammed.
 
-**Issue Auto-Fix** — When users report issues in Seerr (bad audio, wrong subtitles, etc.), the portal can automatically blacklist the file, trigger a new search, and notify the user when the replacement downloads.
+### 🔧 Import Failure Auto-Fix
+When Sonarr or Radarr downloads a file that can't be imported ("no files found are eligible for import"), BingeAlert detects it, removes the bad release from the queue, blocklists it so it won't be grabbed again, and triggers a search for a new release — all automatically. You get an email when it happens.
 
-**Shared Requests** — Multiple users can be attached to the same request. Everyone gets notified when the content is ready.
+### 🩺 Issue Auto-Fix
+When users report issues in Seerr (bad audio, wrong subtitles, corrupted file), BingeAlert can automatically blacklist the problematic file, trigger a new search in Sonarr/Radarr, and notify the user when the replacement downloads. Configurable as manual review, fully automatic, or automatic with admin notification.
 
-**Reconciliation** — A background worker catches missed webhooks by periodically scanning Sonarr/Radarr for content that downloaded but never triggered a notification. Also cleans up stale issues.
+### 🔄 Stuck Download Detection
+A background monitor checks Sonarr and Radarr queues every 30 minutes for downloads that are stalled, failed, or stuck with TBA episode titles. TBA issues are auto-fixed by refreshing series metadata. Stuck downloads trigger an admin alert email with details.
 
-**Authentication** — Optional password protection for external access with Cloudflare Turnstile bot protection. Local network connections bypass login automatically.
+### 👥 Shared Requests
+Multiple users can be attached to the same request. When content becomes available, everyone on that request gets notified — not just the person who originally requested it.
 
-**Admin Dashboard** — Full web UI for managing users, requests, notifications, issues, upcoming episodes, backups, settings, and real-time logs.
+### 🕵️ Reconciliation
+A background worker periodically scans Sonarr and Radarr for content that downloaded but never triggered a webhook notification. Catches anything that slipped through the cracks. Also automatically cleans up stale issues that were never resolved.
 
-**Setup Wizard** — A guided 6-step setup for new installations that tests each connection as you go.
+### 🧠 Queue-Aware Intelligence
+The quality monitor checks whether content is actively in the download queue before sending notifications. If something is downloading (even if stuck), users won't receive a confusing "waiting for quality" email — the stuck download monitor handles it instead.
+
+### 📊 Admin Dashboard
+A full web UI with real-time stats, user management, request tracking, notification history, upcoming episode calendar, database backup/restore, configurable settings, and live log streaming. Everything is manageable from the browser.
+
+### 🔐 Security Hardened
+Optional authentication with bcrypt password hashing, HMAC-signed session cookies, login rate limiting, local network bypass, Cloudflare Turnstile bot protection, webhook IP allowlisting, and API docs disabled in production. Passed a 16-point security audit with CodeQL scanning enabled.
+
+### 🧙 Setup Wizard
+A guided 6-step setup for new installations that walks through connecting Seerr, Sonarr, Radarr, Plex, and SMTP — testing each connection as you go. No manual config file editing required.
+
+### 📬 Weekly Summary
+Every Sunday, admins receive a summary email with stats on requests processed, notifications sent, and any issues that need attention.
+
+### 🎬 Request on Behalf
+Admins can create requests on behalf of other users directly from the dashboard — paste a Seerr URL, pick a user, and go.
 
 ---
 
