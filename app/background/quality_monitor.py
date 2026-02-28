@@ -105,6 +105,21 @@ class QualityReleaseMonitor:
             if air_date:
                 air_datetime = datetime.fromisoformat(air_date.replace('Z', '+00:00'))
                 if air_datetime < datetime.now(timezone.utc) - timedelta(days=7):  # Aired more than a week ago
+                    # Check if series is currently in the download queue (downloading, stuck, etc.)
+                    # If it's in the queue, don't send quality notification - the stuck monitor handles errors
+                    try:
+                        queue = await self.sonarr._get("/queue")
+                        if queue and 'records' in queue:
+                            in_queue = any(
+                                item.get('seriesId') == series.get('id')
+                                for item in queue['records']
+                            )
+                            if in_queue:
+                                logger.info(f"Series '{request.title}' is in Sonarr download queue - skipping quality notification")
+                                return
+                    except Exception as e:
+                        logger.warning(f"Failed to check Sonarr queue for '{request.title}': {e}")
+                    
                     # Check if we already notified about quality waiting
                     if not self._already_notified_quality_wait(request, db):
                         # Get quality profile name from series
@@ -224,6 +239,21 @@ class QualityReleaseMonitor:
         elif status in ['released', 'inCinemas']:
             # Movie is released/inCinemas but hasn't been downloaded yet - likely waiting for quality
             logger.info(f"Movie status '{status}' but no file - likely waiting for quality profile")
+            
+            # Check if movie is currently in the download queue (downloading, stuck, etc.)
+            # If it's in the queue, don't send quality notification - the stuck monitor handles errors
+            try:
+                queue = await self.radarr._get("/queue")
+                if queue and 'records' in queue:
+                    in_queue = any(
+                        item.get('movieId') == movie.get('id')
+                        for item in queue['records']
+                    )
+                    if in_queue:
+                        logger.info(f"Movie '{request.title}' is in Radarr download queue - skipping quality notification")
+                        return
+            except Exception as e:
+                logger.warning(f"Failed to check Radarr queue for '{request.title}': {e}")
             
             already_notified = self._already_notified_quality_wait(request, db)
             logger.info(f"Already notified check: {already_notified}")

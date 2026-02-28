@@ -52,6 +52,56 @@ async def check_sonarr_queue():
             # Check for TBA title issue
             has_tba_issue = any('TBA' in msg or 'episode title' in msg.lower() for msg in messages)
             
+            # Check for import failure (no eligible files)
+            has_import_failure = any(
+                'no files found are eligible for import' in msg.lower() or
+                'not eligible for import' in msg.lower() or
+                'has already been imported' in msg.lower()
+                for msg in messages
+            )
+            
+            if has_import_failure and item_id:
+                alert_key = f"sonarr_{item_id}_import_fix"
+                if alert_key not in alerted_items:
+                    logger.warning(f"🔧 Found import failure in Sonarr: {title}")
+                    
+                    try:
+                        # Remove from queue with blocklist and trigger new search
+                        await sonarr._delete(f"/queue/{item_id}", params={
+                            "removeFromClient": "true",
+                            "blocklist": "true"
+                        })
+                        logger.info(f"✅ Removed from queue and blocklisted: {title}")
+                        
+                        # Trigger new search if we have a series ID
+                        if series_id:
+                            await sonarr._post("/command", {"name": "SeriesSearch", "seriesId": series_id})
+                            logger.info(f"✅ Triggered new search for series ID {series_id}")
+                        
+                        # Get series name for the report
+                        series_title = title
+                        if series_id:
+                            try:
+                                series = await sonarr._get(f"/series/{series_id}")
+                                series_title = series.get('title', title)
+                            except Exception:
+                                pass
+                        
+                        fixed_items.append({
+                            'service': 'Sonarr',
+                            'series_title': series_title,
+                            'episode_title': title,
+                            'action': 'Blocklist & Re-search',
+                            'reason': 'No eligible files for import'
+                        })
+                        
+                        alerted_items.add(alert_key)
+                        logger.info(f"✅ Auto-fixed import failure for: {title}")
+                        continue
+                        
+                    except Exception as e:
+                        logger.error(f"Failed to auto-fix import failure: {e}")
+            
             if has_tba_issue and series_id:
                 logger.warning(f"🔧 Found TBA title issue in Sonarr: {title}")
                 
@@ -148,6 +198,7 @@ async def check_radarr_queue():
     
     radarr = RadarrService()
     stuck_items = []
+    fixed_items = []
     
     try:
         # Get queue from Radarr
@@ -155,7 +206,7 @@ async def check_radarr_queue():
         
         if not queue or 'records' not in queue:
             logger.info("Radarr queue is empty")
-            return []
+            return [], []
         
         now = datetime.utcnow()
         
@@ -163,10 +214,64 @@ async def check_radarr_queue():
             item_id = item.get('id')
             title = item.get('title', 'Unknown')
             status = item.get('status', '').lower()
+            movie_id = item.get('movieId')
             
             # Get status messages
             status_messages = item.get('statusMessages', [])
-            has_warning = any(msg.get('messages', []) for msg in status_messages)
+            messages = []
+            for msg in status_messages:
+                if msg.get('messages'):
+                    messages.extend(msg.get('messages'))
+            
+            # Check for import failure (no eligible files)
+            has_import_failure = any(
+                'no files found are eligible for import' in msg.lower() or
+                'not eligible for import' in msg.lower() or
+                'has already been imported' in msg.lower()
+                for msg in messages
+            )
+            
+            if has_import_failure and item_id:
+                alert_key = f"radarr_{item_id}_import_fix"
+                if alert_key not in alerted_items:
+                    logger.warning(f"🔧 Found import failure in Radarr: {title}")
+                    
+                    try:
+                        # Remove from queue with blocklist and trigger new search
+                        await radarr._delete(f"/queue/{item_id}", params={
+                            "removeFromClient": "true",
+                            "blocklist": "true"
+                        })
+                        logger.info(f"✅ Removed from queue and blocklisted: {title}")
+                        
+                        # Trigger new search if we have a movie ID
+                        if movie_id:
+                            await radarr._post("/command", {"name": "MoviesSearch", "movieIds": [movie_id]})
+                            logger.info(f"✅ Triggered new search for movie ID {movie_id}")
+                        
+                        # Get movie name for the report
+                        movie_title = title
+                        if movie_id:
+                            try:
+                                movie = await radarr._get(f"/movie/{movie_id}")
+                                movie_title = movie.get('title', title)
+                            except Exception:
+                                pass
+                        
+                        fixed_items.append({
+                            'service': 'Radarr',
+                            'series_title': movie_title,
+                            'episode_title': title,
+                            'action': 'Blocklist & Re-search',
+                            'reason': 'No eligible files for import'
+                        })
+                        
+                        alerted_items.add(alert_key)
+                        logger.info(f"✅ Auto-fixed import failure for: {title}")
+                        continue
+                        
+                    except Exception as e:
+                        logger.error(f"Failed to auto-fix import failure: {e}")
             
             # Check if stalled
             is_stalled = status in ['warning', 'stalled', 'failed']
@@ -200,7 +305,7 @@ async def check_radarr_queue():
                 except Exception as e:
                     logger.error(f"Error parsing Radarr item time: {e}")
         
-        return stuck_items, []  # Radarr doesn't have TBA fix yet
+        return stuck_items, fixed_items
         
     except Exception as e:
         logger.error(f"Failed to check Radarr queue: {e}")

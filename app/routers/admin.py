@@ -2191,3 +2191,4 @@ async def skip_setup(db: Session = Depends(get_db)):
         logger.error(f"Failed to skip setup: {e}")
         db.rollback()
         raise HTTPException(status_code=500, detail="Internal server error")
+
