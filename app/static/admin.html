@@ -2,7 +2,15 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="BingeAlert">
+    <meta name="theme-color" content="#1a1a2e">
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png">
     <title>BingeAlert - Admin Dashboard</title>
     <style>
         /* Dark Mode Only - No Switching */
@@ -539,7 +547,7 @@
 
         @media (max-width: 768px) {
             .stats-grid {
-                grid-template-columns: 1fr;
+                grid-template-columns: repeat(2, 1fr);
             }
 
             .data-table {
@@ -552,6 +560,433 @@
 
             .action-group button {
                 width: 100%;
+            }
+
+            header {
+                padding: 15px;
+            }
+
+            h1 {
+                font-size: 22px;
+            }
+
+            .tabs {
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: none;
+            }
+
+            .tabs::-webkit-scrollbar {
+                display: none;
+            }
+
+            .tab {
+                white-space: nowrap;
+                font-size: 13px;
+                padding: 10px 14px;
+            }
+
+            th, td {
+                padding: 10px;
+                font-size: 13px;
+            }
+
+            .modal-content,
+            div[style*="max-width: 700px"],
+            div[style*="max-width: 500px"] {
+                width: 95vw !important;
+                max-width: 95vw !important;
+                margin: 10px auto !important;
+            }
+
+            /* Settings grids -> 2 columns */
+            div[style*="grid-template-columns: repeat(4, 1fr)"] {
+                grid-template-columns: repeat(2, 1fr) !important;
+            }
+
+            div[style*="grid-template-columns: 2fr 1fr"] {
+                grid-template-columns: 1fr !important;
+            }
+        }
+
+        /* ==========================================
+           MOBILE (480px and below) - App-like experience
+           ========================================== */
+        @media (max-width: 480px) {
+            * {
+                -webkit-tap-highlight-color: transparent;
+            }
+
+            html {
+                background: var(--bg-gradient-start);
+            }
+
+            body {
+                padding: 10px 10px 80px 10px;
+            }
+
+            /* Sticky header */
+            header {
+                position: sticky;
+                top: 0;
+                z-index: 1000;
+                border-radius: 0 0 12px 12px;
+                padding: 12px 15px !important;
+                margin-bottom: 15px;
+                backdrop-filter: blur(20px);
+                -webkit-backdrop-filter: blur(20px);
+            }
+
+            h1 {
+                font-size: 20px !important;
+                margin-bottom: 4px !important;
+            }
+
+            .subtitle {
+                font-size: 11px;
+            }
+
+            .last-sync {
+                font-size: 10px !important;
+            }
+
+            #logoutBtn {
+                padding: 6px 10px !important;
+                font-size: 11px !important;
+            }
+
+            /* Stats - 2 columns, compact */
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr) !important;
+                gap: 8px !important;
+                margin-bottom: 15px !important;
+            }
+
+            .stat-card {
+                padding: 12px !important;
+                border-radius: 10px !important;
+            }
+
+            .stat-card:hover {
+                transform: none !important;
+                box-shadow: none !important;
+            }
+
+            .stat-label {
+                font-size: 10px !important;
+                letter-spacing: 0.5px !important;
+                margin-bottom: 4px !important;
+            }
+
+            .stat-value {
+                font-size: 24px !important;
+            }
+
+            /* Action groups - 2 column grid */
+            .actions {
+                grid-template-columns: 1fr !important;
+                gap: 10px !important;
+                margin-bottom: 15px !important;
+            }
+
+            .action-group {
+                padding: 12px !important;
+            }
+
+            .action-group .action-buttons {
+                gap: 6px !important;
+            }
+
+            .action-group button {
+                padding: 10px 8px !important;
+                font-size: 12px !important;
+                min-height: 44px;
+            }
+
+            /* ---- BOTTOM TAB BAR ---- */
+            .tabs {
+                position: fixed !important;
+                bottom: 0 !important;
+                left: 0 !important;
+                right: 0 !important;
+                top: auto !important;
+                z-index: 9999 !important;
+                display: flex !important;
+                flex-direction: row !important;
+                flex-wrap: nowrap !important;
+                overflow-x: auto !important;
+                -webkit-overflow-scrolling: touch;
+                background: rgba(22, 22, 40, 0.97) !important;
+                backdrop-filter: blur(20px) !important;
+                -webkit-backdrop-filter: blur(20px) !important;
+                border-top: 1px solid rgba(229, 160, 13, 0.25) !important;
+                border-bottom: none !important;
+                border-radius: 0 !important;
+                padding: 0 !important;
+                padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+                margin: 0 !important;
+                gap: 0 !important;
+                scrollbar-width: none;
+            }
+
+            .tabs::-webkit-scrollbar {
+                display: none;
+            }
+
+            .tab {
+                flex: 0 0 auto !important;
+                min-width: 64px !important;
+                padding: 8px 10px 6px !important;
+                font-size: 10px !important;
+                text-align: center !important;
+                border: none !important;
+                border-bottom: none !important;
+                border-radius: 0 !important;
+                color: rgba(255, 255, 255, 0.45) !important;
+                background: transparent !important;
+                transition: color 0.2s, background 0.2s !important;
+                white-space: nowrap !important;
+                line-height: 1.3 !important;
+            }
+
+            .tab.active {
+                color: #e5a00d !important;
+                border-bottom: none !important;
+                background: rgba(229, 160, 13, 0.08) !important;
+            }
+
+            /* --- Inputs: prevent iOS zoom --- */
+            input, select, textarea {
+                font-size: 16px !important;
+            }
+
+            /* Search boxes full width */
+            .search-box {
+                width: 100% !important;
+            }
+
+            /* Request/Notification filter bars - wrap */
+            div[style*="display: flex"][style*="gap: 10px"][style*="margin-bottom: 15px"] {
+                flex-wrap: wrap !important;
+            }
+
+            div[style*="display: flex"][style*="gap: 10px"][style*="margin-bottom: 15px"] .search-box {
+                flex: 1 1 100% !important;
+            }
+
+            div[style*="display: flex"][style*="gap: 10px"][style*="margin-bottom: 15px"] button {
+                flex: 1 1 auto !important;
+                font-size: 11px !important;
+                padding: 8px 10px !important;
+                min-height: 40px;
+            }
+
+            /* Tables - horizontal scroll with shadow hint */
+            .data-table {
+                border-radius: 10px !important;
+                position: relative;
+            }
+
+            table {
+                font-size: 12px !important;
+            }
+
+            th {
+                padding: 10px 8px !important;
+                font-size: 11px !important;
+                white-space: nowrap;
+            }
+
+            td {
+                padding: 10px 8px !important;
+                font-size: 12px !important;
+            }
+
+            .badge {
+                font-size: 10px !important;
+                padding: 3px 8px !important;
+            }
+
+            .action-btn {
+                padding: 5px 8px !important;
+                font-size: 10px !important;
+                margin: 2px !important;
+                min-height: 32px;
+            }
+
+            /* Settings sections */
+            div[style*="grid-template-columns: repeat(4, 1fr)"] {
+                grid-template-columns: 1fr 1fr !important;
+            }
+
+            div[style*="grid-template-columns: 2fr 1fr"] {
+                grid-template-columns: 1fr !important;
+            }
+
+            div[style*="grid-template-columns: repeat(3, 1fr)"] {
+                grid-template-columns: 1fr !important;
+            }
+
+            div[style*="grid-template-columns: 1fr 1fr 1fr"] {
+                grid-template-columns: 1fr !important;
+            }
+
+            /* Section headers */
+            h3 {
+                font-size: 15px !important;
+            }
+
+            h4 {
+                font-size: 13px !important;
+            }
+
+            /* Config sections - tighter */
+            .config-section {
+                padding: 15px !important;
+            }
+
+            /* Custom dropdowns - touch friendly */
+            .custom-select-display {
+                min-height: 44px !important;
+                font-size: 14px !important;
+                display: flex;
+                align-items: center;
+            }
+
+            .custom-select-options {
+                max-height: 50vh !important;
+            }
+
+            .custom-select-option {
+                min-height: 44px !important;
+                padding: 12px !important;
+                font-size: 14px !important;
+                display: flex;
+                align-items: center;
+            }
+
+            /* Modals - slide up from bottom */
+            div[style*="position: fixed"][style*="background: rgba(0,0,0"] {
+                align-items: flex-end !important;
+            }
+
+            div[style*="position: fixed"][style*="background: rgba(0,0,0"] > div {
+                width: 100% !important;
+                max-width: 100% !important;
+                max-height: 90vh !important;
+                margin: 0 !important;
+                border-radius: 16px 16px 0 0 !important;
+                overflow-y: auto !important;
+            }
+
+            /* Log viewer */
+            #logContent {
+                font-size: 10px !important;
+                max-height: 50vh !important;
+            }
+
+            /* Maintenance tab grids */
+            div[style*="grid-template-columns: 1fr 1fr"][style*="gap: 20px"] {
+                grid-template-columns: 1fr !important;
+            }
+
+            /* Backup section */
+            div[style*="display: grid"][style*="gap: 20px"][style*="grid-template-columns: 1fr 1fr"] {
+                grid-template-columns: 1fr !important;
+            }
+
+            /* Toggle switches - bigger tap target */
+            .switch {
+                width: 54px !important;
+                height: 30px !important;
+            }
+
+            /* Buttons - all touch friendly */
+            button {
+                min-height: 44px;
+            }
+
+            button:active {
+                opacity: 0.7 !important;
+                transform: scale(0.97) !important;
+            }
+        }
+
+        /* ==========================================
+           EXTRA SMALL (360px - iPhone SE)
+           ========================================== */
+        @media (max-width: 360px) {
+            body {
+                padding: 8px 8px 80px 8px;
+            }
+
+            .stats-grid {
+                gap: 6px !important;
+            }
+
+            .stat-value {
+                font-size: 20px !important;
+            }
+
+            .tab {
+                min-width: 56px !important;
+                font-size: 9px !important;
+                padding: 6px 8px 5px !important;
+            }
+
+            .action-group button {
+                font-size: 11px !important;
+            }
+        }
+
+        /* ==========================================
+           LANDSCAPE MOBILE
+           ========================================== */
+        @media (max-width: 768px) and (orientation: landscape) {
+            body {
+                padding-bottom: 60px;
+            }
+
+            .tab {
+                min-width: 56px !important;
+                padding: 5px 8px !important;
+                font-size: 9px !important;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(3, 1fr) !important;
+            }
+        }
+
+        /* ==========================================
+           TOUCH DEVICE ENHANCEMENTS
+           ========================================== */
+        @media (hover: none) and (pointer: coarse) {
+            .stat-card:hover {
+                transform: none !important;
+                box-shadow: none !important;
+            }
+
+            button:hover {
+                transform: none !important;
+            }
+
+            .tab-content, .data-table, table {
+                -webkit-overflow-scrolling: touch;
+            }
+        }
+
+        /* ==========================================
+           PWA STANDALONE MODE
+           ========================================== */
+        @media all and (display-mode: standalone) {
+            header {
+                padding-top: max(12px, env(safe-area-inset-top)) !important;
+            }
+
+            .tabs {
+                padding-bottom: max(0px, env(safe-area-inset-bottom)) !important;
             }
         }
 
@@ -3844,6 +4279,17 @@
             await origLoadConfig();
             setTimeout(initCustomSelects, 100);
         };
+    }
+    </script>
+
+    <!-- PWA Service Worker Registration -->
+    <script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/static/service-worker.js')
+                .then(reg => console.log('SW registered:', reg.scope))
+                .catch(err => console.log('SW registration failed:', err));
+        });
     }
     </script>
 </body>

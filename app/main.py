@@ -213,6 +213,15 @@ if os.path.exists(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 
+# PWA: Serve service worker from root scope
+@app.get("/service-worker.js")
+async def service_worker():
+    sw_path = os.path.join(os.path.dirname(__file__), "static", "service-worker.js")
+    if os.path.exists(sw_path):
+        return FileResponse(sw_path, media_type="application/javascript")
+    return JSONResponse(status_code=404, content={"detail": "Service worker not found"})
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Global exception: {exc}", exc_info=True)
