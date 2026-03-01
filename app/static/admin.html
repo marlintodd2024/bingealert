@@ -1997,6 +1997,21 @@
     </div>
 
     <script>
+        // Security: HTML/attribute escaping to prevent XSS from API data
+        function escapeHtml(str) {
+            if (str == null) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+        function escapeAttr(str) {
+            // For use inside onclick="..." attributes — escapes HTML entities + backslash-escapes single quotes
+            return escapeHtml(str).replace(/&#39;/g, "\\'");
+        }
+
         let allUsers = [];
         let allRequests = [];
         let allNotifications = [];
@@ -2145,11 +2160,11 @@
                     <td>${req.id}</td>
                     <td>${req.user_email}</td>
                     <td><span class="badge ${req.media_type}">${req.media_type.toUpperCase()}</span></td>
-                    <td>${req.title}</td>
+                    <td>${escapeHtml(req.title)}</td>
                     <td><span class="badge ${req.status}">${req.status}</span></td>
                     <td>${new Date(req.created_at).toLocaleString()}</td>
                     <td>
-                        <button class="action-btn" onclick="manageSharedUsers(${req.id}, '${req.title.replace(/'/g, "\\'")}')">👥 Users</button>
+                        <button class="action-btn" onclick="manageSharedUsers(${req.id}, '${escapeAttr(req.title)}')">👥 Users</button>
                         ${req.media_type === 'tv' ? `<button class="action-btn" onclick="importEpisodes(${req.id})">📥 Import</button>` : ''}
                     </td>
                 </tr>
@@ -2273,7 +2288,7 @@
                                 <span class="badge ${ep.already_notified ? 'sent' : 'pending-email'}" style="font-size: 11px;">
                                     ${ep.already_notified ? 'Notified' : 'Will Notify'}
                                 </span>
-                                <button class="action-btn" onclick="manageSharedUsers(${ep.request_id}, '${ep.series_title.replace(/'/g, "\\'")} - S${String(ep.season_number).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')}')" style="padding: 6px 12px; font-size: 12px;">
+                                <button class="action-btn" onclick="manageSharedUsers(${ep.request_id}, '${escapeAttr(ep.series_title)} - S${String(ep.season_number).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')}')" style="padding: 6px 12px; font-size: 12px;">
                                     👥 Users
                                 </button>
                                 ${showNotifyButton ? `
@@ -2288,7 +2303,7 @@
                 
                 return `
                     <div style="background: rgba(255, 255, 255, 0.05); border-radius: 12px; margin-bottom: 20px; overflow: hidden;">
-                        <div style="background: linear-gradient(135deg, rgba(229, 160, 13, 0.2) 0%, rgba(229, 160, 13, 0.1) 100%); padding: 15px 20px; cursor: pointer; display: flex; align-items: center; justify-content: space-between;" onclick="toggleSeriesExpand('${seriesName.replace(/'/g, "\\'")}')">
+                        <div style="background: linear-gradient(135deg, rgba(229, 160, 13, 0.2) 0%, rgba(229, 160, 13, 0.1) 100%); padding: 15px 20px; cursor: pointer; display: flex; align-items: center; justify-content: space-between;" onclick="toggleSeriesExpand('${escapeAttr(seriesName)}')">
                             <div>
                                 <h3 style="margin: 0; color: #e5a00d; font-size: 18px;">📺 ${seriesName}</h3>
                                 <div style="font-size: 13px; color: #999; margin-top: 5px;">
@@ -2346,7 +2361,7 @@
                     <td>${ep.user_name} (${ep.user_email})</td>
                     <td><span class="badge ${ep.already_notified ? 'sent' : 'pending-email'}">${ep.already_notified ? 'Notified' : 'Will Notify'}</span></td>
                     <td>
-                        <button class="action-btn" onclick="manageSharedUsers(${ep.request_id}, '${ep.series_title.replace(/'/g, "\\'")} - S${String(ep.season_number).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')}')">👥 Users</button>
+                        <button class="action-btn" onclick="manageSharedUsers(${ep.request_id}, '${escapeAttr(ep.series_title)} - S${String(ep.season_number).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')}')">👥 Users</button>
                         ${showNotifyButton ? `<button class="action-btn" onclick="notifyEpisodeNow(${ep.request_id}, ${ep.series_id}, ${ep.season_number}, ${ep.episode_number})">📧 Notify Now</button>` : ''}
                     </td>
                 </tr>
@@ -2943,10 +2958,10 @@
                     // Auto-scroll to bottom
                     container.scrollTop = container.scrollHeight;
                 } else {
-                    container.innerHTML = `<div style="color: #f44336;">Failed to load logs: ${data.detail || 'Unknown error'}</div>`;
+                    container.innerHTML = `<div style="color: #f44336;">Failed to load logs: ${escapeHtml(data.detail || 'Unknown error')}</div>`;
                 }
             } catch (error) {
-                container.innerHTML = `<div style="color: #f44336;">Error loading logs: ${error.message}</div>`;
+                container.innerHTML = `<div style="color: #f44336;">Error loading logs: ${escapeHtml(error.message)}</div>`;
             }
         }
 
