@@ -6,6 +6,7 @@ import logging
 import os
 import asyncio
 
+from sqlalchemy import text
 from app.config import settings
 from app.database import engine, Base
 from app.routers import webhooks, admin, health, sse
@@ -66,9 +67,39 @@ async def lifespan(app: FastAPI):
     """Application lifespan events"""
     logger.info("Starting BingeAlert...")
     
-    # Create database tables
-    Base.metadata.create_all(bind=engine)
-    logger.info("Database tables created/verified")
+    # Wait for database to be ready (retry with backoff)
+    max_retries = 30
+    retry_delay = 2
+    db_ready = False
+    
+    for attempt in range(1, max_retries + 1):
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            Base.metadata.create_all(bind=engine)
+            logger.info(f"Database connected and tables created/verified (attempt {attempt})")
+            db_ready = True
+            break
+        except Exception as e:
+            if attempt < max_retries:
+                logger.warning(
+                    f"Database not ready (attempt {attempt}/{max_retries}): {e}. "
+                    f"Retrying in {retry_delay}s..."
+                )
+                await asyncio.sleep(retry_delay)
+                retry_delay = min(retry_delay * 1.5, 10)
+            else:
+                logger.error(
+                    f"Failed to connect to database after {max_retries} attempts. "
+                    f"Check DB_HOST, DB_PORT, DB_USER, DB_PASSWORD in your .env file. "
+                    f"Last error: {e}"
+                )
+    
+    if not db_ready:
+        logger.error(
+            "⚠️  BingeAlert starting without database connection. "
+            "Most features will not work until the database is available."
+        )
     
     # Initial sync with Jellyseerr - DISABLED (using webhooks instead)
     # Uncomment below if you want to sync existing requests on startup
@@ -207,6 +238,19 @@ app.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks"])
 app.include_router(admin.router, prefix="/admin", tags=["Admin"])
 app.include_router(sse.router, tags=["SSE"])  # Real-time updates
 
+
+# ──────────────────────────────────────
+# Setup wizard route (must be before static mount)
+# ──────────────────────────────────────
+@app.get("/setup.html")
+async def setup_page():
+    """Serve the setup wizard directly"""
+    static_file = os.path.join(os.path.dirname(__file__), "static", "setup.html")
+    if os.path.exists(static_file):
+        return FileResponse(static_file)
+    return JSONResponse(status_code=404, content={"detail": "Setup page not found"})
+
+
 # Mount static files
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 if os.path.exists(static_dir):
@@ -249,7 +293,7 @@ async def login_page():
 async def auth_check(request: Request):
     """Check current auth status and return turnstile config for login page"""
     from app.auth import get_auth_settings, get_client_ip, verify_session_token, is_local_network
-    from app.database import get_db
+    from app.database import get_db, SystemConfig
     
     client_ip = get_client_ip(request)
     
@@ -257,20 +301,36 @@ async def auth_check(request: Request):
         db = next(get_db())
         try:
             settings_dict = get_auth_settings(db)
+            
+            # Check setup status
+            setup_config = db.query(SystemConfig).filter(
+                SystemConfig.key == "setup_complete"
+            ).first()
+            setup_complete = bool(setup_config and setup_config.value == "true")
         finally:
             db.close()
     except Exception:
-        return {"authenticated": False, "auth_enabled": False, "client_ip": client_ip}
+        return {"authenticated": False, "auth_enabled": False, "setup_complete": False, "client_ip": client_ip}
+    
+    # If setup not complete, tell the client to go to setup
+    if not setup_complete:
+        return {
+            "authenticated": False,
+            "auth_enabled": False,
+            "setup_complete": False,
+            "redirect": "/setup.html",
+            "client_ip": client_ip
+        }
     
     auth_enabled = settings_dict.get('auth_enabled', 'false').lower() == 'true'
     
     if not auth_enabled:
-        return {"authenticated": True, "auth_enabled": False, "client_ip": client_ip}
+        return {"authenticated": True, "auth_enabled": False, "setup_complete": True, "client_ip": client_ip}
     
     # Check local network
     local_cidr = settings_dict.get('local_network_cidr', '')
     if local_cidr and is_local_network(client_ip, local_cidr):
-        return {"authenticated": True, "auth_enabled": True, "local_network": True, "client_ip": client_ip}
+        return {"authenticated": True, "auth_enabled": True, "setup_complete": True, "local_network": True, "client_ip": client_ip}
     
     # Check session
     session_token = request.cookies.get('pnp_session')
@@ -282,6 +342,7 @@ async def auth_check(request: Request):
     result = {
         "authenticated": authenticated,
         "auth_enabled": True,
+        "setup_complete": True,
         "client_ip": client_ip,
         "turnstile_enabled": settings_dict.get('turnstile_enabled', 'false').lower() == 'true',
         "turnstile_site_key": settings_dict.get('turnstile_site_key', '') if settings_dict.get('turnstile_enabled', 'false').lower() == 'true' else ''

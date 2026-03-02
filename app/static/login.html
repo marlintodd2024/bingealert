@@ -191,6 +191,12 @@
                 const resp = await fetch('/auth/check');
                 const data = await resp.json();
 
+                // If setup not complete, redirect to setup wizard
+                if (data.setup_complete === false) {
+                    window.location.href = data.redirect || '/setup.html';
+                    return;
+                }
+
                 if (data.authenticated) {
                     window.location.href = '/';
                     return;

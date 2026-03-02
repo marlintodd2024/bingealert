@@ -252,34 +252,70 @@ class AuthMiddleware(BaseHTTPMiddleware):
             if path.startswith(public_path) or path == public_path:
                 return await call_next(request)
 
-        # ============================================================
-        # SECURITY FIX [MED-1]: Setup pages only public if setup
-        # hasn't been completed yet. After setup, require auth.
-        # ============================================================
+        # Always allow static assets (CSS, JS, images, fonts, icons)
+        # except HTML files which may need auth
+        if path.startswith("/static/") and not path.endswith(".html"):
+            return await call_next(request)
+
+        # ──────────────────────────────────────────────────────
+        # CHECK SETUP STATUS FIRST
+        # On fresh install, allow setup pages and redirect
+        # everything else to the setup wizard.
+        # ──────────────────────────────────────────────────────
         setup_paths = ["/setup", "/setup.html", "/static/setup.html"]
-        if any(path.startswith(sp) or path == sp for sp in setup_paths):
+        is_setup_path = any(path == sp or path.startswith(sp) for sp in setup_paths)
+
+        try:
+            from app.database import get_db, SystemConfig
+            db = next(get_db())
             try:
-                from app.database import get_db, SystemConfig
-                db = next(get_db())
-                try:
-                    setup_done = db.query(SystemConfig).filter(
-                        SystemConfig.key == "setup_complete",
-                        SystemConfig.value == "true"
-                    ).first()
-                finally:
-                    db.close()
-                if not setup_done:
-                    # Setup not complete — allow public access
-                    return await call_next(request)
-                # Setup IS complete — fall through to require auth
-            except Exception:
-                # DB error during setup check — allow access to not lock out
+                setup_done = db.query(SystemConfig).filter(
+                    SystemConfig.key == "setup_complete",
+                    SystemConfig.value == "true"
+                ).first()
+            finally:
+                db.close()
+        except Exception:
+            # DB not ready — allow setup paths and root to avoid lockout
+            if is_setup_path or path == "/":
                 return await call_next(request)
+            return JSONResponse(
+                status_code=503,
+                content={"detail": "Service starting up, please try again in a moment"}
+            )
+
+        if not setup_done:
+            # ──────────────────────────────────────────────────
+            # FRESH INSTALL: Setup not complete.
+            # Allow setup pages, root (for redirect to setup),
+            # admin config endpoints (setup wizard needs these),
+            # and static assets.
+            # ──────────────────────────────────────────────────
+            allowed_during_setup = [
+                "/",
+                "/setup", "/setup.html", "/static/setup.html",
+                "/admin/config", "/admin/setup-status", "/admin/skip-setup",
+                "/admin/test-email", "/admin/test-connection",
+                "/admin/sync/users", "/admin/sync/requests",
+                "/service-worker.js",
+            ]
+            if any(path == p or path.startswith(p) for p in allowed_during_setup):
+                return await call_next(request)
+            if path.startswith("/static/"):
+                return await call_next(request)
+            # Everything else redirects to setup wizard
+            return RedirectResponse(url="/setup.html", status_code=302)
+
+        # ──────────────────────────────────────────────────────
+        # SETUP COMPLETE — Normal auth flow below
+        # ──────────────────────────────────────────────────────
+
+        # Setup pages require auth after completion (fall through)
 
         # Check if auth is enabled
         try:
-            from app.database import get_db
-            db = next(get_db())
+            from app.database import get_db as get_db2
+            db = next(get_db2())
             try:
                 settings = get_auth_settings(db)
             finally:

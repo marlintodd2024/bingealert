@@ -1,50 +1,66 @@
 version: '3.8'
 
-# BingeAlert - Docker Compose (Pre-built Image)
-# 
+# BingeAlert - Docker Compose (GHCR Pre-built Image)
+# For users who want to pull the pre-built image without cloning the repo
+#
 # Quick start:
 #   1. Download this file and .env.example
-#   2. cp .env.example .env && edit .env with your settings
+#   2. cp .env.example .env && nano .env
 #   3. docker compose -f docker-compose.ghcr.yml up -d
-#   4. Open http://your-server:8000 — setup wizard will guide you
+#   4. Open http://your-server:8000
 
 services:
-  postgres:
+  bingealert-db:
     image: postgres:15
     container_name: bingealert-db
     environment:
-      POSTGRES_DB: notifications
-      POSTGRES_USER: notifyuser
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_USER: ${DB_USER:-notifyuser}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme123}
+      POSTGRES_DB: ${DB_NAME:-notifications}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - bingealert_postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-notifyuser} -d ${DB_NAME:-notifications}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
-  portal-api:
+  bingealert:
     image: ghcr.io/marlintodd2024/bingealert:latest
     container_name: bingealert
-    depends_on:
-      - postgres
+    environment:
+      DB_PASSWORD: ${DB_PASSWORD:-changeme123}
+      DB_USER: ${DB_USER:-notifyuser}
+      DB_NAME: ${DB_NAME:-notifications}
+      DB_HOST: bingealert-db
+      DB_PORT: ${DB_PORT:-5432}
+      JELLYSEERR_URL: ${JELLYSEERR_URL}
+      JELLYSEERR_API_KEY: ${JELLYSEERR_API_KEY}
+      SONARR_URL: ${SONARR_URL}
+      SONARR_API_KEY: ${SONARR_API_KEY}
+      RADARR_URL: ${RADARR_URL}
+      RADARR_API_KEY: ${RADARR_API_KEY}
+      PLEX_URL: ${PLEX_URL:-}
+      PLEX_TOKEN: ${PLEX_TOKEN:-}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-BingeAlert <your_email@gmail.com>}
+      APP_SECRET_KEY: ${APP_SECRET_KEY:-changeme-generate-random-key}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
     ports:
       - "8000:8000"
+    depends_on:
+      bingealert-db:
+        condition: service_healthy
     volumes:
       - ./data:/data
       - ./.env:/app/.env
       - /var/run/docker.sock:/var/run/docker.sock
-    env_file:
-      - .env
     restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "5"
-        compress: "true"
 
 volumes:
-  postgres_data:
+  bingealert_postgres_data:
