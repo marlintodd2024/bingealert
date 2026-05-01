@@ -1,0 +1,511 @@
+/* ============================================
+   BingeAlert Mobile Responsive CSS
+   Add this to your admin.html <style> block
+   or link as a separate stylesheet
+   ============================================ */
+
+/* --- PWA Status Bar --- */
+@supports (padding-top: env(safe-area-inset-top)) {
+    body {
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+        padding-left: env(safe-area-inset-left);
+        padding-right: env(safe-area-inset-right);
+    }
+}
+
+/* ==========================================
+   TABLET BREAKPOINT (768px and below)
+   ========================================== */
+@media (max-width: 768px) {
+    /* --- Header --- */
+    .header {
+        padding: 12px 15px !important;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .header h1 {
+        font-size: 18px !important;
+    }
+
+    .header .subtitle,
+    .header .version-badge {
+        font-size: 11px !important;
+    }
+
+    /* --- Stats Grid --- */
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 10px !important;
+    }
+
+    .stat-card {
+        padding: 12px !important;
+    }
+
+    .stat-card .stat-number {
+        font-size: 22px !important;
+    }
+
+    .stat-card .stat-label {
+        font-size: 11px !important;
+    }
+
+    /* --- Action Buttons Grid --- */
+    .actions-grid,
+    .quick-actions,
+    [style*="grid-template-columns: repeat(4"] {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 8px !important;
+    }
+
+    /* --- Tables become cards on tablet --- */
+    table {
+        font-size: 13px !important;
+    }
+
+    th, td {
+        padding: 8px 10px !important;
+    }
+
+    /* --- Settings Grid --- */
+    .config-grid,
+    [style*="grid-template-columns: repeat(4, 1fr)"] {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+
+    [style*="grid-template-columns: repeat(3, 1fr)"] {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+
+    /* --- Modals --- */
+    .modal-content {
+        width: 95% !important;
+        max-width: none !important;
+        margin: 20px auto !important;
+        max-height: 85vh !important;
+    }
+}
+
+/* ==========================================
+   MOBILE BREAKPOINT (480px and below)
+   This is where the magic happens
+   ========================================== */
+@media (max-width: 480px) {
+
+    /* --- Global Resets --- */
+    * {
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+        padding-bottom: 70px !important; /* Space for bottom nav */
+        overflow-x: hidden;
+    }
+
+    /* --- Header Compact --- */
+    .header {
+        padding: 10px 12px !important;
+        position: sticky;
+        top: 0;
+        z-index: 1000;
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+    }
+
+    .header h1 {
+        font-size: 16px !important;
+    }
+
+    .header .subtitle {
+        display: none !important; /* Hide subtitle on mobile */
+    }
+
+    /* --- Tab Bar → Bottom Navigation --- */
+    .tabs {
+        position: fixed !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        top: auto !important;
+        z-index: 9999 !important;
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+        background: rgba(10, 10, 15, 0.95) !important;
+        backdrop-filter: blur(20px) !important;
+        -webkit-backdrop-filter: blur(20px) !important;
+        border-top: 1px solid rgba(229, 160, 13, 0.3) !important;
+        border-bottom: none !important;
+        border-radius: 0 !important;
+        padding: 0 !important;
+        padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+        margin: 0 !important;
+        gap: 0 !important;
+        scrollbar-width: none; /* Firefox */
+    }
+
+    .tabs::-webkit-scrollbar {
+        display: none; /* Chrome/Safari */
+    }
+
+    .tabs .tab,
+    .tabs button,
+    .tabs a {
+        flex: 0 0 auto !important;
+        min-width: 70px !important;
+        padding: 8px 6px !important;
+        font-size: 10px !important;
+        text-align: center !important;
+        border: none !important;
+        border-radius: 0 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 2px !important;
+        white-space: nowrap !important;
+        background: transparent !important;
+        color: rgba(255, 255, 255, 0.5) !important;
+        transition: color 0.2s, background 0.2s !important;
+    }
+
+    .tabs .tab.active,
+    .tabs button.active,
+    .tabs .tab[style*="border-bottom"],
+    .tabs button[style*="border-bottom"] {
+        color: #e5a00d !important;
+        background: rgba(229, 160, 13, 0.1) !important;
+        border-bottom: none !important;
+    }
+
+    /* Make emoji bigger as icon */
+    .tabs .tab::first-line,
+    .tabs button::first-line {
+        font-size: 18px;
+    }
+
+    /* --- Content Area --- */
+    .tab-content,
+    [class*="tab-content"] {
+        padding: 12px !important;
+    }
+
+    /* --- Stats Grid → 2 columns on phone --- */
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 8px !important;
+    }
+
+    .stat-card {
+        padding: 10px !important;
+        border-radius: 10px !important;
+    }
+
+    .stat-card .stat-number {
+        font-size: 20px !important;
+    }
+
+    .stat-card .stat-label {
+        font-size: 10px !important;
+    }
+
+    /* --- Action Buttons → Full width stack --- */
+    .actions-grid,
+    .quick-actions,
+    [style*="grid-template-columns: repeat(4"],
+    [style*="grid-template-columns: repeat(3"],
+    [style*="display: grid"][style*="gap"] {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 6px !important;
+    }
+
+    /* Make buttons touch-friendly */
+    button, .btn, [role="button"] {
+        min-height: 44px !important; /* Apple's minimum tap target */
+        font-size: 13px !important;
+    }
+
+    /* --- Tables → Card Layout --- */
+    table.mobile-cards {
+        display: block !important;
+    }
+
+    table.mobile-cards thead {
+        display: none !important;
+    }
+
+    table.mobile-cards tbody {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 8px !important;
+    }
+
+    table.mobile-cards tr {
+        display: block !important;
+        background: rgba(255, 255, 255, 0.03) !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        border-radius: 10px !important;
+        padding: 12px !important;
+        position: relative;
+    }
+
+    table.mobile-cards td {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        padding: 4px 0 !important;
+        border: none !important;
+        font-size: 13px !important;
+    }
+
+    table.mobile-cards td::before {
+        content: attr(data-label);
+        font-weight: 600;
+        color: #e5a00d;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        flex-shrink: 0;
+        margin-right: 10px;
+    }
+
+    /* Hide less important columns on mobile */
+    table.mobile-cards td.hide-mobile {
+        display: none !important;
+    }
+
+    /* --- Settings Grid → Single Column --- */
+    .config-grid,
+    [style*="grid-template-columns: repeat(4, 1fr)"],
+    [style*="grid-template-columns: repeat(3, 1fr)"],
+    [style*="grid-template-columns: repeat(2, 1fr)"] {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* --- Modals → Full Screen --- */
+    .modal-overlay,
+    [style*="position: fixed"][style*="background: rgba"] {
+        align-items: flex-end !important; /* Slide up from bottom */
+    }
+
+    .modal-content,
+    .modal-overlay > div:first-child,
+    [style*="background: rgba(20"][style*="border-radius"] {
+        width: 100% !important;
+        max-width: 100% !important;
+        max-height: 90vh !important;
+        margin: 0 !important;
+        border-radius: 16px 16px 0 0 !important;
+        padding: 16px !important;
+    }
+
+    /* Modal close button - bigger tap target */
+    .modal-close,
+    [onclick*="closeModal"],
+    [onclick*="display='none'"] {
+        min-width: 44px !important;
+        min-height: 44px !important;
+        font-size: 24px !important;
+    }
+
+    /* --- Search Box --- */
+    .search-box,
+    input[type="search"],
+    input[type="text"].search {
+        width: 100% !important;
+        font-size: 16px !important; /* Prevents iOS zoom on focus */
+        padding: 12px !important;
+    }
+
+    /* All inputs - prevent iOS zoom */
+    input, select, textarea {
+        font-size: 16px !important; /* CRITICAL: prevents iOS auto-zoom */
+    }
+
+    /* --- Custom Select Dropdowns --- */
+    .custom-select-wrap {
+        width: 100% !important;
+    }
+
+    .custom-select-display {
+        min-height: 44px !important;
+        font-size: 14px !important;
+    }
+
+    .custom-select-options {
+        max-height: 50vh !important;
+    }
+
+    .custom-select-option {
+        min-height: 44px !important;
+        padding: 12px !important;
+        font-size: 14px !important;
+    }
+
+    /* --- Pagination / Filter Bar --- */
+    .filter-bar,
+    [style*="display: flex"][style*="justify-content: space-between"] {
+        flex-direction: column !important;
+        gap: 8px !important;
+    }
+
+    /* --- Log viewer --- */
+    .log-container,
+    #logContent,
+    pre {
+        font-size: 11px !important;
+        max-height: 50vh !important;
+        overflow-x: auto !important;
+        word-break: break-all !important;
+    }
+
+    /* --- Section Headers --- */
+    h2 {
+        font-size: 16px !important;
+    }
+
+    h3 {
+        font-size: 14px !important;
+    }
+
+    /* --- Hide non-essential elements --- */
+    .desktop-only {
+        display: none !important;
+    }
+
+    /* --- Backup/Restore Sections --- */
+    .backup-section {
+        flex-direction: column !important;
+    }
+
+    /* --- Notification Cards --- */
+    .notification-badge,
+    .status-badge {
+        font-size: 10px !important;
+        padding: 3px 8px !important;
+    }
+
+    /* --- Pull to refresh hint (optional) --- */
+    .pull-to-refresh {
+        text-align: center;
+        padding: 10px;
+        color: rgba(255, 255, 255, 0.3);
+        font-size: 12px;
+        display: none;
+    }
+}
+
+/* ==========================================
+   EXTRA SMALL (320px - iPhone SE, etc.)
+   ========================================== */
+@media (max-width: 360px) {
+    .stats-grid {
+        grid-template-columns: 1fr 1fr !important;
+        gap: 6px !important;
+    }
+
+    .stat-card .stat-number {
+        font-size: 18px !important;
+    }
+
+    .tabs .tab,
+    .tabs button {
+        min-width: 60px !important;
+        font-size: 9px !important;
+        padding: 6px 4px !important;
+    }
+
+    .actions-grid,
+    .quick-actions {
+        grid-template-columns: 1fr 1fr !important;
+    }
+
+    button, .btn {
+        font-size: 12px !important;
+        padding: 8px !important;
+    }
+}
+
+/* ==========================================
+   LANDSCAPE MOBILE
+   ========================================== */
+@media (max-width: 768px) and (orientation: landscape) {
+    .tabs .tab,
+    .tabs button {
+        min-width: 60px !important;
+        padding: 6px 4px !important;
+        font-size: 9px !important;
+    }
+
+    body {
+        padding-bottom: 55px !important;
+    }
+
+    .stats-grid {
+        grid-template-columns: repeat(4, 1fr) !important;
+    }
+}
+
+/* ==========================================
+   TOUCH INTERACTION ENHANCEMENTS
+   ========================================== */
+@media (hover: none) and (pointer: coarse) {
+    /* Touch devices - larger targets */
+    button, .btn, [role="button"], a.btn {
+        min-height: 44px;
+    }
+
+    /* Remove hover effects that don't work on touch */
+    .stat-card:hover {
+        transform: none !important;
+    }
+
+    /* Add active state for touch feedback */
+    button:active, .btn:active, .tab:active {
+        opacity: 0.7 !important;
+        transform: scale(0.97) !important;
+        transition: all 0.1s !important;
+    }
+
+    /* Smooth scrolling for momentum */
+    .tab-content, .modal-content, table {
+        -webkit-overflow-scrolling: touch;
+    }
+}
+
+/* ==========================================
+   PWA STANDALONE MODE ADJUSTMENTS
+   When opened from home screen
+   ========================================== */
+@media all and (display-mode: standalone) {
+    .header {
+        padding-top: max(12px, env(safe-area-inset-top)) !important;
+    }
+
+    .tabs {
+        padding-bottom: max(0px, env(safe-area-inset-bottom)) !important;
+    }
+}
+
+/* ==========================================
+   DARK MODE SAFE AREA FILLS
+   (For notch/Dynamic Island areas)
+   ========================================== */
+html {
+    background-color: #0a0a0f;
+}
+
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: env(safe-area-inset-top, 0px);
+    background: #0a0a0f;
+    z-index: 10000;
+}
