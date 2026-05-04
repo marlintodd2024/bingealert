@@ -165,6 +165,27 @@ def login_attempt_allowed(ip: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
+def get_auth_settings(db) -> dict:
+    """Compat shim for v1 admin.py code that read auth state from system_config.
+
+    In v2, auth state lives in app.config.settings (loaded from /data/config.json).
+    This shim returns a dict shaped like the v1 system_config rows so the existing
+    admin.py read paths (e.g. /admin/config GET) work without modification.
+
+    The `db` arg is unused -- accepted only because callers still pass a session.
+    """
+    timeout_hours = max(1, int(settings.session_max_age_seconds // 3600))
+    return {
+        "auth_enabled": "true" if settings.auth_required else "false",
+        "auth_password_hash": settings.admin_password_hash or "",
+        "local_network_cidr": settings.local_network_cidrs or "",
+        "session_timeout_hours": str(timeout_hours),
+        "turnstile_enabled": "true" if settings.turnstile_secret_key else "false",
+        "turnstile_site_key": settings.turnstile_site_key or "",
+        "turnstile_secret_key": settings.turnstile_secret_key or "",
+    }
+
+
 async def verify_turnstile(token: str, secret_key: str, client_ip: Optional[str] = None) -> bool:
     if not token or not secret_key:
         return False

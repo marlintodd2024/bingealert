@@ -24,9 +24,11 @@ from fastapi.staticfiles import StaticFiles
 from app.auth import AuthMiddleware
 from app.config import settings
 from app.middleware import SetupGateMiddleware
+from app.routers import admin as admin_router
 from app.routers import auth as auth_router
 from app.routers import health as health_router
 from app.routers import setup as setup_router
+from app.routers import sse as sse_router
 from app.routers import webhooks as webhooks_router
 
 
@@ -139,7 +141,8 @@ app.include_router(setup_router.router, tags=["Setup"])
 app.include_router(auth_router.router, tags=["Auth"])
 app.include_router(health_router.router, prefix="/health", tags=["Health"])
 app.include_router(webhooks_router.router, prefix="/webhooks", tags=["Webhooks"])
-# admin + sse routers come in Phase 4d.
+app.include_router(admin_router.router, prefix="/admin", tags=["Admin"])
+app.include_router(sse_router.router, tags=["SSE"])  # already prefixes /sse internally
 
 if _STATIC_DIR.is_dir():
     app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")

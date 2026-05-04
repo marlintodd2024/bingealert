@@ -2298,72 +2298,31 @@ async def test_radarr_connection(data: dict):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+# NOTE (v2): the three /setup-* endpoints below originally read/wrote a
+# `setup_complete` flag in the system_config table. In v2 the existence of
+# /data/config.json (and is_minimally_configured) IS the source of truth.
+# These bodies now delegate to settings so the v1 admin.html can keep calling
+# them without the result drifting from reality.
+
 @router.post("/setup-complete")
-async def mark_setup_complete(db: Session = Depends(get_db)):
-    """Mark initial setup as complete"""
-    try:
-        # Check if already exists
-        config = db.query(SystemConfig).filter(SystemConfig.key == "setup_complete").first()
-        
-        if config:
-            config.value = "true"
-            config.updated_at = datetime.utcnow()
-        else:
-            config = SystemConfig(key="setup_complete", value="true")
-            db.add(config)
-        
-        db.commit()
-        
-        logger.info("Setup marked as complete in database")
-        return {"success": True, "message": "Setup marked as complete"}
-        
-    except Exception as e:
-        logger.error(f"Failed to mark setup complete: {e}")
-        db.rollback()
-        raise HTTPException(status_code=500, detail="Internal server error")
+async def mark_setup_complete():
+    """No-op in v2 -- /data/config.json existence is the setup flag."""
+    from app.config import settings as _s
+    return {"success": True, "message": "Setup state derives from /data/config.json", "configured": _s.is_minimally_configured()}
 
 
 @router.get("/setup-status")
-async def get_setup_status(db: Session = Depends(get_db)):
-    """Check if initial setup has been completed"""
-    try:
-        config = db.query(SystemConfig).filter(SystemConfig.key == "setup_complete").first()
-        setup_complete = config and config.value == "true"
-        
-        return {
-            "setup_complete": setup_complete,
-            "needs_setup": not setup_complete
-        }
-        
-    except Exception as e:
-        logger.error(f"Failed to check setup status: {e}")
-        # If there's an error, assume setup is not complete to be safe
-        return {"setup_complete": False, "needs_setup": True}
+async def get_setup_status():
+    from app.config import settings as _s
+    configured = _s.is_minimally_configured()
+    return {"setup_complete": configured, "needs_setup": not configured}
 
 
 @router.post("/skip-setup")
-async def skip_setup(db: Session = Depends(get_db)):
-    """Skip setup wizard for already configured instances"""
-    try:
-        # Check if already exists
-        config = db.query(SystemConfig).filter(SystemConfig.key == "setup_complete").first()
-        
-        if config:
-            config.value = "true"
-            config.updated_at = datetime.utcnow()
-        else:
-            config = SystemConfig(key="setup_complete", value="true")
-            db.add(config)
-        
-        db.commit()
-        
-        logger.info("Setup skipped - marked as complete in database")
-        return {"success": True, "message": "Setup skipped - marked as complete"}
-        
-    except Exception as e:
-        logger.error(f"Failed to skip setup: {e}")
-        db.rollback()
-        raise HTTPException(status_code=500, detail="Internal server error")
+async def skip_setup():
+    """No-op in v2 -- there's nothing to skip; config.json is required."""
+    from app.config import settings as _s
+    return {"success": True, "message": "Setup state derives from /data/config.json", "configured": _s.is_minimally_configured()}
 
 
 # ──────────────────────────────────────
