@@ -57,14 +57,29 @@
     input:focus, select:focus { outline: 2px solid #f39c12; outline-offset: -1px; }
     .checkbox { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
     .checkbox input { width: auto; }
-    .actions { display: flex; justify-content: space-between; align-items: center; margin-top: 24px; }
+    .actions { display: flex; justify-content: space-between; align-items: center; margin-top: 24px; gap: 12px; }
     button {
       background: linear-gradient(135deg, #e5a00d 0%, #f39c12 100%);
       color: #fff; border: 0; border-radius: 8px;
       padding: 10px 20px; font-size: 15px; font-weight: 600;
       cursor: pointer;
     }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.secondary {
+      background: transparent; color: #c8cce0;
+      border: 1px solid rgba(255,255,255,0.18);
+    }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    .progress { display: flex; gap: 6px; margin: 0 0 18px; }
+    .progress .step {
+      flex: 1; height: 6px; border-radius: 3px;
+      background: rgba(255,255,255,0.08);
+      transition: background 0.2s;
+    }
+    .progress .step.done { background: #f39c12; }
+    .progress .step.current { background: linear-gradient(90deg, #f39c12 50%, rgba(255,255,255,0.08) 50%); }
+    .step-label { font-size: 12px; color: #7c83a3; text-align: center; margin: 4px 0 18px; }
+    section { display: none; }
+    section.active { display: block; }
     .err { color: #ff8a8a; font-size: 13px; margin: 6px 0 0; min-height: 18px; }
     #overlay {
       position: fixed; inset: 0;
@@ -97,9 +112,15 @@
       <p>Configure your services. Required fields are marked <span class="req">*</span>. You can change everything later from the admin dashboard.</p>
     </header>
     <main>
+      <div class="progress" id="progress">
+        <div class="step"></div><div class="step"></div><div class="step"></div>
+        <div class="step"></div><div class="step"></div><div class="step"></div>
+      </div>
+      <p class="step-label" id="step-label">Step 1 of 6</p>
+
       <form id="setup-form" autocomplete="off">
 
-        <section>
+        <section data-step="1" class="active">
           <h2>1. Email (SMTP)</h2>
           <p class="hint">Used to send all notifications. Gmail requires an App Password.</p>
           <div class="row">
@@ -112,7 +133,7 @@
           </div>
         </section>
 
-        <section>
+        <section data-step="2">
           <h2>2. Jellyseerr / Overseerr</h2>
           <p class="hint">Source of user requests. We'll subscribe to its webhooks.</p>
           <div class="row">
@@ -121,7 +142,7 @@
           </div>
         </section>
 
-        <section>
+        <section data-step="3">
           <h2>3. Sonarr (TV)</h2>
           <p class="hint">Optional second instance for anime; leave blank if you run a single Sonarr.</p>
           <div class="row">
@@ -132,7 +153,7 @@
           </div>
         </section>
 
-        <section>
+        <section data-step="4">
           <h2>4. Radarr (Movies)</h2>
           <div class="row">
             <div><label>URL <span class="req">*</span></label><input name="radarr_url" type="text" placeholder="http://192.168.1.100:7878" required></div>
@@ -140,7 +161,7 @@
           </div>
         </section>
 
-        <section>
+        <section data-step="5">
           <h2>5. Plex (optional)</h2>
           <p class="hint">Used to verify a download is actually visible in Plex before sending the email.</p>
           <div class="row">
@@ -149,7 +170,7 @@
           </div>
         </section>
 
-        <section>
+        <section data-step="6">
           <h2>6. Authentication &amp; secrets</h2>
           <p class="hint">Local-network clients (matching the CIDRs below) bypass the password check.</p>
           <div class="row full">
@@ -164,8 +185,10 @@
 
         <p id="err" class="err"></p>
         <div class="actions">
-          <span style="font-size:12px;color:#7c83a3">Submitting saves to <code>/data/config.json</code> and restarts the service.</span>
-          <button type="submit" id="submit-btn">Save &amp; Start</button>
+          <button type="button" id="prev-btn" class="secondary" disabled>&larr; Back</button>
+          <span style="font-size:12px;color:#7c83a3" id="action-hint"></span>
+          <button type="button" id="next-btn">Next &rarr;</button>
+          <button type="submit" id="submit-btn" style="display:none">Save &amp; Start</button>
         </div>
       </form>
     </main>
@@ -185,6 +208,57 @@
     const overlay = document.getElementById("overlay");
     const restartMsg = document.getElementById("restart-msg");
     const submitBtn = document.getElementById("submit-btn");
+    const prevBtn = document.getElementById("prev-btn");
+    const nextBtn = document.getElementById("next-btn");
+    const stepLabel = document.getElementById("step-label");
+    const progressEl = document.getElementById("progress");
+    const actionHint = document.getElementById("action-hint");
+
+    const TOTAL_STEPS = 6;
+    let currentStep = 1;
+
+    function showStep(n) {
+      currentStep = n;
+      document.querySelectorAll("section[data-step]").forEach(s => {
+        s.classList.toggle("active", Number(s.dataset.step) === n);
+      });
+      stepLabel.textContent = `Step ${n} of ${TOTAL_STEPS}`;
+      [...progressEl.children].forEach((el, i) => {
+        el.classList.toggle("done", i + 1 < n);
+        el.classList.toggle("current", i + 1 === n);
+      });
+      prevBtn.disabled = n === 1;
+      const onLast = n === TOTAL_STEPS;
+      nextBtn.style.display = onLast ? "none" : "";
+      submitBtn.style.display = onLast ? "" : "none";
+      actionHint.textContent = onLast ? "Saves /data/config.json and restarts the service." : "";
+      errEl.textContent = "";
+      // Focus first input of the new step.
+      const first = document.querySelector(`section[data-step="${n}"] input`);
+      if (first) setTimeout(() => first.focus(), 0);
+    }
+
+    function validateStep(n) {
+      const section = document.querySelector(`section[data-step="${n}"]`);
+      const required = section.querySelectorAll("input[required]");
+      for (const el of required) {
+        if (!el.value.trim()) {
+          errEl.textContent = `${(el.previousElementSibling?.textContent || "Field").replace("*","").trim()} is required.`;
+          el.focus();
+          return false;
+        }
+      }
+      return true;
+    }
+
+    nextBtn.addEventListener("click", () => {
+      if (!validateStep(currentStep)) return;
+      if (currentStep < TOTAL_STEPS) showStep(currentStep + 1);
+    });
+    prevBtn.addEventListener("click", () => {
+      if (currentStep > 1) showStep(currentStep - 1);
+    });
+    showStep(1);
 
     function payloadFromForm() {
       const fd = new FormData(form);
