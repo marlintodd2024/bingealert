@@ -166,10 +166,18 @@ def reset_sqlite_sequences(dst: Engine, tables: list[str]) -> None:
     Since we copied rows with their original ids, future inserts (which use
     AUTOINCREMENT) need the counter set to max(id) so we don't collide.
     """
-    # Table names come from our hardcoded TABLE_ORDER, not user input -- safe
-    # to interpolate. exec_driver_sql doesn't accept named parameters reliably
-    # across SQLite, hence the f-string.
+    # sqlite_sequence is only auto-created when a table uses AUTOINCREMENT.
+    # Our schema uses plain `INTEGER PRIMARY KEY`, where SQLite's rowid logic
+    # picks max(id)+1 on its own -- no manual reset needed. We still try to
+    # update the counter when sqlite_sequence DOES exist (some installs may
+    # have AUTOINCREMENT in custom migrations), but skip silently otherwise.
     with dst.begin() as conn:
+        seq_exists = conn.exec_driver_sql(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='sqlite_sequence'"
+        ).fetchone()
+        if not seq_exists:
+            return
+        # Table names come from our hardcoded TABLE_ORDER, not user input.
         for t in tables:
             row = conn.exec_driver_sql(f"SELECT MAX(id) FROM {t}").fetchone()
             if row is None or row[0] is None:
