@@ -17,12 +17,18 @@ data/
 *.sql
 *.bak
 
+# One-shot drift-check input (snapshot of prod file list)
+prod-files.txt
+
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+
+# Claude Code per-project settings (user-local)
+.claude/settings.local.json
 
 # Docker
 docker-compose.override.yml

@@ -1,17 +1,66 @@
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, ForeignKey, Text, UniqueConstraint
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
+"""SQLAlchemy engine, session, and ORM models for BingeAlert v2.
+
+The engine targets SQLite. On every new connection we apply three PRAGMAs:
+  - journal_mode=WAL    -- concurrent readers + a writer; required for our
+                           background workers + request handlers.
+  - foreign_keys=ON     -- off by default in SQLite; we depend on FK enforcement.
+  - synchronous=NORMAL  -- safe default for WAL; FULL is overkill for our workload.
+
+Models match the v1.5.x post-008 schema 1:1 so existing data migrates byte-for-byte
+via scripts/migrate_from_v1.py. Schema cleanup (notifications.status enum,
+system_config retirement, UTC-aware timestamps) is deferred to a future migration.
+"""
 from datetime import datetime
+
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    create_engine,
+    event,
+)
+from sqlalchemy.engine import Engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship, sessionmaker
 
 from app.config import settings
 
-engine = create_engine(settings.database_url)
+
+engine = create_engine(
+    settings.database_url,
+    connect_args={"check_same_thread": False},
+    future=True,
+)
+
+
+@event.listens_for(Engine, "connect")
+def _sqlite_on_connect(dbapi_connection, connection_record):
+    """Apply SQLite PRAGMAs on every new connection.
+
+    Listening on Engine (not engine) is intentional: alembic creates its own
+    Engine when running migrations, and we want the same PRAGMAs there too.
+    """
+    # Some pools open connections we don't recognise (e.g. mock); guard for it.
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA foreign_keys=ON")
+    finally:
+        cursor.close()
+
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
 def get_db():
-    """Dependency for database sessions"""
+    """FastAPI dependency for a request-scoped DB session."""
     db = SessionLocal()
     try:
         yield db
@@ -19,10 +68,21 @@ def get_db():
         db.close()
 
 
+# ---------------------------------------------------------------------------
+# Models -- schema mirrors v1.5.x post-008 exactly.
+# ---------------------------------------------------------------------------
+
+
 class SystemConfig(Base):
-    """System-wide configuration and state tracking"""
+    """Key-value store: setup_complete flag, reconciliation state, etc.
+
+    NOTE: in v2 the *user-facing config* lives in /data/config.json, not here.
+    This table is now strictly for application-managed runtime state. We keep
+    it for v1 data migration; usage is being audited for cleanup in Phase 4.
+    """
+
     __tablename__ = "system_config"
-    
+
     id = Column(Integer, primary_key=True)
     key = Column(String, unique=True, nullable=False, index=True)
     value = Column(String, nullable=False)
@@ -31,7 +91,7 @@ class SystemConfig(Base):
 
 class User(Base):
     __tablename__ = "users"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     jellyseerr_id = Column(Integer, unique=True, nullable=False, index=True)
     email = Column(String, nullable=False)
@@ -41,61 +101,57 @@ class User(Base):
     deactivated_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # Relationships
+
     requests = relationship("MediaRequest", back_populates="user")
     notifications = relationship("Notification", back_populates="user")
 
 
 class MediaRequest(Base):
     __tablename__ = "media_requests"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     jellyseerr_request_id = Column(Integer, unique=True, nullable=False, index=True)
-    media_type = Column(String, nullable=False)  # 'movie' or 'tv'
+    media_type = Column(String, nullable=False)  # 'movie' | 'tv'
     tmdb_id = Column(Integer, nullable=False)
     title = Column(String, nullable=False)
-    status = Column(String, nullable=False)  # 'pending', 'approved', 'available'
-    
-    # For TV shows
+    status = Column(String, nullable=False)  # 'pending' | 'approved' | 'available'
     season_count = Column(Integer, nullable=True)
-    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # Relationships
+
     user = relationship("User", back_populates="requests")
     episodes = relationship("EpisodeTracking", back_populates="request")
     notifications = relationship("Notification", back_populates="request")
-    shared_with = relationship("SharedRequest", back_populates="request", cascade="all, delete-orphan")
+    shared_with = relationship(
+        "SharedRequest", back_populates="request", cascade="all, delete-orphan"
+    )
 
 
 class SharedRequest(Base):
     __tablename__ = "shared_requests"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     request_id = Column(Integer, ForeignKey("media_requests.id"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     added_at = Column(DateTime, default=datetime.utcnow)
-    added_by = Column(Integer, ForeignKey("users.id"), nullable=True)  # Who added this user
-    
-    # Relationships
+    added_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+
     request = relationship("MediaRequest", back_populates="shared_with")
     user = relationship("User", foreign_keys=[user_id])
     added_by_user = relationship("User", foreign_keys=[added_by])
-    
+
     __table_args__ = (
-        UniqueConstraint('request_id', 'user_id', name='_request_user_uc'),
+        UniqueConstraint("request_id", "user_id", name="_request_user_uc"),
     )
 
 
 class EpisodeTracking(Base):
     __tablename__ = "episode_tracking"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     request_id = Column(Integer, ForeignKey("media_requests.id"), nullable=False)
-    series_id = Column(Integer, nullable=False)  # Sonarr series ID
+    series_id = Column(Integer, nullable=False)
     season_number = Column(Integer, nullable=False)
     episode_number = Column(Integer, nullable=False)
     episode_title = Column(String, nullable=True)
@@ -103,74 +159,79 @@ class EpisodeTracking(Base):
     notified = Column(Boolean, default=False)
     available_in_plex = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
-    
-    # Relationships
+
     request = relationship("MediaRequest", back_populates="episodes")
-    
+
     __table_args__ = (
-        UniqueConstraint('request_id', 'series_id', 'season_number', 'episode_number', name='_request_series_season_episode_uc'),
+        UniqueConstraint(
+            "request_id",
+            "series_id",
+            "season_number",
+            "episode_number",
+            name="_request_series_season_episode_uc",
+        ),
     )
 
 
 class ReportedIssue(Base):
-    """Tracks issues reported by users via Seerr"""
+    """Issues users report via Seerr that we mirror + auto-fix."""
+
     __tablename__ = "reported_issues"
-    
+
     id = Column(Integer, primary_key=True, index=True)
-    seerr_issue_id = Column(Integer, nullable=True, index=True)  # Seerr's issue ID for API callbacks
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # Who reported it
+    seerr_issue_id = Column(Integer, nullable=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     request_id = Column(Integer, ForeignKey("media_requests.id"), nullable=True)
-    media_type = Column(String, nullable=False)  # 'movie' or 'tv'
+    media_type = Column(String, nullable=False)
     tmdb_id = Column(Integer, nullable=False)
     title = Column(String, nullable=False)
-    issue_type = Column(String, nullable=True)  # 'video', 'audio', 'subtitle', 'other'
-    issue_message = Column(Text, nullable=True)  # User's description
-    status = Column(String, nullable=False, default="reported")  # 'reported', 'fixing', 'resolved', 'failed'
-    action_taken = Column(String, nullable=True)  # 'blacklist_research', 'manual', None
+    issue_type = Column(String, nullable=True)  # 'video' | 'audio' | 'subtitle' | 'other'
+    issue_message = Column(Text, nullable=True)
+    status = Column(String, nullable=False, default="reported")
+    action_taken = Column(String, nullable=True)
     resolved_at = Column(DateTime, nullable=True)
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # Relationships
+
     user = relationship("User", foreign_keys=[user_id])
     request = relationship("MediaRequest")
 
 
 class MaintenanceWindow(Base):
-    """Scheduled maintenance windows with email notifications to all users"""
+    """Scheduled maintenance windows with email broadcasts."""
+
     __tablename__ = "maintenance_windows"
-    
+
     id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, nullable=False)  # e.g. "Server Updates & Maintenance"
-    description = Column(Text, nullable=True)  # Optional details about what's being done
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
     start_time = Column(DateTime, nullable=False)
     end_time = Column(DateTime, nullable=False)
     announcement_sent = Column(Boolean, default=False)
     reminder_sent = Column(Boolean, default=False)
     completion_sent = Column(Boolean, default=False)
     cancelled = Column(Boolean, default=False)
-    status = Column(String, nullable=False, default="scheduled")  # 'scheduled', 'active', 'completed', 'cancelled'
+    status = Column(String, nullable=False, default="scheduled")
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class Notification(Base):
     __tablename__ = "notifications"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     request_id = Column(Integer, ForeignKey("media_requests.id"), nullable=False)
-    notification_type = Column(String, nullable=False)  # 'episode', 'movie', 'season_complete'
+    notification_type = Column(String, nullable=False)  # 'episode' | 'movie' | 'season_complete'
     subject = Column(String, nullable=False)
     body = Column(Text, nullable=False)
     sent = Column(Boolean, default=False)
     sent_at = Column(DateTime, nullable=True)
-    send_after = Column(DateTime, nullable=True)  # Delay sending until this time (for Plex indexing)
-    series_id = Column(Integer, nullable=True)  # Sonarr series ID (for batching TV episodes)
+    send_after = Column(DateTime, nullable=True)  # delay until this time (Plex indexing)
+    series_id = Column(Integer, nullable=True)  # batching key for TV
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
-    
-    # Relationships
+
     user = relationship("User", back_populates="notifications")
     request = relationship("MediaRequest", back_populates="notifications")

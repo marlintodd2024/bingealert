@@ -1,66 +1,23 @@
-version: '3.8'
-
-# BingeAlert - Docker Compose (GHCR Pre-built Image)
-# For users who want to pull the pre-built image without cloning the repo
+# BingeAlert v2 - Pre-built image (recommended for self-hosters).
 #
 # Quick start:
-#   1. Download this file and .env.example
-#   2. cp .env.example .env && nano .env
-#   3. docker compose -f docker-compose.ghcr.yml up -d
-#   4. Open http://your-server:8000
+#   1. mkdir -p data && chown 1000:1000 data
+#   2. docker compose -f docker-compose.ghcr.yml up -d
+#   3. Open http://your-host:8000  (setup wizard runs on first boot)
+#
+# All configuration is collected by the in-app wizard and persisted to
+# ./data/config.json. If you want to skip the wizard (e.g. for automation),
+# create an .env file matching .env.example and uncomment the env_file: line
+# below; matching env vars take effect when the wizard hasn't been completed.
 
 services:
-  bingealert-db:
-    image: postgres:15
-    container_name: bingealert-db
-    environment:
-      POSTGRES_USER: ${DB_USER:-notifyuser}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme123}
-      POSTGRES_DB: ${DB_NAME:-notifications}
-    volumes:
-      - bingealert_postgres_data:/var/lib/postgresql/data
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-notifyuser} -d ${DB_NAME:-notifications}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-      start_period: 10s
-
   bingealert:
     image: ghcr.io/marlintodd2024/bingealert:latest
     container_name: bingealert
-    environment:
-      DB_PASSWORD: ${DB_PASSWORD:-changeme123}
-      DB_USER: ${DB_USER:-notifyuser}
-      DB_NAME: ${DB_NAME:-notifications}
-      DB_HOST: bingealert-db
-      DB_PORT: ${DB_PORT:-5432}
-      JELLYSEERR_URL: ${JELLYSEERR_URL}
-      JELLYSEERR_API_KEY: ${JELLYSEERR_API_KEY}
-      SONARR_URL: ${SONARR_URL}
-      SONARR_API_KEY: ${SONARR_API_KEY}
-      RADARR_URL: ${RADARR_URL}
-      RADARR_API_KEY: ${RADARR_API_KEY}
-      PLEX_URL: ${PLEX_URL:-}
-      PLEX_TOKEN: ${PLEX_TOKEN:-}
-      SMTP_HOST: ${SMTP_HOST}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM: ${SMTP_FROM:-BingeAlert <your_email@gmail.com>}
-      APP_SECRET_KEY: ${APP_SECRET_KEY:-changeme-generate-random-key}
-      ENVIRONMENT: ${ENVIRONMENT:-production}
     ports:
       - "8000:8000"
-    depends_on:
-      bingealert-db:
-        condition: service_healthy
     volumes:
       - ./data:/data
-      - ./.env:/app/.env
-      - /var/run/docker.sock:/var/run/docker.sock
+    # env_file:
+    #   - .env
     restart: unless-stopped
-
-volumes:
-  bingealert_postgres_data:
