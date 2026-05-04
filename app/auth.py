@@ -1,331 +1,235 @@
-"""
-Authentication middleware for BingeAlert.
+"""Authentication for BingeAlert v2.
 
-Features:
-- Local network bypass (configurable CIDR) with proper X-Forwarded-For handling
-- Session cookie auth for external access
-- Cloudflare Turnstile integration (optional)
-- Password stored as bcrypt hash in database
-- Login rate limiting
-- Setup page lockdown after initial setup
-"""
+What changed vs v1:
+    - Auth settings (admin password hash, CIDRs, Turnstile keys, session timeout)
+      now live in /data/config.json via app.config.settings, NOT in the
+      system_config DB table. The wizard writes config.json; the bcrypt hash
+      is set via settings.write_to_disk({"admin_password_hash": ...}).
+    - AuthMiddleware no longer needs a DB session per request -- everything
+      it needs is on the settings object. This also means it works during
+      database migrations / outages.
+    - Setup-mode gating moved out of here into app.middleware.SetupGateMiddleware.
 
-import os
-import re
-import time
-import hmac
+What carried forward:
+    - bcrypt password hash + verify
+    - HMAC-signed session cookie (timestamp.signature)
+    - Local network CIDR bypass with X-Forwarded-For / CF-Connecting-IP support
+    - Login rate limit (5 attempts / IP / 5 minutes)
+    - Optional Cloudflare Turnstile verification
+"""
+from __future__ import annotations
+
 import hashlib
-import json
-import logging
+import hmac
 import ipaddress
+import logging
+import time
 from collections import defaultdict
-from datetime import datetime, timezone
 from typing import Optional
 
 import bcrypt
 import httpx
-from fastapi import Request, Response
-from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+
+from app.config import settings
+
 
 logger = logging.getLogger(__name__)
 
-# ============================================================
-# SECURITY FIX [CRIT-1, HIGH-3]: Removed /docs, /redoc,
-# /openapi.json, and /api/sse/ from public paths.
-# SECURITY FIX [MED-1]: Removed /setup paths — handled
-# conditionally in middleware based on setup_complete status.
-# ============================================================
-PUBLIC_PATHS = [
+
+# Paths reachable without auth -- webhooks must be (upstream services post here),
+# health is for orchestrators, login + auth/check power the login flow.
+_PUBLIC_PATHS = (
     "/health",
-    "/api/webhooks/",
     "/webhooks/",
-    "/auth/login",
-    "/auth/check",
     "/login",
     "/login.html",
-    "/static/login.html",
+    "/auth/login",
+    "/auth/check",
+    "/static/",
     "/favicon.ico",
-]
-
-# ============================================================
-# SECURITY FIX [MED-5]: Login rate limiting
-# ============================================================
-LOGIN_ATTEMPTS = defaultdict(list)  # IP -> [timestamp, ...]
-MAX_LOGIN_ATTEMPTS = 5
-LOGIN_WINDOW_SECONDS = 300  # 5 minutes
+    # The wizard frontend polls this *after* a restart but *before* the user
+    # logs in -- needs to be reachable without auth.
+    "/api/setup/status",
+)
 
 
-def check_login_rate_limit(ip: str) -> bool:
-    """Return True if login attempt is allowed, False if rate limited"""
-    now = time.time()
-    LOGIN_ATTEMPTS[ip] = [t for t in LOGIN_ATTEMPTS[ip] if now - t < LOGIN_WINDOW_SECONDS]
-    if len(LOGIN_ATTEMPTS[ip]) >= MAX_LOGIN_ATTEMPTS:
-        return False
-    LOGIN_ATTEMPTS[ip].append(now)
-    return True
-
-
-def get_auth_settings(db) -> dict:
-    """Get all auth-related settings from the database"""
-    from app.database import SystemConfig
-
-    settings = {}
-    configs = db.query(SystemConfig).filter(
-        SystemConfig.key.in_([
-            'auth_enabled', 'auth_password_hash', 'local_network_cidr',
-            'session_timeout_hours', 'turnstile_enabled',
-            'turnstile_site_key', 'turnstile_secret_key'
-        ])
-    ).all()
-
-    for config in configs:
-        settings[config.key] = config.value
-
-    return settings
-
-
-def set_auth_setting(db, key: str, value: str):
-    """Set an auth setting in the database"""
-    from app.database import SystemConfig
-
-    config = db.query(SystemConfig).filter(SystemConfig.key == key).first()
-    if config:
-        config.value = value
-        config.updated_at = datetime.utcnow()
-    else:
-        config = SystemConfig(key=key, value=value)
-        db.add(config)
-    db.commit()
+# ---------------------------------------------------------------------------
+# Password hashing (bcrypt)
+# ---------------------------------------------------------------------------
 
 
 def hash_password(password: str) -> str:
-    """Hash a password with bcrypt"""
-    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(password: str, hashed: str) -> bool:
-    """Verify a password against a bcrypt hash"""
     try:
-        return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+        return bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
     except Exception:
         return False
 
 
+# ---------------------------------------------------------------------------
+# Session token (HMAC over a timestamp)
+# ---------------------------------------------------------------------------
+
+
 def create_session_token(secret_key: str) -> str:
-    """Create a signed session token with timestamp"""
     timestamp = str(int(time.time()))
     signature = hmac.new(
-        secret_key.encode('utf-8'),
-        timestamp.encode('utf-8'),
-        hashlib.sha256
+        secret_key.encode("utf-8"), timestamp.encode("utf-8"), hashlib.sha256
     ).hexdigest()
     return f"{timestamp}.{signature}"
 
 
-def verify_session_token(token: str, secret_key: str, timeout_hours: int = 24) -> bool:
-    """Verify a session token is valid and not expired"""
+def verify_session_token(token: str, secret_key: str, max_age_seconds: int) -> bool:
     try:
-        parts = token.split('.')
+        parts = token.split(".")
         if len(parts) != 2:
             return False
-
         timestamp_str, signature = parts
         timestamp = int(timestamp_str)
-
-        # Check expiry
-        age_hours = (time.time() - timestamp) / 3600
-        if age_hours > timeout_hours:
+        if time.time() - timestamp > max_age_seconds:
             return False
-
-        # Check signature
         expected = hmac.new(
-            secret_key.encode('utf-8'),
-            timestamp_str.encode('utf-8'),
-            hashlib.sha256
+            secret_key.encode("utf-8"), timestamp_str.encode("utf-8"), hashlib.sha256
         ).hexdigest()
-
         return hmac.compare_digest(signature, expected)
     except Exception:
         return False
 
 
-def is_local_network(ip_str: str, cidr_list: str) -> bool:
-    """Check if an IP address is in the local network CIDR range(s)"""
-    try:
-        client_ip = ipaddress.ip_address(ip_str)
-
-        for cidr in cidr_list.split(','):
-            cidr = cidr.strip()
-            if not cidr:
-                continue
-            try:
-                network = ipaddress.ip_network(cidr, strict=False)
-                if client_ip in network:
-                    return True
-            except ValueError:
-                continue
-
-        return False
-    except Exception as e:
-        logger.warning(f"Error checking local network: {e}")
-        return False
+# ---------------------------------------------------------------------------
+# Client IP + CIDR bypass
+# ---------------------------------------------------------------------------
 
 
 def get_client_ip(request: Request) -> str:
-    """Get the real client IP, checking forwarded headers"""
-    # Check X-Forwarded-For (from reverse proxies like nginx, Cloudflare)
-    forwarded_for = request.headers.get('x-forwarded-for')
-    if forwarded_for:
-        # First IP in the chain is the original client
-        return forwarded_for.split(',')[0].strip()
-
-    # Check X-Real-IP
-    real_ip = request.headers.get('x-real-ip')
-    if real_ip:
-        return real_ip.strip()
-
-    # Check CF-Connecting-IP (Cloudflare)
-    cf_ip = request.headers.get('cf-connecting-ip')
-    if cf_ip:
-        return cf_ip.strip()
-
-    # Fall back to direct connection IP
-    return request.client.host if request.client else '0.0.0.0'
+    """Return the real client IP, honouring common reverse-proxy headers."""
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    real = request.headers.get("x-real-ip")
+    if real:
+        return real.strip()
+    cf = request.headers.get("cf-connecting-ip")
+    if cf:
+        return cf.strip()
+    return request.client.host if request.client else "0.0.0.0"
 
 
-async def verify_turnstile(token: str, secret_key: str, client_ip: str = None) -> bool:
-    """Verify a Cloudflare Turnstile token"""
+def is_local_network(ip_str: str, cidr_csv: str) -> bool:
+    if not cidr_csv:
+        return False
     try:
-        async with httpx.AsyncClient() as client:
-            data = {
-                'secret': secret_key,
-                'response': token,
-            }
-            if client_ip:
-                data['remoteip'] = client_ip
+        addr = ipaddress.ip_address(ip_str)
+    except ValueError:
+        return False
+    for cidr in cidr_csv.split(","):
+        cidr = cidr.strip()
+        if not cidr:
+            continue
+        try:
+            if addr in ipaddress.ip_network(cidr, strict=False):
+                return True
+        except ValueError:
+            continue
+    return False
 
+
+# ---------------------------------------------------------------------------
+# Login rate limiting
+# ---------------------------------------------------------------------------
+
+
+_LOGIN_ATTEMPTS: dict[str, list[float]] = defaultdict(list)
+LOGIN_MAX_ATTEMPTS = 5
+LOGIN_WINDOW_SECONDS = 300
+
+
+def login_attempt_allowed(ip: str) -> bool:
+    """Return True if a new login attempt is allowed; record it if so."""
+    now = time.time()
+    _LOGIN_ATTEMPTS[ip] = [t for t in _LOGIN_ATTEMPTS[ip] if now - t < LOGIN_WINDOW_SECONDS]
+    if len(_LOGIN_ATTEMPTS[ip]) >= LOGIN_MAX_ATTEMPTS:
+        return False
+    _LOGIN_ATTEMPTS[ip].append(now)
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Cloudflare Turnstile
+# ---------------------------------------------------------------------------
+
+
+async def verify_turnstile(token: str, secret_key: str, client_ip: Optional[str] = None) -> bool:
+    if not token or not secret_key:
+        return False
+    data = {"secret": secret_key, "response": token}
+    if client_ip:
+        data["remoteip"] = client_ip
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.post(
-                'https://challenges.cloudflare.com/turnstile/v0/siteverify',
-                data=data,
-                timeout=10
+                "https://challenges.cloudflare.com/turnstile/v0/siteverify", data=data
             )
-
-            result = resp.json()
-            return result.get('success', False)
+        return bool(resp.json().get("success"))
     except Exception as e:
         logger.error(f"Turnstile verification failed: {e}")
         return False
 
 
-# ============================================================
-# SECURITY FIX [MED-3]: Warn on weak/default APP_SECRET_KEY
-# ============================================================
-_secret_key_warned = False
-
-
-def _warn_if_weak_secret():
-    global _secret_key_warned
-    if _secret_key_warned:
-        return
-    secret = os.getenv('APP_SECRET_KEY', '')
-    if not secret or secret in ('default-secret', 'change-me', 'CHANGE_ME_TO_A_RANDOM_STRING'):
-        logger.critical(
-            "⚠️  APP_SECRET_KEY is not set or uses a default value! "
-            "Session cookies can be forged by anyone. "
-            "Set a strong random value in your .env file immediately."
-        )
-    _secret_key_warned = True
+# ---------------------------------------------------------------------------
+# Middleware
+# ---------------------------------------------------------------------------
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
-    """Middleware that handles authentication for all requests"""
+    """Require auth on protected routes once setup is complete.
+
+    No-op when settings.auth_required is False. CIDR-matched clients bypass
+    the password check. SetupGateMiddleware runs *before* this and gates
+    everything to /setup until configured -- so AuthMiddleware can assume
+    config is loaded.
+    """
+
+    SESSION_COOKIE = "ba_session"
 
     async def dispatch(self, request: Request, call_next):
+        # Pre-setup, SetupGateMiddleware (which runs first) has already
+        # restricted the surface to the wizard + housekeeping. Don't try
+        # to enforce auth on routes that don't exist yet -- otherwise
+        # /setup -> /login -> SetupGate redirect to /setup -> infinite loop.
+        if not settings.is_minimally_configured():
+            return await call_next(request)
+
+        if not settings.auth_required:
+            return await call_next(request)
+
         path = request.url.path
-
-        # Warn on first request if secret key is weak
-        _warn_if_weak_secret()
-
-        # Always allow public paths (webhooks, health, login page)
-        for public_path in PUBLIC_PATHS:
-            if path.startswith(public_path) or path == public_path:
+        for pub in _PUBLIC_PATHS:
+            if path == pub or path.startswith(pub):
                 return await call_next(request)
 
-        # ============================================================
-        # SECURITY FIX [MED-1]: Setup pages only public if setup
-        # hasn't been completed yet. After setup, require auth.
-        # ============================================================
-        setup_paths = ["/setup", "/setup.html", "/static/setup.html"]
-        if any(path.startswith(sp) or path == sp for sp in setup_paths):
-            try:
-                from app.database import get_db, SystemConfig
-                db = next(get_db())
-                try:
-                    setup_done = db.query(SystemConfig).filter(
-                        SystemConfig.key == "setup_complete",
-                        SystemConfig.value == "true"
-                    ).first()
-                finally:
-                    db.close()
-                if not setup_done:
-                    # Setup not complete — allow public access
-                    return await call_next(request)
-                # Setup IS complete — fall through to require auth
-            except Exception:
-                # DB error during setup check — allow access to not lock out
-                return await call_next(request)
-
-        # Check if auth is enabled
-        try:
-            from app.database import get_db
-            db = next(get_db())
-            try:
-                settings = get_auth_settings(db)
-            finally:
-                db.close()
-        except Exception as e:
-            logger.error(f"Auth middleware DB error: {e}")
-            # ============================================================
-            # SECURITY FIX [CRIT-0]: On DB error, DENY access instead of
-            # allowing it. Previously this allowed everything through.
-            # ============================================================
-            return JSONResponse(
-                status_code=503,
-                content={"detail": "Service temporarily unavailable"}
-            )
-
-        auth_enabled = settings.get('auth_enabled', 'false').lower() == 'true'
-
-        if not auth_enabled:
-            return await call_next(request)
-
-        # Check if local network
         client_ip = get_client_ip(request)
-        local_cidr = settings.get('local_network_cidr', '')
-
-        if local_cidr and is_local_network(client_ip, local_cidr):
-            # ============================================================
-            # SECURITY FIX [HIGH-2]: Log when CIDR bypass is used so
-            # admin can detect if proxy IP is incorrectly matching.
-            # ============================================================
-            logger.debug(f"Local network bypass for IP: {client_ip}")
+        if is_local_network(client_ip, settings.local_network_cidrs):
+            logger.debug(f"local-network bypass for {client_ip}")
             return await call_next(request)
 
-        # Check session cookie
-        session_token = request.cookies.get('pnp_session')
-        secret_key = os.getenv('APP_SECRET_KEY', 'default-secret')
-        timeout_hours = int(settings.get('session_timeout_hours', '24'))
-
-        if session_token and verify_session_token(session_token, secret_key, timeout_hours):
+        token = request.cookies.get(self.SESSION_COOKIE)
+        if (
+            token
+            and settings.app_secret_key
+            and verify_session_token(token, settings.app_secret_key, settings.session_max_age_seconds)
+        ):
             return await call_next(request)
 
-        # Not authenticated — redirect to login or return 401 for API calls
-        if path.startswith('/admin/') or path.startswith('/api/'):
+        # Unauthenticated. API routes get JSON 401; everything else redirects to login.
+        if path.startswith("/api/") or path.startswith("/admin/"):
             return JSONResponse(
-                status_code=401,
-                content={"detail": "Authentication required"}
+                status_code=401, content={"detail": "Authentication required"}
             )
-
-        # For page requests, redirect to login
-        return RedirectResponse(url="/login")
+        return RedirectResponse(url="/login", status_code=302)
