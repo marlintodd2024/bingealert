@@ -31,10 +31,23 @@ _SETUP_MODE_ALLOWED = (
 )
 
 
-def _is_html_request(request: Request) -> bool:
-    """Best-effort: does this request want HTML, or is it an API call?"""
+def _wants_html(request: Request) -> bool:
+    """Best-effort: should an unconfigured response be a redirect (HTML
+    browser) or a 503 (API client)?
+
+    Only redirect on plain GET/HEAD with an HTML-acceptable Accept header.
+    Anything else -- POSTs, /api/*, /webhooks/*, application/json -- gets 503
+    so upstreams (Sonarr/Radarr/Seerr) and AJAX clients see a real error.
+    """
+    if request.method not in ("GET", "HEAD"):
+        return False
+    path = request.url.path
+    if path.startswith("/api/") or path.startswith("/webhooks/"):
+        return False
     accept = request.headers.get("accept", "")
-    return "text/html" in accept or accept == "" or accept == "*/*"
+    if "application/json" in accept and "text/html" not in accept:
+        return False
+    return True
 
 
 class SetupGateMiddleware(BaseHTTPMiddleware):
@@ -58,7 +71,7 @@ class SetupGateMiddleware(BaseHTTPMiddleware):
         if any(path == p or path.startswith(p) for p in _SETUP_MODE_ALLOWED):
             return await call_next(request)
 
-        if _is_html_request(request):
+        if _wants_html(request):
             return RedirectResponse(url="/setup", status_code=302)
         return JSONResponse(
             status_code=503,

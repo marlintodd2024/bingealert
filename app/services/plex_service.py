@@ -12,8 +12,12 @@ class PlexService:
     """Service for interacting with Plex Media Server"""
     
     def __init__(self):
-        self.base_url = settings.plex_url.rstrip('/')
-        self.token = settings.plex_token
+        # Plex is optional in v2 -- guard the rstrip so PlexService can be
+        # instantiated even before plex is configured. Calls will fail at
+        # request time with a clear connection error, which the workers
+        # already handle.
+        self.base_url = (settings.plex_url or "").rstrip("/")
+        self.token = settings.plex_token or ""
         
     async def _get(self, endpoint: str):
         """Make GET request to Plex API"""
