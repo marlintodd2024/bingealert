@@ -144,14 +144,15 @@ If you're running v1.5.x with the Postgres `bingealert-db` container, follow thi
 
 ---
 
-## Known v2.0 limitations
+## Editing settings post-install
 
-These are deliberate trade-offs in the v2 ship; fixes planned for follow-ups:
+Three options, in order of convenience:
 
-- **`/admin/config` Save button errors** — the v1 admin dashboard tries to write to a `.env` file. v2 stores config in `config.json`. Edit `./data/config.json` directly and restart, or re-run the wizard.
-- **`/admin/logs` and `/admin/logs/stream` return 500** — these shell out to the Docker CLI, which v2's image no longer ships (saves ~70 MB). Use `docker logs bingealert -f` from the host until a Python `docker` SDK port lands.
+1. **Admin dashboard → Settings tab.** `POST /admin/config` writes through to `./data/config.json`. Restart the container after saving so the in-memory `settings` singleton reloads.
+2. **Edit `./data/config.json` directly**, then `docker compose restart`.
+3. **Re-run the wizard:** `rm ./data/config.json && docker compose restart`. Your DB and notification history are preserved.
 
-Everything else — webhooks, notifications, batching, reconciliation, weekly summaries, maintenance windows, the auth/login flow, and all admin read-only views — works.
+`/admin/logs` and `/admin/logs/stream` work via the Docker SDK reading `/var/run/docker.sock`. The compose file already mounts the socket — if you removed that mount, those endpoints return 503 with a clear message and you can use `docker logs bingealert -f` from the host instead.
 
 ---
 

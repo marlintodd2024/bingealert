@@ -1005,71 +1005,101 @@ async def unshare_request_with_user(request_id: int, user_id: int, db: Session =
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+def _mask_secret(value) -> str:
+    """Bullet-mask any non-empty value. Used for keys/passwords in GET /admin/config."""
+    return "••••••••" if value else ""
+
+
+def _is_masked_value(value: str) -> bool:
+    """Detect whether a posted secret is the bullet-masked version we sent on GET.
+
+    The admin UI fills password/key fields with the masked value on load. When the
+    user saves without re-typing the secret, the masked string comes back -- we
+    must NOT save it (would blank out the real secret).
+    """
+    if not value:
+        return False
+    if "•" in value:
+        return True
+    # mojibake encodings of U+2022 sometimes leak through
+    if "\xe2\x80\xa2" in value.encode("latin-1", errors="ignore").decode("latin-1", errors="ignore"):
+        return True
+    import re as _re
+    if len(_re.findall(r"[^\x00-\x7F]", value)) >= 3:
+        return True
+    if value.strip() in ("********",):
+        return True
+    return False
+
+
 @router.get("/config")
 async def get_config():
-    """Get current configuration (sanitized - no passwords/API keys shown in full)"""
-    import os
-    
-    def mask_secret(value: str) -> str:
-        """SECURITY FIX [CRIT-2]: Never reveal any part of secrets"""
-        if not value or value.strip() == "":
-            return ""
-        return "••••••••"
-    
+    """Return the current settings (with secrets masked).
+
+    In v2, settings come from /data/config.json (overlaid on env+defaults), not
+    raw os.environ. We render the response in the v1-nested shape so the
+    existing admin.html JS keeps working without modification.
+    """
+    from app.config import settings as _s
+
     try:
+        # NOTIFICATION_* timing values were never actually consumed by any worker
+        # in v1 -- the email service has its own hardcoded thresholds. They're
+        # echoed back unchanged so the admin UI keeps showing fields the user
+        # remembers, but POST /config drops them.
         config = {
             "timing": {
-                "initial_delay_minutes": int(os.getenv("NOTIFICATION_INITIAL_DELAY_MIN", "7")),
-                "extension_delay_minutes": int(os.getenv("NOTIFICATION_EXTENSION_DELAY_MIN", "3")),
-                "max_wait_minutes": int(os.getenv("NOTIFICATION_MAX_WAIT_MIN", "15")),
-                "check_frequency_seconds": int(os.getenv("NOTIFICATION_CHECK_FREQUENCY_SEC", "60"))
+                "initial_delay_minutes": 7,
+                "extension_delay_minutes": 3,
+                "max_wait_minutes": 20,
+                "check_frequency_seconds": 60,
             },
             "smtp": {
-                "host": os.getenv("SMTP_HOST", ""),
-                "port": os.getenv("SMTP_PORT", "587"),
-                "from": os.getenv("SMTP_FROM", ""),
-                "user": os.getenv("SMTP_USER", ""),
-                "password": mask_secret(os.getenv("SMTP_PASSWORD", ""))
+                "host": _s.smtp_host or "",
+                "port": str(_s.smtp_port),
+                "from": _s.smtp_from or "",
+                "user": _s.smtp_user or "",
+                "password": _mask_secret(_s.smtp_password),
             },
             "jellyseerr": {
-                "url": os.getenv("JELLYSEERR_URL", ""),
-                "api_key": mask_secret(os.getenv("JELLYSEERR_API_KEY", ""))
+                "url": _s.jellyseerr_url or "",
+                "api_key": _mask_secret(_s.jellyseerr_api_key),
             },
             "sonarr": {
-                "url": os.getenv("SONARR_URL", ""),
-                "api_key": mask_secret(os.getenv("SONARR_API_KEY", ""))
+                "url": _s.sonarr_url or "",
+                "api_key": _mask_secret(_s.sonarr_api_key),
             },
             "sonarr_anime": {
-                "url": os.getenv("SONARR_ANIME_URL", ""),
-                "api_key": mask_secret(os.getenv("SONARR_ANIME_API_KEY", ""))
+                "url": _s.sonarr_anime_url or "",
+                "api_key": _mask_secret(_s.sonarr_anime_api_key),
             },
             "radarr": {
-                "url": os.getenv("RADARR_URL", ""),
-                "api_key": mask_secret(os.getenv("RADARR_API_KEY", ""))
+                "url": _s.radarr_url or "",
+                "api_key": _mask_secret(_s.radarr_api_key),
             },
             "plex": {
-                "url": os.getenv("PLEX_URL", ""),
-                "token": mask_secret(os.getenv("PLEX_TOKEN", ""))
+                "url": _s.plex_url or "",
+                "token": _mask_secret(_s.plex_token),
             },
             "quality_monitor": {
-                "enabled": os.getenv("QUALITY_MONITOR_ENABLED", "true").lower() == "true",
-                "interval_hours": int(os.getenv("QUALITY_MONITOR_INTERVAL_HOURS", "24")),
-                "waiting_delay_seconds": int(os.getenv("QUALITY_WAITING_DELAY_SECONDS", "300"))
+                "enabled": _s.quality_monitor_enabled,
+                "interval_hours": _s.quality_monitor_interval_hours,
+                "waiting_delay_seconds": _s.quality_waiting_delay_seconds,
             },
             "issue_autofix": {
-                "mode": os.getenv("ISSUE_AUTOFIX_MODE", "manual")
+                "mode": _s.issue_autofix_mode,
             },
-            "admin_email": os.getenv("ADMIN_EMAIL", ""),
+            "admin_email": _s.admin_email or "",
             "seerr_anime": {
-                "server_id": os.getenv("SEERR_ANIME_SERVER_ID", ""),
-                "profile_id": os.getenv("SEERR_ANIME_PROFILE_ID", ""),
-                "root_folder": os.getenv("SEERR_ANIME_ROOT_FOLDER", ""),
+                "server_id": _s.seerr_anime_server_id if _s.seerr_anime_server_id is not None else "",
+                "profile_id": _s.seerr_anime_profile_id if _s.seerr_anime_profile_id is not None else "",
+                "root_folder": _s.seerr_anime_root_folder or "",
             },
             "security": {
-                "webhook_allowed_ips": os.getenv("WEBHOOK_ALLOWED_IPS", ""),
-                "environment": os.getenv("ENVIRONMENT", "production"),
-                "secret_key_status": "strong" if os.getenv("APP_SECRET_KEY", "") not in ("", "default-secret", "change-me", "CHANGE_ME_random_string_here", "CHANGE_ME_TO_A_RANDOM_STRING") and len(os.getenv("APP_SECRET_KEY", "")) >= 32 else "weak"
-            }
+                "webhook_allowed_ips": _s.webhook_allowed_ips,
+                "environment": _s.environment,
+                "secret_key_status": "strong" if _s.app_secret_key and len(_s.app_secret_key) >= 32 else "weak",
+            },
         }
         
         # Load auth settings from database
@@ -1120,324 +1150,153 @@ async def get_config():
 
 
 @router.post("/config")
-async def update_config(config: dict):
-    """Update configuration in .env file"""
-    import os
-    from pathlib import Path
-    
-    try:
-        # Try multiple possible .env locations
-        possible_paths = [
-            Path("/app/.env"),
-            Path("/data/.env"),
-            Path(".env"),
-            Path(os.getcwd()) / ".env"
-        ]
-        
-        env_path = None
-        for path in possible_paths:
-            if path.exists():
-                env_path = path
-                logger.info(f"Found .env at: {env_path}")
-                break
-        
-        if not env_path:
-            logger.error(f".env not found in any of: {[str(p) for p in possible_paths]}")
-            raise HTTPException(
-                status_code=500, 
-                detail=".env file not found. Configuration cannot be saved."
-            )
-        
-        # Read existing .env
-        env_lines = []
-        with open(env_path, 'r') as f:
-            env_lines = f.readlines()
-        
-        # Build new env dict
-        env_dict = {}
-        for line in env_lines:
-            line = line.strip()
-            if line and not line.startswith('#') and '=' in line:
-                key, value = line.split('=', 1)
-                env_dict[key] = value
-        
-        # Update with new values (only if not masked)
-        updates = []
-        
-        def is_masked_value(value: str) -> bool:
-            """Check if a value is a masked/redacted secret that should NOT be saved.
-            Catches all variants of bullet masking regardless of encoding."""
-            if not value:
-                return False
-            # Check for actual bullet character (U+2022)
-            if '\u2022' in value:
-                return True
-            # Check for common mojibake patterns of U+2022
-            # UTF-8 bytes of • are 0xE2 0x80 0xA2
-            # When read as Latin-1: â€¢  When read as Windows-1252: â€¢
-            if '\xe2\x80\xa2' in value.encode('latin-1', errors='ignore').decode('latin-1', errors='ignore'):
-                return True
-            # Catch any non-ASCII in what should be ASCII-only API keys/passwords
-            # If the value has non-ASCII chars mixed with ASCII, it's likely masked
-            import re
-            non_ascii_count = len(re.findall(r'[^\x00-\x7F]', value))
-            if non_ascii_count >= 3:
-                return True
-            # Check for placeholder patterns
-            if value.strip() in ('********',):
-                return True
-            return False
-        
-        # Notification Timing
-        if 'timing' in config:
-            if config['timing'].get('initial_delay_minutes'):
-                env_dict['NOTIFICATION_INITIAL_DELAY_MIN'] = str(config['timing']['initial_delay_minutes'])
-                updates.append('NOTIFICATION_INITIAL_DELAY_MIN')
-            if config['timing'].get('extension_delay_minutes'):
-                env_dict['NOTIFICATION_EXTENSION_DELAY_MIN'] = str(config['timing']['extension_delay_minutes'])
-                updates.append('NOTIFICATION_EXTENSION_DELAY_MIN')
-            if config['timing'].get('max_wait_minutes'):
-                env_dict['NOTIFICATION_MAX_WAIT_MIN'] = str(config['timing']['max_wait_minutes'])
-                updates.append('NOTIFICATION_MAX_WAIT_MIN')
-            if config['timing'].get('check_frequency_seconds'):
-                env_dict['NOTIFICATION_CHECK_FREQUENCY_SEC'] = str(config['timing']['check_frequency_seconds'])
-                updates.append('NOTIFICATION_CHECK_FREQUENCY_SEC')
-        
-        # SMTP
-        if 'smtp' in config:
-            if config['smtp'].get('host'):
-                env_dict['SMTP_HOST'] = config['smtp']['host']
-                updates.append('SMTP_HOST')
-            if config['smtp'].get('port'):
-                env_dict['SMTP_PORT'] = str(config['smtp']['port'])
-                updates.append('SMTP_PORT')
-            if config['smtp'].get('from'):
-                env_dict['SMTP_FROM'] = config['smtp']['from']
-                updates.append('SMTP_FROM')
-            if config['smtp'].get('user'):
-                env_dict['SMTP_USER'] = config['smtp']['user']
-                updates.append('SMTP_USER')
-            if config['smtp'].get('password') and not is_masked_value(config['smtp']['password']):
-                env_dict['SMTP_PASSWORD'] = config['smtp']['password']
-                updates.append('SMTP_PASSWORD')
-        
-        # Admin email
-        if config.get('admin_email'):
-            env_dict['ADMIN_EMAIL'] = config['admin_email']
-            updates.append('ADMIN_EMAIL')
-        
-        # Seerr Anime Overrides
-        if 'seerr_anime' in config:
-            sa = config['seerr_anime']
-            if sa.get('server_id') not in (None, '', '0'):
-                env_dict['SEERR_ANIME_SERVER_ID'] = str(sa['server_id'])
-                updates.append('SEERR_ANIME_SERVER_ID')
-            elif sa.get('server_id') in ('', '0'):
-                env_dict.pop('SEERR_ANIME_SERVER_ID', None)
-                updates.append('SEERR_ANIME_SERVER_ID (cleared)')
-            if sa.get('profile_id') not in (None, '', '0'):
-                env_dict['SEERR_ANIME_PROFILE_ID'] = str(sa['profile_id'])
-                updates.append('SEERR_ANIME_PROFILE_ID')
-            elif sa.get('profile_id') in ('', '0'):
-                env_dict.pop('SEERR_ANIME_PROFILE_ID', None)
-            if sa.get('root_folder'):
-                env_dict['SEERR_ANIME_ROOT_FOLDER'] = sa['root_folder']
-                updates.append('SEERR_ANIME_ROOT_FOLDER')
-            elif sa.get('root_folder') == '':
-                env_dict.pop('SEERR_ANIME_ROOT_FOLDER', None)
-        
-        # Jellyseerr
-        if 'jellyseerr' in config:
-            if config['jellyseerr'].get('url'):
-                env_dict['JELLYSEERR_URL'] = config['jellyseerr']['url']
-                updates.append('JELLYSEERR_URL')
-            if config['jellyseerr'].get('api_key') and not is_masked_value(config['jellyseerr']['api_key']):
-                env_dict['JELLYSEERR_API_KEY'] = config['jellyseerr']['api_key']
-                updates.append('JELLYSEERR_API_KEY')
-        
-        # Sonarr
-        if 'sonarr' in config:
-            if config['sonarr'].get('url'):
-                env_dict['SONARR_URL'] = config['sonarr']['url']
-                updates.append('SONARR_URL')
-            if config['sonarr'].get('api_key') and not is_masked_value(config['sonarr']['api_key']):
-                env_dict['SONARR_API_KEY'] = config['sonarr']['api_key']
-                updates.append('SONARR_API_KEY')
-        
-        # Sonarr Anime (optional)
-        if 'sonarr_anime' in config:
-            if config['sonarr_anime'].get('url'):
-                env_dict['SONARR_ANIME_URL'] = config['sonarr_anime']['url']
-                updates.append('SONARR_ANIME_URL')
-            elif config['sonarr_anime'].get('url') == '':
-                # Explicitly cleared — remove from env
-                env_dict.pop('SONARR_ANIME_URL', None)
-                env_dict.pop('SONARR_ANIME_API_KEY', None)
-                updates.append('SONARR_ANIME_URL (cleared)')
-            if config['sonarr_anime'].get('api_key') and not is_masked_value(config['sonarr_anime']['api_key']):
-                env_dict['SONARR_ANIME_API_KEY'] = config['sonarr_anime']['api_key']
-                updates.append('SONARR_ANIME_API_KEY')
-        
-        # Radarr
-        if 'radarr' in config:
-            if config['radarr'].get('url'):
-                env_dict['RADARR_URL'] = config['radarr']['url']
-                updates.append('RADARR_URL')
-            if config['radarr'].get('api_key') and not is_masked_value(config['radarr']['api_key']):
-                env_dict['RADARR_API_KEY'] = config['radarr']['api_key']
-                updates.append('RADARR_API_KEY')
-        
-        # Plex
-        if 'plex' in config:
-            if config['plex'].get('url'):
-                env_dict['PLEX_URL'] = config['plex']['url']
-                updates.append('PLEX_URL')
-            if config['plex'].get('token') and not is_masked_value(config['plex']['token']):
-                env_dict['PLEX_TOKEN'] = config['plex']['token']
-                updates.append('PLEX_TOKEN')
-        
-        # Quality Monitor
-        if 'quality_monitor' in config:
-            env_dict['QUALITY_MONITOR_ENABLED'] = str(config['quality_monitor'].get('enabled', True)).lower()
-            updates.append('QUALITY_MONITOR_ENABLED')
-            if config['quality_monitor'].get('interval_hours'):
-                env_dict['QUALITY_MONITOR_INTERVAL_HOURS'] = str(config['quality_monitor']['interval_hours'])
-                updates.append('QUALITY_MONITOR_INTERVAL_HOURS')
-            if config['quality_monitor'].get('waiting_delay_seconds'):
-                env_dict['QUALITY_WAITING_DELAY_SECONDS'] = str(config['quality_monitor']['waiting_delay_seconds'])
-                updates.append('QUALITY_WAITING_DELAY_SECONDS')
-        
-        # Issue Auto-fix
-        if 'issue_autofix' in config:
-            mode = config['issue_autofix'].get('mode', 'manual')
-            if mode in ('manual', 'auto', 'auto_notify'):
-                env_dict['ISSUE_AUTOFIX_MODE'] = mode
-                updates.append('ISSUE_AUTOFIX_MODE')
-        
-        # Security settings (stored in .env)
-        if 'security' in config:
-            sec = config['security']
-            if 'webhook_allowed_ips' in sec:
-                env_dict['WEBHOOK_ALLOWED_IPS'] = sec['webhook_allowed_ips']
-                updates.append('WEBHOOK_ALLOWED_IPS')
-            if sec.get('environment') in ('production', 'development'):
-                env_dict['ENVIRONMENT'] = sec['environment']
-                updates.append('ENVIRONMENT')
-            if sec.get('app_secret_key') and not is_masked_value(sec['app_secret_key']):
-                env_dict['APP_SECRET_KEY'] = sec['app_secret_key']
-                updates.append('APP_SECRET_KEY')
-        
-        # Auth settings (stored in database, not .env)
-        if 'auth' in config:
+async def update_config(config: dict, db: Session = Depends(get_db)):
+    """Persist settings updates to /data/config.json.
+
+    Accepts the v1-shaped nested dict for admin.html JS compatibility, then
+    flattens to v2 settings field names. Masked secrets (bullet-character or
+    similar) are skipped so a partial save doesn\'t blank existing API keys.
+
+    Some changes (auth password, local CIDR, app_secret_key, environment)
+    only take effect after a container restart -- the in-memory settings
+    singleton is rebuilt at process boot, not per-request.
+
+    Reconciliation tunables remain in the system_config DB table for now;
+    the worker reads them lazily each cycle so they apply without restart.
+    """
+    from app.auth import hash_password
+    from app.config import settings as _s
+
+    updates: dict = {}
+    label_updates: list = []
+
+    def take(json_path, settings_key, label=None, transform=None,
+             secret=False, allow_empty=False):
+        node = config
+        for k in json_path:
+            if not isinstance(node, dict) or k not in node:
+                return
+            node = node[k]
+        if not allow_empty and (node is None or node == ""):
+            return
+        if secret and isinstance(node, str) and _is_masked_value(node):
+            return
+        try:
+            updates[settings_key] = transform(node) if transform else node
+        except (TypeError, ValueError):
+            return
+        label_updates.append(label or settings_key.upper())
+
+    # SMTP / email
+    take(["smtp", "host"], "smtp_host")
+    take(["smtp", "port"], "smtp_port", transform=int)
+    take(["smtp", "from"], "smtp_from")
+    take(["smtp", "user"], "smtp_user", allow_empty=True)
+    take(["smtp", "password"], "smtp_password", secret=True)
+    take(["admin_email"], "admin_email", allow_empty=True)
+
+    # Seerr / Sonarr / Radarr / Plex
+    take(["jellyseerr", "url"], "jellyseerr_url")
+    take(["jellyseerr", "api_key"], "jellyseerr_api_key", secret=True)
+    take(["sonarr", "url"], "sonarr_url")
+    take(["sonarr", "api_key"], "sonarr_api_key", secret=True)
+    take(["sonarr_anime", "url"], "sonarr_anime_url", allow_empty=True)
+    take(["sonarr_anime", "api_key"], "sonarr_anime_api_key", secret=True)
+    take(["radarr", "url"], "radarr_url")
+    take(["radarr", "api_key"], "radarr_api_key", secret=True)
+    take(["plex", "url"], "plex_url", allow_empty=True)
+    take(["plex", "token"], "plex_token", secret=True)
+
+    # Quality monitor + issue autofix
+    take(["quality_monitor", "enabled"], "quality_monitor_enabled", transform=bool)
+    take(["quality_monitor", "interval_hours"], "quality_monitor_interval_hours", transform=int)
+    take(["quality_monitor", "waiting_delay_seconds"], "quality_waiting_delay_seconds", transform=int)
+    if config.get("issue_autofix", {}).get("mode") in ("manual", "auto", "auto_notify"):
+        updates["issue_autofix_mode"] = config["issue_autofix"]["mode"]
+        label_updates.append("ISSUE_AUTOFIX_MODE")
+
+    # Seerr anime overrides
+    take(["seerr_anime", "server_id"], "seerr_anime_server_id",
+         transform=lambda v: int(v) if str(v).strip() else None, allow_empty=True)
+    take(["seerr_anime", "profile_id"], "seerr_anime_profile_id",
+         transform=lambda v: int(v) if str(v).strip() else None, allow_empty=True)
+    take(["seerr_anime", "root_folder"], "seerr_anime_root_folder", allow_empty=True)
+
+    # Security
+    take(["security", "webhook_allowed_ips"], "webhook_allowed_ips", allow_empty=True)
+    if config.get("security", {}).get("environment") in ("production", "development"):
+        updates["environment"] = config["security"]["environment"]
+        label_updates.append("ENVIRONMENT")
+    take(["security", "app_secret_key"], "app_secret_key", secret=True)
+
+    # Auth -- bcrypt the password; map session timeout hours to seconds
+    auth = config.get("auth", {})
+    if auth:
+        if "enabled" in auth:
+            updates["auth_required"] = bool(auth["enabled"])
+            label_updates.append("AUTH_REQUIRED")
+        new_password = auth.get("password", "")
+        if new_password and not _is_masked_value(new_password):
+            updates["admin_password_hash"] = hash_password(new_password)
+            label_updates.append("AUTH_PASSWORD")
+        if "local_network_cidr" in auth:
+            updates["local_network_cidrs"] = auth["local_network_cidr"]
+            label_updates.append("LOCAL_NETWORK_CIDRS")
+        if "session_timeout_hours" in auth:
             try:
-                from app.auth import set_auth_setting, hash_password, get_auth_settings
-                from app.database import get_db
-                db = next(get_db())
-                try:
-                    auth = config['auth']
-                    
-                    if 'enabled' in auth:
-                        set_auth_setting(db, 'auth_enabled', str(auth['enabled']).lower())
-                        updates.append('AUTH_ENABLED')
-                    
-                    # Only set password if a new one is provided (not empty, not masked)
-                    new_password = auth.get('password', '')
-                    if new_password and not is_masked_value(new_password):
-                        set_auth_setting(db, 'auth_password_hash', hash_password(new_password))
-                        updates.append('AUTH_PASSWORD')
-                    
-                    if 'local_network_cidr' in auth:
-                        set_auth_setting(db, 'local_network_cidr', auth['local_network_cidr'])
-                        updates.append('LOCAL_NETWORK_CIDR')
-                    
-                    if 'session_timeout_hours' in auth:
-                        set_auth_setting(db, 'session_timeout_hours', str(auth['session_timeout_hours']))
-                        updates.append('SESSION_TIMEOUT_HOURS')
-                    
-                    if 'turnstile_enabled' in auth:
-                        set_auth_setting(db, 'turnstile_enabled', str(auth['turnstile_enabled']).lower())
-                        updates.append('TURNSTILE_ENABLED')
-                    
-                    if auth.get('turnstile_site_key') is not None:
-                        set_auth_setting(db, 'turnstile_site_key', auth['turnstile_site_key'])
-                        updates.append('TURNSTILE_SITE_KEY')
-                    
-                    turnstile_secret = auth.get('turnstile_secret_key', '')
-                    if turnstile_secret and not is_masked_value(turnstile_secret):
-                        set_auth_setting(db, 'turnstile_secret_key', turnstile_secret)
-                        updates.append('TURNSTILE_SECRET_KEY')
-                finally:
-                    db.close()
-            except Exception as e:
-                logger.error(f"Failed to save auth settings: {e}")
-        
-        # Reconciliation settings (stored in database)
-        if 'reconciliation' in config:
-            try:
-                from app.database import get_db, SystemConfig
-                db = next(get_db())
-                try:
-                    recon = config['reconciliation']
-                    recon_fields = {
-                        'reconciliation_interval_hours': ('interval_hours', 2),
-                        'reconciliation_issue_fixing_cutoff_hours': ('issue_fixing_cutoff_hours', 1),
-                        'reconciliation_issue_reported_cutoff_hours': ('issue_reported_cutoff_hours', 24),
-                        'reconciliation_issue_abandon_days': ('issue_abandon_days', 7),
-                    }
-                    for db_key, (json_key, default) in recon_fields.items():
-                        if json_key in recon:
-                            val = str(int(recon[json_key]))
-                            existing = db.query(SystemConfig).filter(SystemConfig.key == db_key).first()
-                            if existing:
-                                existing.value = val
-                                existing.updated_at = datetime.utcnow()
-                            else:
-                                db.add(SystemConfig(key=db_key, value=val))
-                            updates.append(db_key.upper())
-                    db.commit()
-                finally:
-                    db.close()
-            except Exception as e:
-                logger.error(f"Failed to save reconciliation settings: {e}")
-        
-        # Write back to .env - preserve comments and structure
-        new_lines = []
-        keys_written = set()
-        for line in env_lines:
-            stripped = line.strip()
-            if stripped and not stripped.startswith('#') and '=' in stripped:
-                key = stripped.split('=', 1)[0]
-                if key in env_dict:
-                    new_lines.append(f"{key}={env_dict[key]}\n")
-                    keys_written.add(key)
-                else:
-                    new_lines.append(line if line.endswith('\n') else line + '\n')
-            else:
-                new_lines.append(line if line.endswith('\n') else line + '\n')
-        
-        # Add any new keys not in original file
-        for key, value in env_dict.items():
-            if key not in keys_written:
-                new_lines.append(f"{key}={value}\n")
-        
-        with open(env_path, 'w') as f:
-            f.writelines(new_lines)
-        
-        # Update os.environ so settings reflect immediately without restart
-        for key, value in env_dict.items():
-            os.environ[key] = value
-        
-        logger.info(f"Configuration updated: {', '.join(updates)}")
-        
-        return {
-            "success": True,
-            "message": f"Updated {len(updates)} settings. Some changes may require a restart to take full effect.",
-            "updated_fields": updates
-        }
-        
-    except Exception as e:
-        logger.error(f"Failed to update config: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+                updates["session_max_age_seconds"] = int(auth["session_timeout_hours"]) * 3600
+                label_updates.append("SESSION_MAX_AGE_SECONDS")
+            except (TypeError, ValueError):
+                pass
+        if "turnstile_site_key" in auth:
+            updates["turnstile_site_key"] = auth["turnstile_site_key"] or None
+            label_updates.append("TURNSTILE_SITE_KEY")
+        ts_secret = auth.get("turnstile_secret_key", "")
+        if ts_secret and not _is_masked_value(ts_secret):
+            updates["turnstile_secret_key"] = ts_secret
+            label_updates.append("TURNSTILE_SECRET_KEY")
+
+    # Reconciliation -- still in system_config (lazy-read each cycle, no restart)
+    if "reconciliation" in config:
+        try:
+            recon = config["reconciliation"]
+            recon_fields = {
+                "reconciliation_interval_hours": "interval_hours",
+                "reconciliation_issue_fixing_cutoff_hours": "issue_fixing_cutoff_hours",
+                "reconciliation_issue_reported_cutoff_hours": "issue_reported_cutoff_hours",
+                "reconciliation_issue_abandon_days": "issue_abandon_days",
+            }
+            for db_key, json_key in recon_fields.items():
+                if json_key in recon:
+                    val = str(int(recon[json_key]))
+                    existing = db.query(SystemConfig).filter(SystemConfig.key == db_key).first()
+                    if existing:
+                        existing.value = val
+                        existing.updated_at = datetime.utcnow()
+                    else:
+                        db.add(SystemConfig(key=db_key, value=val))
+                    label_updates.append(db_key.upper())
+            db.commit()
+        except Exception as e:
+            logger.error(f"Failed to save reconciliation settings: {e}")
+            db.rollback()
+
+    if updates:
+        try:
+            _s.write_to_disk(updates)
+        except OSError as e:
+            logger.error(f"failed writing config.json: {e}")
+            raise HTTPException(status_code=500, detail=f"Could not write config.json: {e}")
+
+    logger.info(f"config updated: {', '.join(label_updates)}")
+    return {
+        "success": True,
+        "message": (
+            f"Updated {len(label_updates)} settings. "
+            "Restart the container for password / secret-key / environment changes to take effect."
+        ),
+        "updated_fields": label_updates,
+    }
 
 
 @router.post("/restart")
@@ -1500,33 +1359,54 @@ async def trigger_reconciliation():
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+def _docker_self():
+    """Open the Docker SDK against /var/run/docker.sock and return our own container.
+
+    Uses HOSTNAME (docker sets this to the short container ID) -- works inside
+    any normally-launched container. Raises HTTPException if the socket is not
+    mounted or HOSTNAME does not resolve.
+    """
+    import docker
+    from docker.errors import DockerException, NotFound
+
+    try:
+        client = docker.from_env()
+    except DockerException as e:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Docker socket unavailable. Mount /var/run/docker.sock into the "
+                f"container to enable log access. ({e})"
+            ),
+        )
+    container_id = os.environ.get("HOSTNAME", "")
+    if not container_id:
+        raise HTTPException(
+            status_code=500, detail="HOSTNAME not set; cannot identify own container"
+        )
+    try:
+        return client.containers.get(container_id)
+    except NotFound:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Container {container_id} not found via Docker socket",
+        )
+
+
 @router.get("/logs")
 async def get_logs(lines: int = 100):
-    """Get recent application logs"""
+    """Return the last `lines` lines of this container\'s stdout+stderr."""
     try:
-        import subprocess
-        
-        # Get logs from Docker container
-        result = subprocess.run(
-            ["docker", "logs", "--tail", str(lines), os.environ.get("HOSTNAME", "self")],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-        
-        # Combine stdout and stderr
-        logs = result.stdout + result.stderr
-        
+        container = _docker_self()
+        raw = container.logs(tail=lines, stdout=True, stderr=True, timestamps=False)
+        text = raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else str(raw)
         return {
             "success": True,
-            "logs": logs,
-            "lines": len(logs.split('\n'))
+            "logs": text,
+            "lines": text.count("\n"),
         }
-        
-    except subprocess.TimeoutExpired:
-        raise HTTPException(status_code=500, detail="Timeout reading logs")
-    except FileNotFoundError:
-        raise HTTPException(status_code=500, detail="Docker CLI not available")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to read logs: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -1534,35 +1414,47 @@ async def get_logs(lines: int = 100):
 
 @router.get("/logs/stream")
 async def stream_logs():
-    """Stream logs in real-time (SSE)"""
-    try:
-        import subprocess
-        from fastapi.responses import StreamingResponse
-        
-        async def log_generator():
-            process = subprocess.Popen(
-                ["docker", "logs", "-f", "--tail", "50", os.environ.get("HOSTNAME", "self")],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1
-            )
-            
+    """Stream this container\'s logs as Server-Sent Events.
+
+    docker.Client.logs(stream=True, follow=True) returns a blocking byte
+    iterator. We pump it in a thread and feed an asyncio queue so the event
+    loop stays responsive.
+    """
+    from fastapi.responses import StreamingResponse
+
+    container = _docker_self()  # raises HTTPException on infra problems
+
+    async def log_generator():
+        import asyncio
+        import queue
+        import threading
+
+        q: queue.Queue = queue.Queue(maxsize=512)
+        sentinel = object()
+
+        def pump():
             try:
-                for line in process.stdout:
-                    yield f"data: {line}\n\n"
+                for chunk in container.logs(
+                    stream=True, follow=True, tail=50, stdout=True, stderr=True
+                ):
+                    q.put(chunk)
+            except Exception as e:
+                q.put(f"[log stream ended: {e}]\n".encode())
             finally:
-                process.terminate()
-                process.wait()
-        
-        return StreamingResponse(
-            log_generator(),
-            media_type="text/event-stream"
-        )
-        
-    except Exception as e:
-        logger.error(f"Failed to stream logs: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+                q.put(sentinel)
+
+        threading.Thread(target=pump, daemon=True).start()
+        loop = asyncio.get_event_loop()
+        while True:
+            chunk = await loop.run_in_executor(None, q.get)
+            if chunk is sentinel:
+                break
+            if isinstance(chunk, bytes):
+                chunk = chunk.decode("utf-8", errors="replace")
+            for line in chunk.splitlines():
+                yield f"data: {line}\n\n"
+
+    return StreamingResponse(log_generator(), media_type="text/event-stream")
 
 
 @router.post("/notifications/mark-old-as-sent")
