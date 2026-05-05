@@ -1491,17 +1491,23 @@
                 <!-- Email Sender -->
                 <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
                     <h4 style="color: #fff; margin-bottom: 15px; font-size: 14px;">✉️ Sender Information</h4>
-                    <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 12px;">
+                    <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 12px; margin-bottom: 12px;">
                         <div>
                             <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">Display Name</label>
-                            <input type="text" id="config-smtp-from-name" placeholder="BingeAlert" 
+                            <input type="text" id="config-smtp-from-name" placeholder="BingeAlert"
                                    style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
                         </div>
                         <div>
                             <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">From Email Address</label>
-                            <input type="email" id="config-smtp-from-email" placeholder="noreply@example.com" 
+                            <input type="email" id="config-smtp-from-email" placeholder="noreply@example.com"
                                    style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
                         </div>
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">Admin Email (for weekly reports &amp; system alerts)</label>
+                        <input type="email" id="config-admin-email" placeholder="defaults to From address if blank"
+                               style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
+                        <small style="color: #666; font-size: 11px;">Stuck-download alerts, weekly summaries, and other admin-only notifications go here.</small>
                     </div>
                 </div>
             </div>
@@ -3505,6 +3511,7 @@
                 
                 document.getElementById('config-smtp-user').value = config.smtp.user || '';
                 document.getElementById('config-smtp-password').value = config.smtp.password || '';
+                document.getElementById('config-admin-email').value = config.admin_email || '';
                 
                 // Populate Jellyseerr fields
                 const jellyseerr = splitUrl(config.jellyseerr.url);
@@ -3647,6 +3654,7 @@
                         user: document.getElementById('config-smtp-user').value,
                         password: document.getElementById('config-smtp-password').value
                     },
+                    admin_email: document.getElementById('config-admin-email').value.trim(),
                     jellyseerr: {
                         url: buildUrl('config-jellyseerr-host', 'config-jellyseerr-port'),
                         api_key: document.getElementById('config-jellyseerr-api').value
