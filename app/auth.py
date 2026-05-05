@@ -53,6 +53,8 @@ _PUBLIC_PATHS = (
     # The wizard frontend polls this *after* a restart but *before* the user
     # logs in -- needs to be reachable without auth.
     "/api/setup/status",
+    # Version probe so the login page footer can render the running version.
+    "/api/version",
 )
 
 

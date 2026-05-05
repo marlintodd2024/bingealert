@@ -21,6 +21,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from app import __version__
 from app.auth import AuthMiddleware
 from app.config import settings
 from app.middleware import SetupGateMiddleware
@@ -125,7 +126,7 @@ _is_dev = os.getenv("ENVIRONMENT", "production").lower() != "production"
 
 app = FastAPI(
     title="BingeAlert",
-    version="2.0.0-dev",
+    version=__version__,
     lifespan=lifespan,
     docs_url="/docs" if _is_dev else None,
     redoc_url="/redoc" if _is_dev else None,
@@ -146,6 +147,12 @@ app.include_router(sse_router.router, tags=["SSE"])  # already prefixes /sse int
 
 if _STATIC_DIR.is_dir():
     app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
+
+
+@app.get("/api/version")
+async def api_version() -> dict:
+    """Public version probe -- consumed by the admin/login footer."""
+    return {"version": __version__}
 
 
 @app.get("/service-worker.js")
