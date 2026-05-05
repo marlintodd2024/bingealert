@@ -1116,7 +1116,7 @@ async def get_config():
                     "session_timeout_hours": int(auth_settings.get("session_timeout_hours", "24")),
                     "turnstile_enabled": auth_settings.get("turnstile_enabled", "false").lower() == "true",
                     "turnstile_site_key": auth_settings.get("turnstile_site_key", ""),
-                    "turnstile_secret_key": mask_secret(auth_settings.get("turnstile_secret_key", "")) if auth_settings.get("turnstile_secret_key") else ""
+                    "turnstile_secret_key": _mask_secret(auth_settings.get("turnstile_secret_key", "")) if auth_settings.get("turnstile_secret_key") else ""
                 }
                 
                 # Reconciliation settings
@@ -1282,18 +1282,24 @@ async def update_config(config: dict, db: Session = Depends(get_db)):
             db.rollback()
 
     if updates:
+        from app.config import reload_from_disk
         try:
             _s.write_to_disk(updates)
         except OSError as e:
             logger.error(f"failed writing config.json: {e}")
             raise HTTPException(status_code=500, detail=f"Could not write config.json: {e}")
+        # Refresh the in-memory settings singleton so subsequent reads (this
+        # request's GET, AuthMiddleware, background workers) see the new
+        # values without a container restart.
+        reload_from_disk()
 
     logger.info(f"config updated: {', '.join(label_updates)}")
     return {
         "success": True,
         "message": (
-            f"Updated {len(label_updates)} settings. "
-            "Restart the container for password / secret-key / environment changes to take effect."
+            f"Updated {len(label_updates)} settings. Most changes are live now; "
+            "restart the container if you changed the database URL or want background "
+            "workers to re-create their HTTP clients with new credentials."
         ),
         "updated_fields": label_updates,
     }

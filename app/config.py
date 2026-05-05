@@ -184,3 +184,21 @@ def _build_settings() -> Settings:
 
 
 settings = _build_settings()
+
+
+def reload_from_disk() -> None:
+    """Re-read /data/config.json and update the module-level `settings` in place.
+
+    Used after the admin Settings page or the wizard writes config.json so
+    subsequent reads (middleware, /admin/config GET, background workers) see
+    the new values without a container restart. Note: connection-time state
+    (e.g. an already-open SQLAlchemy engine, in-flight HTTP clients) does
+    NOT pick up new URLs/tokens until restart -- only the read paths that
+    consult `settings.X` per-request benefit.
+    """
+    fresh = _build_settings()
+    for field_name in Settings.model_fields:
+        try:
+            object.__setattr__(settings, field_name, getattr(fresh, field_name))
+        except Exception:
+            pass

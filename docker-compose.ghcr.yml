@@ -2,8 +2,15 @@
 #
 # Quick start:
 #   1. mkdir -p data && chown 1000:1000 data
-#   2. docker compose -f docker-compose.ghcr.yml up -d
-#   3. Open http://your-host:8000  (setup wizard runs on first boot)
+#   2. export DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
+#   3. docker compose -f docker-compose.ghcr.yml up -d
+#   4. Open http://your-host:8000  (setup wizard runs on first boot)
+#
+# DOCKER_GID gives the container's non-root user permission to read
+# /var/run/docker.sock so the admin Logs tab can stream this container's
+# logs. If you skip step 2, group_add gets the literal "docker" string
+# which fails on most distros -- the Logs tab will return 503 until you
+# re-up with the right GID.
 #
 # All configuration is collected by the in-app wizard and persisted to
 # ./data/config.json. If you want to skip the wizard (e.g. for automation),
@@ -18,10 +25,12 @@ services:
       - "8000:8000"
     volumes:
       - ./data:/data
-      # Mount the Docker socket so the admin dashboard's Logs tab can read
-      # this container's stdout/stderr via the Python docker SDK. Comment
-      # out if you don't want that capability; /admin/logs will then 503.
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    # The container runs as a non-root user; this supplementary group gives
+    # it read access to the docker socket above. Set DOCKER_GID in your
+    # shell to match `stat -c '%g' /var/run/docker.sock` on the host.
+    group_add:
+      - "${DOCKER_GID:-docker}"
     # env_file:
     #   - .env
     restart: unless-stopped

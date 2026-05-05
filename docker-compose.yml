@@ -17,6 +17,8 @@ services:
       # Live-reload bind mounts -- handy for development, remove for prod-like runs.
       - ./app:/app/app
       - ./alembic:/app/alembic
+    group_add:
+      - "${DOCKER_GID:-docker}"
     # env_file:
     #   - .env
     restart: unless-stopped

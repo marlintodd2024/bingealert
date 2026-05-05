@@ -59,6 +59,10 @@ curl -O https://raw.githubusercontent.com/marlintodd2024/bingealert/main/docker-
 # Create the data directory and chown it for the non-root container user
 mkdir -p data && sudo chown -R 1000:1000 data
 
+# Pass the host's docker group GID so the container can read docker.sock
+# (powers the admin dashboard's Logs tab; skip if you don't need it).
+export DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
+
 # Bring it up
 docker compose -f docker-compose.ghcr.yml up -d
 ```
