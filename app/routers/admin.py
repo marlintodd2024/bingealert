@@ -1916,61 +1916,13 @@ async def notify_shared_user_about_existing(request_id: int, user_id: int, db: S
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post("/requests/{request_id}/share")
-async def add_user_to_request(
-    request_id: int,
-    data: dict,
-    db: Session = Depends(get_db)
-):
-    """Add a user to an existing request's notifications"""
-    try:
-        user_id = data.get('user_id')
-        
-        if not user_id:
-            raise HTTPException(status_code=400, detail="user_id is required")
-        
-        # Check if request exists
-        request = db.query(MediaRequest).filter(MediaRequest.id == request_id).first()
-        if not request:
-            raise HTTPException(status_code=404, detail="Request not found")
-        
-        # Check if user exists
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-        
-        # Check if already shared
-        existing = db.query(SharedRequest).filter(
-            SharedRequest.request_id == request_id,
-            SharedRequest.user_id == user_id
-        ).first()
-        
-        if existing:
-            raise HTTPException(status_code=400, detail="User already added to this request")
-        
-        # Create shared request
-        from datetime import datetime
-        shared = SharedRequest(
-            request_id=request_id,
-            user_id=user_id,
-            shared_at=datetime.utcnow()
-        )
-        db.add(shared)
-        db.commit()
-        
-        logger.info(f"Added user {user.email} to request {request_id} ({request.title})")
-        
-        return {
-            "success": True,
-            "message": f"User {user.email} added to notifications for {request.title}"
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to add user to request: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
-
+# NOTE: a duplicate @router.post("/requests/{request_id}/share") used to live
+# here, taking a JSON body and constructing SharedRequest(shared_at=...) -- a
+# column name that doesn't exist (the model has `added_at`). The duplicate
+# made FastAPI's resolution non-deterministic and any time the second handler
+# won the race, the SharedRequest construction crashed with a 500. Removed
+# entirely; the canonical handler at line ~938 reads user_id from the query
+# string, which matches what admin.html actually sends.
 
 @router.post("/request-on-behalf")
 async def request_on_behalf(
