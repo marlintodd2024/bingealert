@@ -181,46 +181,62 @@ async def list_notifications(
 
 @router.get("/upcoming-episodes")
 async def get_upcoming_episodes(days: int = 30, db: Session = Depends(get_db)):
-    """Get upcoming episodes from Sonarr calendar that match user requests"""
+    """Get upcoming episodes from Sonarr calendar that match user requests.
+
+    Multi-instance correct: each Sonarr's series IDs are scoped to that
+    instance, so we tag every calendar episode with its source and look
+    up its series details against that instance's series_map. (The
+    pre-v2.0.2 code only built series_map from the last instance, which
+    silently dropped calendar episodes from any other instance whose
+    series IDs didn't happen to collide with the last one's.)
+    """
     try:
         from app.services.sonarr_service import SonarrService, get_all_sonarr_instances
         from app.database import EpisodeTracking
         from datetime import datetime, timedelta
-        
-        # Get calendar for next N days from all Sonarr instances
+
         start_date = datetime.utcnow().strftime('%Y-%m-%d')
         end_date = (datetime.utcnow() + timedelta(days=days)).strftime('%Y-%m-%d')
-        
-        calendar_episodes = []
-        for sonarr in get_all_sonarr_instances():
+
+        instances = get_all_sonarr_instances()
+        # series_maps[i] = {series_id: series_dict} for instances[i]
+        series_maps: list[dict] = []
+        calendar_episodes: list[dict] = []
+
+        for idx, sonarr in enumerate(instances):
+            # Pull /series for this instance so we can resolve seriesId later.
+            try:
+                series_list = await sonarr._get("/series")
+                series_maps.append({s.get("id"): s for s in series_list if s.get("id")})
+                logger.info(f"Loaded {len(series_maps[-1])} series from {sonarr.instance_name}")
+            except Exception as e:
+                logger.warning(f"Failed to load series from {sonarr.instance_name}: {e}")
+                series_maps.append({})
+
             logger.info(f"Fetching {sonarr.instance_name} calendar from {start_date} to {end_date}")
-            episodes = await sonarr.get_calendar(start_date, end_date)
+            try:
+                episodes = await sonarr.get_calendar(start_date, end_date)
+            except Exception as e:
+                logger.warning(f"Failed calendar fetch from {sonarr.instance_name}: {e}")
+                episodes = []
             if episodes:
+                for ep in episodes:
+                    ep["_instance_idx"] = idx
                 calendar_episodes.extend(episodes)
                 logger.info(f"Found {len(episodes)} episodes in {sonarr.instance_name} calendar")
-        
+
         if not calendar_episodes:
             logger.warning("No episodes returned from any Sonarr instance")
             return {"upcoming": [], "count": 0}
-        
+
         logger.info(f"Found {len(calendar_episodes)} total episodes across all Sonarr instances")
-        
+
         # Get all TV show requests with their users
         tv_requests = db.query(MediaRequest).filter(
             MediaRequest.media_type == "tv"
         ).all()
-        
+
         logger.info(f"Found {len(tv_requests)} TV show requests in database")
-        
-        # Get all series from Sonarr to map seriesId to series details
-        all_series = await sonarr._get("/series")
-        series_map = {}  # seriesId -> series details
-        for series in all_series:
-            series_id = series.get("id")
-            if series_id:
-                series_map[series_id] = series
-        
-        logger.info(f"Loaded {len(series_map)} series from Sonarr")
         
         # Create a mapping of series TMDB IDs to users who requested them
         tmdb_to_requests = {}
@@ -245,13 +261,18 @@ async def get_upcoming_episodes(days: int = 30, db: Session = Depends(get_db)):
         matched_count = 0
         
         for episode in calendar_episodes:
-            # Get series details from the series map
+            # Get series details from the per-instance series map.
             series_id = episode.get("seriesId")
-            if not series_id or series_id not in series_map:
-                logger.debug(f"Episode {episode.get('title')} has no series in map")
+            instance_idx = episode.get("_instance_idx", 0)
+            instance_map = series_maps[instance_idx] if instance_idx < len(series_maps) else {}
+            if not series_id or series_id not in instance_map:
+                logger.debug(
+                    f"Episode {episode.get('title')} (seriesId={series_id}) "
+                    f"not in instance {instance_idx} series_map"
+                )
                 continue
-            
-            series = series_map[series_id]
+
+            series = instance_map[series_id]
             series_tmdb = series.get("tmdbId")
             series_title = series.get("title", "").lower().strip()
             
