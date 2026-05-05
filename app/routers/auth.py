@@ -131,5 +131,16 @@ async def auth_login(payload: LoginPayload, request: Request) -> JSONResponse:
 @router.post("/auth/logout")
 async def auth_logout() -> RedirectResponse:
     response = RedirectResponse(url="/login", status_code=302)
-    response.delete_cookie(AuthMiddleware.SESSION_COOKIE)
+    # Pass the same path/httponly/samesite that we used on set_cookie above.
+    # Some browsers (notably recent Chrome/Edge) match cookies for deletion
+    # by attribute set; without these the Max-Age=0 cookie is treated as a
+    # different cookie and the original sticks around -- resulting in
+    # "logout doesn't actually log me out".
+    response.delete_cookie(
+        key=AuthMiddleware.SESSION_COOKIE,
+        path="/",
+        httponly=True,
+        samesite="lax",
+        secure=False,
+    )
     return response

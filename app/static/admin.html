@@ -3002,12 +3002,15 @@
             window.location.href = '/login';
         }
 
-        // Check auth status to show/hide logout button
+        // Check auth status to show/hide logout button. Hide it when the
+        // current client is on the local-network CIDR -- in that case the
+        // user is bypassing the password entirely and "logout" would just
+        // bounce them right back through CIDR auth on the next request.
         async function checkAuthStatus() {
             try {
                 const resp = await fetch('/auth/check');
                 const data = await resp.json();
-                if (data.auth_enabled) {
+                if (data.auth_enabled && !data.local_network) {
                     document.getElementById('logoutBtn').style.display = 'block';
                 }
             } catch(e) {}
@@ -3581,8 +3584,13 @@
                     document.getElementById('config-turnstile-site-key').value = config.auth.turnstile_site_key || '';
                     document.getElementById('config-turnstile-secret-key').value = config.auth.turnstile_secret_key || '';
                     
-                    // Show/hide logout button
-                    document.getElementById('logoutBtn').style.display = config.auth.enabled ? 'block' : 'none';
+                    // Show/hide logout button. checkAuthStatus() (called on
+                    // initial page load) already handles the local_network
+                    // bypass case; here we only need to hide if auth is
+                    // disabled entirely.
+                    if (!config.auth.enabled) {
+                        document.getElementById('logoutBtn').style.display = 'none';
+                    }
                 }
                 
                 // Populate Security fields
