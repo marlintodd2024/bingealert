@@ -232,8 +232,13 @@
     }
 
     function renderReview() {
+      // Build the panel with DOM APIs instead of innerHTML so user-typed
+      // values can never be reinterpreted as markup. Field labels are
+      // hardcoded above; only describe() returns user input.
       const review = document.getElementById("review");
       const list = document.getElementById("review-list");
+      list.textContent = "";
+
       const groups = [
         ["SMTP", ["smtp_host", "smtp_port", "smtp_user", "smtp_password", "smtp_from"]],
         ["Email recipient", ["admin_email"]],
@@ -243,13 +248,38 @@
         ["Plex", ["plex_url", "plex_token"]],
         ["Auth", ["admin_password", "local_network_cidrs", "app_secret_key"]],
       ];
-      const lines = [];
-      for (const [label, fields] of groups) {
-        const parts = fields.map(f => `<div style="display:flex; gap:6px"><span style="opacity:0.6; min-width:160px">${f}</span><span>${describe(f) ?? "—"}</span></div>`);
-        lines.push(`<div style="margin-bottom:6px"><div style="color:#9aa0b4; font-size:11px; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:2px">${label}</div>${parts.join("")}</div>`);
+
+      function row(field) {
+        const r = document.createElement("div");
+        r.style.cssText = "display:flex; gap:6px";
+        const k = document.createElement("span");
+        k.style.cssText = "opacity:0.6; min-width:160px";
+        k.textContent = field;
+        const v = document.createElement("span");
+        v.textContent = describe(field) ?? "—";
+        r.appendChild(k); r.appendChild(v);
+        return r;
       }
-      lines.push(`<div><span style="opacity:0.6">auth_required</span>: ${form.elements.auth_required.checked ? "yes" : "no"}</div>`);
-      list.innerHTML = lines.join("");
+
+      for (const [label, fields] of groups) {
+        const g = document.createElement("div");
+        g.style.cssText = "margin-bottom:6px";
+        const h = document.createElement("div");
+        h.style.cssText = "color:#9aa0b4; font-size:11px; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:2px";
+        h.textContent = label;
+        g.appendChild(h);
+        for (const f of fields) g.appendChild(row(f));
+        list.appendChild(g);
+      }
+
+      const auth = document.createElement("div");
+      const ak = document.createElement("span");
+      ak.style.opacity = "0.6";
+      ak.textContent = "auth_required";
+      auth.appendChild(ak);
+      auth.appendChild(document.createTextNode(": " + (form.elements.auth_required.checked ? "yes" : "no")));
+      list.appendChild(auth);
+
       review.style.display = "block";
     }
 
@@ -281,7 +311,7 @@
       const required = section.querySelectorAll("input[required]");
       for (const el of required) {
         if (!el.value.trim()) {
-          errEl.textContent = `${(el.previousElementSibling?.textContent || "Field").replace("*","").trim()} is required.`;
+          errEl.textContent = `${(el.previousElementSibling?.textContent || "Field").replace(/\*/g, "").trim()} is required.`;
           el.focus();
           return false;
         }

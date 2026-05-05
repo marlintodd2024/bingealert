@@ -12,6 +12,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Build-only -- never pushes to GHCR or modifies repo state.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
