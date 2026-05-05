@@ -1968,8 +1968,14 @@
                     </div>
                     <div>
                         <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">X-Plex-Token</label>
-                        <input type="password" id="config-plex-token" placeholder="••••••••" 
+                        <input type="password" id="config-plex-token" placeholder="••••••••"
                                style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
+                        <small style="color: #777; font-size: 11px; display: block; margin-top: 6px; line-height: 1.5;">
+                            Sign in at <a href="https://app.plex.tv" target="_blank" rel="noopener" style="color: #e5a00d;">app.plex.tv</a>,
+                            open any media item, click <strong>⋯</strong> &rarr; <strong>Get Info</strong> &rarr; <strong>View XML</strong>.
+                            The browser URL contains <code style="background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 3px;">?X-Plex-Token=&lt;your-token&gt;</code> &mdash; copy the value.
+                            <a href="https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/" target="_blank" rel="noopener" style="color: #e5a00d;">Full guide</a>.
+                        </small>
                     </div>
                 </div>
             </div>

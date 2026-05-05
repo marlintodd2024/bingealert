@@ -168,6 +168,15 @@
             <div><label>URL</label><input name="plex_url" type="text" placeholder="http://192.168.1.100:32400"></div>
             <div><label>X-Plex-Token</label><input name="plex_token" type="text"></div>
           </div>
+          <p class="hint" style="margin-top:10px; line-height:1.5">
+            <strong style="color:#c8cce0">How to find your X-Plex-Token:</strong><br>
+            Sign in at <a href="https://app.plex.tv" target="_blank" rel="noopener" style="color:#f39c12">app.plex.tv</a>,
+            open any media item, click <strong>⋯</strong> &rarr; <strong>Get Info</strong> &rarr;
+            <strong>View XML</strong>. The browser URL that opens contains
+            <code style="background:rgba(255,255,255,0.06); padding:1px 5px; border-radius:3px">?X-Plex-Token=&lt;your-token&gt;</code>
+            &mdash; copy the value after the equals sign.
+            Full guide: <a href="https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/" target="_blank" rel="noopener" style="color:#f39c12">support.plex.tv</a>.
+          </p>
         </section>
 
         <section data-step="6">
