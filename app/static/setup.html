@@ -126,8 +126,8 @@
           <div class="row">
             <div><label>SMTP host <span class="req">*</span></label><input name="smtp_host" type="text" placeholder="smtp.gmail.com" required></div>
             <div><label>Port</label><input name="smtp_port" type="number" value="587"></div>
-            <div><label>Username</label><input name="smtp_user" type="text" placeholder="you@example.com"></div>
-            <div><label>Password</label><input name="smtp_password" type="password"></div>
+            <div><label>Username</label><input name="smtp_user" type="text" placeholder="you@example.com" autocomplete="off"></div>
+            <div><label>Password</label><input name="smtp_password" type="password" autocomplete="new-password"></div>
             <div><label>From address <span class="req">*</span></label><input name="smtp_from" type="text" placeholder="BingeAlert &lt;you@example.com&gt;" required></div>
             <div><label>Admin email</label><input name="admin_email" type="email" placeholder="defaults to From"></div>
           </div>
@@ -183,6 +183,10 @@
           <div class="row full"><div><label>App secret key (HMAC; auto-generated if blank)</label><input name="app_secret_key" type="text" placeholder="leave blank to generate"></div></div>
         </section>
 
+        <div id="review" style="display:none; margin-top:6px; padding:14px 18px; border-radius:8px; background:rgba(243,156,18,0.07); border:1px solid rgba(243,156,18,0.18); font-size:13px; color:#c8cce0">
+          <div style="color:#f39c12; font-weight:600; margin-bottom:8px">Review before saving:</div>
+          <div id="review-list"></div>
+        </div>
         <p id="err" class="err"></p>
         <div class="actions">
           <button type="button" id="prev-btn" class="secondary" disabled>&larr; Back</button>
@@ -217,6 +221,38 @@
     const TOTAL_STEPS = 6;
     let currentStep = 1;
 
+    function describe(name) {
+      const el = form.elements[name];
+      if (!el) return null;
+      const v = (el.value || "").trim();
+      if (!v) return "(blank)";
+      // Mask passwords / tokens / keys -- show length so user can spot empties.
+      if (/password|token|api_key|secret_key/.test(name)) return "set (" + v.length + " chars)";
+      return v;
+    }
+
+    function renderReview() {
+      const review = document.getElementById("review");
+      const list = document.getElementById("review-list");
+      const groups = [
+        ["SMTP", ["smtp_host", "smtp_port", "smtp_user", "smtp_password", "smtp_from"]],
+        ["Email recipient", ["admin_email"]],
+        ["Jellyseerr", ["jellyseerr_url", "jellyseerr_api_key"]],
+        ["Sonarr", ["sonarr_url", "sonarr_api_key", "sonarr_anime_url", "sonarr_anime_api_key"]],
+        ["Radarr", ["radarr_url", "radarr_api_key"]],
+        ["Plex", ["plex_url", "plex_token"]],
+        ["Auth", ["admin_password", "local_network_cidrs", "app_secret_key"]],
+      ];
+      const lines = [];
+      for (const [label, fields] of groups) {
+        const parts = fields.map(f => `<div style="display:flex; gap:6px"><span style="opacity:0.6; min-width:160px">${f}</span><span>${describe(f) ?? "—"}</span></div>`);
+        lines.push(`<div style="margin-bottom:6px"><div style="color:#9aa0b4; font-size:11px; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:2px">${label}</div>${parts.join("")}</div>`);
+      }
+      lines.push(`<div><span style="opacity:0.6">auth_required</span>: ${form.elements.auth_required.checked ? "yes" : "no"}</div>`);
+      list.innerHTML = lines.join("");
+      review.style.display = "block";
+    }
+
     function showStep(n) {
       currentStep = n;
       document.querySelectorAll("section[data-step]").forEach(s => {
@@ -233,6 +269,8 @@
       submitBtn.style.display = onLast ? "" : "none";
       actionHint.textContent = onLast ? "Saves /data/config.json and restarts the service." : "";
       errEl.textContent = "";
+      const review = document.getElementById("review");
+      if (onLast) renderReview(); else review.style.display = "none";
       // Focus first input of the new step.
       const first = document.querySelector(`section[data-step="${n}"] input`);
       if (first) setTimeout(() => first.focus(), 0);
@@ -300,6 +338,11 @@
       const body = payloadFromForm();
       if (body.auth_required && !body.admin_password) {
         errEl.textContent = "Admin password is required when 'Require login' is checked.";
+        submitBtn.disabled = false;
+        return;
+      }
+      if (body.smtp_user && !body.smtp_password) {
+        errEl.textContent = "SMTP password is required when SMTP username is set. Go back to step 1 and re-enter it (browsers sometimes blank password fields on navigation).";
         submitBtn.disabled = false;
         return;
       }

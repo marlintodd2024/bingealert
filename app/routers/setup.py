@@ -130,6 +130,20 @@ async def save_setup(
             detail="Admin password is required when auth_required is true.",
         )
 
+    # If SMTP authentication is being used, both halves must be present.
+    # Browsers occasionally blank password fields on form navigation; without
+    # this check the wizard succeeds and the user finds out hours later when
+    # the SMTP relay rejects with "relay access denied".
+    if payload.smtp_user and not payload.smtp_password:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "SMTP password is required when smtp_user is set. Re-enter it "
+                "and resubmit (browsers sometimes clear password fields on "
+                "form navigation)."
+            ),
+        )
+
     # Translate the wire payload into the on-disk config shape.
     config: dict = payload.model_dump(exclude={"admin_password"}, exclude_none=False)
 
