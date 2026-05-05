@@ -428,31 +428,42 @@ class QualityReleaseMonitor:
         # This allows it to be cancelled if the movie downloads in correct quality before the delay expires
     
     def _already_notified_coming_soon(self, request: MediaRequest, db: Session) -> bool:
-        """Check if we already sent a 'coming soon' notification for this request"""
-        # Only send once every 30 days
+        """True iff there's already a pending or recently-sent coming_soon for this request.
+
+        Pending counts because it's still going to fire -- creating another now
+        would just duplicate. Sent counts within a 30-day cooldown so we don't
+        re-spam the user every quality_monitor cycle.
+        """
+        from sqlalchemy import and_, or_
         cutoff = datetime.now(timezone.utc) - timedelta(days=30)
-        
         existing = db.query(Notification).filter(
             Notification.request_id == request.id,
             Notification.notification_type == "coming_soon",
-            Notification.sent == True,
-            Notification.sent_at > cutoff
+            or_(
+                Notification.sent == False,
+                and_(Notification.sent == True, Notification.sent_at > cutoff),
+            ),
         ).first()
-        
         return existing is not None
-    
+
     def _already_notified_quality_wait(self, request: MediaRequest, db: Session) -> bool:
-        """Check if we already sent a 'quality waiting' notification for this request"""
-        # Only send once every 7 days
+        """True iff there's already a pending or recently-sent quality_waiting for this request.
+
+        Pre-v2.0.3 this only checked sent==True, so a still-pending notification
+        (waiting on its send_after delay) didn't dedupe -- next quality_monitor
+        cycle queued another. Result: duplicate quality_waiting rows in the
+        admin UI for the same user/request.
+        """
+        from sqlalchemy import and_, or_
         cutoff = datetime.now(timezone.utc) - timedelta(days=7)
-        
         existing = db.query(Notification).filter(
             Notification.request_id == request.id,
             Notification.notification_type == "quality_waiting",
-            Notification.sent == True,
-            Notification.sent_at > cutoff
+            or_(
+                Notification.sent == False,
+                and_(Notification.sent == True, Notification.sent_at > cutoff),
+            ),
         ).first()
-        
         return existing is not None
 
 
