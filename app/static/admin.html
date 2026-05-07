@@ -2748,7 +2748,7 @@
         const _upcomingCache = { key: null, ts: 0, payload: null };
         async function loadUpcoming(force) {
             try {
-                const days = document.getElementById('upcomingDays')?.value || 30;
+                const days = parseInt(document.getElementById('upcomingDays')?.value, 10) || 30;
                 const cacheKey = String(days);
                 const now = Date.now();
                 let data;
@@ -2915,7 +2915,7 @@
             const container = document.getElementById('upcomingGroupedContent');
 
             if (upcoming.length === 0) {
-                const days = document.getElementById('upcomingDays')?.value || 30;
+                const days = parseInt(document.getElementById('upcomingDays')?.value, 10) || 30;
                 container.innerHTML = `<div class="empty-hint"><div class="empty-icon">📅</div><div>No upcoming episodes in the next ${days} days.</div></div>`;
                 return;
             }
@@ -3028,7 +3028,7 @@
             const tbody = document.getElementById('upcomingTableBody');
             upcoming = sortDataset(upcoming, 'upcoming');
             if (upcoming.length === 0) {
-                const days = document.getElementById('upcomingDays')?.value || 30;
+                const days = parseInt(document.getElementById('upcomingDays')?.value, 10) || 30;
                 tbody.innerHTML = emptyHintRow(8, '📅', `No upcoming episodes in the next ${days} days.`);
                 return;
             }
