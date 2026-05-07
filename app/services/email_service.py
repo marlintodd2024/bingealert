@@ -1,7 +1,7 @@
 import aiosmtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from jinja2 import Environment, select_autoescape
+from jinja2 import Environment
 import logging
 from typing import List, Optional
 from datetime import datetime
@@ -18,7 +18,14 @@ logger = logging.getLogger(__name__)
 # upstream-supplied) strings; without autoescape, anything containing < > "
 # was injected verbatim into the resulting email -- stored XSS for any HTML
 # email client that renders scripts.
-_template_env = Environment(autoescape=select_autoescape(["html", "xml"]))
+#
+# We use autoescape=True (not select_autoescape(["html","xml"])) because
+# select_autoescape decides based on the template's source filename
+# extension. Every template here is constructed via from_string(), so it
+# has no filename -- the heuristic falls back to default_for_string which
+# is True in Jinja2 3.x but the config is fragile and confusing to
+# scanners. autoescape=True is unambiguous: every render escapes.
+_template_env = Environment(autoescape=True)
 
 
 def _safe_url(url: Optional[str]) -> Optional[str]:
