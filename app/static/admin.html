@@ -561,6 +561,235 @@
             border: 1px solid rgba(244, 67, 54, 0.3);
         }
 
+        /* Toast notification system */
+        #toastContainer {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 100000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+            max-width: min(420px, calc(100vw - 40px));
+        }
+        .toast {
+            pointer-events: auto;
+            background: #1e2140;
+            border: 1px solid rgba(255,255,255,0.12);
+            border-left: 4px solid #888;
+            border-radius: 8px;
+            padding: 12px 14px;
+            color: #e4e4e4;
+            font-size: 14px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            animation: toastSlideIn 0.18s ease-out;
+            line-height: 1.4;
+        }
+        .toast.toast-leaving {
+            animation: toastSlideOut 0.2s ease-in forwards;
+        }
+        .toast .toast-icon {
+            flex: 0 0 auto;
+            font-size: 16px;
+            line-height: 1.4;
+        }
+        .toast .toast-msg {
+            flex: 1 1 auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .toast .toast-close {
+            flex: 0 0 auto;
+            background: transparent;
+            border: none;
+            color: #999;
+            cursor: pointer;
+            font-size: 18px;
+            padding: 0 4px;
+            line-height: 1;
+            box-shadow: none;
+        }
+        .toast .toast-close:hover {
+            color: #e4e4e4;
+            transform: none;
+            box-shadow: none;
+        }
+        .toast.toast-success { border-left-color: #4caf50; }
+        .toast.toast-success .toast-icon { color: #4caf50; }
+        .toast.toast-error   { border-left-color: #f44336; }
+        .toast.toast-error .toast-icon   { color: #f44336; }
+        .toast.toast-warn    { border-left-color: #ff9800; }
+        .toast.toast-warn .toast-icon    { color: #ff9800; }
+        .toast.toast-info    { border-left-color: #e5a00d; }
+        .toast.toast-info .toast-icon    { color: #e5a00d; }
+        @keyframes toastSlideIn {
+            from { transform: translateX(110%); opacity: 0; }
+            to   { transform: translateX(0);    opacity: 1; }
+        }
+        @keyframes toastSlideOut {
+            from { transform: translateX(0);    opacity: 1; }
+            to   { transform: translateX(110%); opacity: 0; }
+        }
+
+        /* Confirm modal */
+        #confirmModal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.65);
+            z-index: 100001;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        #confirmModal.open { display: flex; }
+        #confirmModal .confirm-box {
+            background: #1a1a2e;
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 480px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+        }
+        #confirmModal h3 {
+            color: #e5a00d;
+            margin-bottom: 12px;
+            font-size: 18px;
+        }
+        #confirmModal .confirm-msg {
+            color: #e4e4e4;
+            margin-bottom: 20px;
+            white-space: pre-wrap;
+            line-height: 1.5;
+            font-size: 14px;
+        }
+        #confirmModal .confirm-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+        #confirmModal button.confirm-cancel {
+            background: rgba(255,255,255,0.1);
+            color: #e4e4e4;
+        }
+        #confirmModal button.confirm-ok-danger {
+            background: #f44336;
+            color: white;
+        }
+
+        /* Compact action toolbar */
+        .actions-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--bg-card);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 12px;
+            padding: 8px 12px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .actions-toolbar .toolbar-summary {
+            cursor: pointer;
+            color: #e5a00d;
+            font-size: 13px;
+            font-weight: 600;
+            user-select: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 8px;
+            border-radius: 6px;
+        }
+        .actions-toolbar .toolbar-summary:hover {
+            background: rgba(229,160,13,0.1);
+        }
+        .actions-toolbar .toolbar-caret {
+            transition: transform 0.2s;
+            display: inline-block;
+        }
+        .actions-toolbar.open .toolbar-caret {
+            transform: rotate(90deg);
+        }
+        .actions-toolbar .toolbar-body {
+            display: none;
+            flex: 1 1 100%;
+            flex-wrap: wrap;
+            gap: 16px;
+            padding-top: 6px;
+        }
+        .actions-toolbar.open .toolbar-body {
+            display: flex;
+        }
+        .actions-toolbar .toolbar-group {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .actions-toolbar .toolbar-group-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: #888;
+            margin-right: 4px;
+        }
+        .actions-toolbar .toolbar-group-label.danger { color: #e57373; }
+        .actions-toolbar button {
+            padding: 6px 10px;
+            font-size: 12px;
+            border-radius: 6px;
+            white-space: nowrap;
+        }
+
+        /* Keyboard shortcut hint */
+        #shortcutHint {
+            position: fixed;
+            left: 14px;
+            bottom: 12px;
+            font-size: 11px;
+            color: #777;
+            background: rgba(20,20,30,0.7);
+            padding: 4px 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            z-index: 99;
+            user-select: none;
+            border: 1px solid rgba(255,255,255,0.06);
+        }
+        #shortcutHint:hover { color: #e5a00d; }
+        #shortcutHint kbd {
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 3px;
+            padding: 0 4px;
+            font-family: monospace;
+            font-size: 10px;
+        }
+        #shortcutHelpModal table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        #shortcutHelpModal td {
+            padding: 8px 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            font-size: 13px;
+        }
+        #shortcutHelpModal kbd {
+            background: rgba(229,160,13,0.15);
+            border: 1px solid rgba(229,160,13,0.3);
+            color: #e5a00d;
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
         .empty-state {
             text-align: center;
             padding: 60px 20px;
@@ -1172,6 +1401,43 @@
         <div class="success-message" id="successMessage"></div>
         <div class="error-message" id="errorMessage"></div>
 
+        <!-- Toast notification container -->
+        <div id="toastContainer" aria-live="polite" aria-atomic="true"></div>
+
+        <!-- Confirm modal -->
+        <div id="confirmModal" role="dialog" aria-modal="true">
+            <div class="confirm-box">
+                <h3 id="confirmTitle">Confirm</h3>
+                <div class="confirm-msg" id="confirmMsg"></div>
+                <div class="confirm-actions">
+                    <button class="confirm-cancel" id="confirmCancelBtn">Cancel</button>
+                    <button id="confirmOkBtn">Confirm</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Keyboard shortcut help modal -->
+        <div id="shortcutHelpModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:100002;align-items:center;justify-content:center;padding:20px;">
+            <div style="background:#1a1a2e;border:1px solid rgba(255,255,255,0.12);border-radius:12px;padding:24px;max-width:480px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.6);">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                    <h3 style="color:#e5a00d;font-size:18px;margin:0;">Keyboard Shortcuts</h3>
+                    <button onclick="hideShortcutHelp()" class="secondary" style="padding:6px 10px;font-size:12px;">Close</button>
+                </div>
+                <table>
+                    <tr><td><kbd>g</kbd> <kbd>u</kbd></td><td>Users</td></tr>
+                    <tr><td><kbd>g</kbd> <kbd>r</kbd></td><td>Requests</td></tr>
+                    <tr><td><kbd>g</kbd> <kbd>n</kbd></td><td>Notifications</td></tr>
+                    <tr><td><kbd>g</kbd> <kbd>e</kbd></td><td>Upcoming Episodes</td></tr>
+                    <tr><td><kbd>g</kbd> <kbd>i</kbd></td><td>Issues</td></tr>
+                    <tr><td><kbd>g</kbd> <kbd>b</kbd></td><td>Backup</td></tr>
+                    <tr><td><kbd>g</kbd> <kbd>s</kbd></td><td>Settings</td></tr>
+                    <tr><td><kbd>/</kbd></td><td>Focus search on the visible tab</td></tr>
+                    <tr><td><kbd>?</kbd></td><td>Show this help</td></tr>
+                    <tr><td><kbd>Esc</kbd></td><td>Cancel modal / close help</td></tr>
+                </table>
+            </div>
+        </div>
+
         <div class="stats-grid">
             <div class="stat-card" style="cursor: pointer;" onclick="switchTab('users', event)">
                 <div class="stat-label">Active Users</div>
@@ -1200,38 +1466,33 @@
             </div>
         </div>
 
-        <div class="actions">
-            <div class="action-group">
-                <div class="action-group-title">Sync</div>
-                <div class="action-buttons">
-                    <button onclick="syncUsers()" id="syncUsersBtn">🔄 Users</button>
-                    <button onclick="syncRequests()" id="syncRequestsBtn">🔄 Requests</button>
-                    <button onclick="importAllEpisodes()" id="importEpisodesBtn">📥 Episodes</button>
+        <div class="actions-toolbar" id="actionsToolbar">
+            <span class="toolbar-summary" id="toolbarToggle" onclick="toggleActionsToolbar()" title="Show admin actions">
+                <span class="toolbar-caret">▶</span> Admin Actions
+            </span>
+            <span style="color:#666;font-size:12px;">Sync · Notifications · Monitoring · Cleanup</span>
+            <div class="toolbar-body">
+                <div class="toolbar-group">
+                    <span class="toolbar-group-label">Sync</span>
+                    <button onclick="syncUsers()" id="syncUsersBtn" class="secondary">🔄 Users</button>
+                    <button onclick="syncRequests()" id="syncRequestsBtn" class="secondary">🔄 Requests</button>
+                    <button onclick="importAllEpisodes()" id="importEpisodesBtn" class="secondary">📥 Episodes</button>
                 </div>
-            </div>
-
-            <div class="action-group">
-                <div class="action-group-title">Notifications</div>
-                <div class="action-buttons">
+                <div class="toolbar-group">
+                    <span class="toolbar-group-label">Notifications</span>
                     <button onclick="processNotifications()" id="processNotifBtn">📧 Process Queue</button>
                     <button onclick="showTestEmailModal()" class="secondary">✉️ Test Email</button>
                     <button onclick="sendWeeklySummary()" id="summaryBtn" class="secondary">📊 Summary</button>
                 </div>
-            </div>
-
-            <div class="action-group">
-                <div class="action-group-title">Monitoring</div>
-                <div class="action-buttons">
+                <div class="toolbar-group">
+                    <span class="toolbar-group-label">Monitoring</span>
                     <button onclick="runReconciliation()" id="reconcileBtn" class="secondary">🔍 Check Missed</button>
-                    <button onclick="checkStuckDownloads()" id="stuckBtn" class="secondary">⚠️ Stuck Downloads</button>
-                    <button onclick="checkQualityRelease()" id="qualityCheckBtn" class="secondary">📅 Quality/Release</button>
+                    <button onclick="checkStuckDownloads()" id="stuckBtn" class="secondary">⚠️ Stuck</button>
+                    <button onclick="checkQualityRelease()" id="qualityCheckBtn" class="secondary">📅 Quality</button>
                 </div>
-            </div>
-
-            <div class="action-group">
-                <div class="action-group-title danger-title">Cleanup</div>
-                <div class="action-buttons">
-                    <button onclick="refreshData()" class="secondary">♻️ Refresh</button>
+                <div class="toolbar-group">
+                    <span class="toolbar-group-label danger">Cleanup</span>
+                    <button onclick="refreshData()" class="secondary">♻️ Refresh All</button>
                     <button onclick="clearOldNotifications()" id="clearOldBtn" class="danger">🗑️ Clear Old</button>
                     <button onclick="clearAllPending()" id="clearAllBtn" class="danger" style="background: #c62828;">⚠️ Clear All</button>
                 </div>
@@ -1251,7 +1512,10 @@
         </div>
 
         <div id="usersTab" class="tab-content active">
-            <input type="text" class="search-box" placeholder="Search users..." id="userSearch" oninput="filterUsers()">
+            <div style="display: flex; gap: 10px; margin-bottom: 15px; align-items: center;">
+                <input type="text" class="search-box" placeholder="Search users..." id="userSearch" oninput="filterUsers()" style="flex: 1; margin-bottom: 0;">
+                <button onclick="loadUsers(true)" class="secondary" title="Refresh users list">🔄 Refresh</button>
+            </div>
             <div class="data-table">
                 <table>
                     <thead>
@@ -1280,6 +1544,7 @@
                 <button onclick="filterRequestsByType('all')" id="requestFilterAll" class="secondary" style="background: #e5a00d;">All</button>
                 <button onclick="filterRequestsByType('tv')" id="requestFilterTV" class="secondary">📺 TV Shows</button>
                 <button onclick="filterRequestsByType('movie')" id="requestFilterMovie" class="secondary">🎬 Movies</button>
+                <button onclick="loadRequests(true)" class="secondary" title="Refresh requests">🔄 Refresh</button>
             </div>
             <div class="data-table">
                 <table>
@@ -1312,6 +1577,7 @@
                 <button onclick="filterNotificationsByType('all')" id="notificationFilterAll" class="secondary" style="background: #e5a00d;">All</button>
                 <button onclick="filterNotificationsByType('episode')" id="notificationFilterTV" class="secondary">📺 TV Shows</button>
                 <button onclick="filterNotificationsByType('movie')" id="notificationFilterMovie" class="secondary">🎬 Movies</button>
+                <button onclick="loadNotifications(true)" class="secondary" title="Refresh notifications">🔄 Refresh</button>
             </div>
             <div class="data-table">
                 <table>
@@ -1350,7 +1616,7 @@
                     <option value="resolved">Resolved</option>
                     <option value="failed">Failed</option>
                 </select>
-                <button onclick="loadIssues()" class="secondary" style="padding: 10px 15px;">🔄 Refresh</button>
+                <button onclick="loadIssues(true)" class="secondary" style="padding: 10px 15px;">🔄 Refresh</button>
             </div>
             
             <div class="data-table">
@@ -1380,12 +1646,13 @@
                 <select id="upcomingUserFilter" onchange="filterUpcoming()" style="padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
                     <option value="all">All Users</option>
                 </select>
-                <select id="upcomingDays" onchange="loadUpcoming()" style="padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
+                <select id="upcomingDays" onchange="loadUpcoming(true)" style="padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
                     <option value="7">Next 7 Days</option>
                     <option value="14">Next 14 Days</option>
                     <option value="30" selected">Next 30 Days</option>
                     <option value="60">Next 60 Days</option>
                 </select>
+                <button onclick="loadUpcoming(true)" class="secondary" title="Force refresh (bypass 30s cache)">🔄 Refresh</button>
                 <button onclick="toggleUpcomingView()" id="viewToggleBtn" style="padding: 10px 15px; background: rgba(229,160,13,0.2); border: 1px solid #e5a00d; border-radius: 8px; color: #e5a00d; cursor: pointer;">
                     📋 Switch to List View
                 </button>
@@ -2372,7 +2639,29 @@
             }
         }
 
-        async function loadUsers() {
+        // Tab cache flags - set to true once a tab has loaded its data
+        // Cleared on explicit Refresh button or full refreshData()
+        const tabCache = {
+            users: false,
+            requests: false,
+            notifications: false,
+            upcoming: false,
+            issues: false,
+            backup: false,
+            maintenance: false,
+            settings: false,
+            logs: false
+        };
+        function invalidateTabCache(tab) {
+            if (tab) tabCache[tab] = false;
+            else Object.keys(tabCache).forEach(k => tabCache[k] = false);
+        }
+
+        async function loadUsers(force) {
+            if (!force && tabCache.users) {
+                renderUsers(allUsers);
+                return;
+            }
             try {
                 const response = await fetch(`${API_BASE}/admin/users?limit=1000`);
                 const data = await response.json();
@@ -2380,6 +2669,7 @@
                 updateTabCount('users', allUsers.length);
                 applyHeaderSortIndicators('users');
                 filterUsers();
+                tabCache.users = true;
             } catch (error) {
                 console.error('Failed to load users:', error);
                 document.getElementById('usersTableBody').innerHTML = '<tr><td colspan="6" class="empty-state">Failed to load users</td></tr>';
@@ -2388,9 +2678,15 @@
 
         async function toggleUserActive(userId, username, currentlyActive) {
             const action = currentlyActive ? 'deactivate' : 'reactivate';
-            if (!confirm(`${currentlyActive ? '⏸️' : '✅'} ${action.charAt(0).toUpperCase() + action.slice(1)} user "${username}"?\n\n${currentlyActive ? 'They will stop receiving notifications.' : 'They will start receiving notifications again.'}`)) {
-                return;
-            }
+            const ok = await showConfirm(
+                `${currentlyActive ? 'They will stop receiving notifications.' : 'They will start receiving notifications again.'}`,
+                {
+                    title: `${currentlyActive ? '⏸️' : '✅'} ${action.charAt(0).toUpperCase() + action.slice(1)} user "${username}"?`,
+                    okText: currentlyActive ? 'Deactivate' : 'Reactivate',
+                    danger: currentlyActive
+                }
+            );
+            if (!ok) return;
             
             try {
                 const response = await fetch(`${API_BASE}/admin/users/${userId}/toggle-active`, { method: 'POST' });
@@ -2407,7 +2703,11 @@
             }
         }
 
-        async function loadRequests() {
+        async function loadRequests(force) {
+            if (!force && tabCache.requests) {
+                renderRequests(allRequests);
+                return;
+            }
             try {
                 const response = await fetch(`${API_BASE}/admin/requests?limit=1000`);
                 const data = await response.json();
@@ -2415,13 +2715,18 @@
                 updateTabCount('requests', allRequests.length);
                 applyHeaderSortIndicators('requests');
                 applyRequestFilters();
+                tabCache.requests = true;
             } catch (error) {
                 console.error('Failed to load requests:', error);
                 document.getElementById('requestsTableBody').innerHTML = '<tr><td colspan="7" class="empty-state">Failed to load requests</td></tr>';
             }
         }
 
-        async function loadNotifications() {
+        async function loadNotifications(force) {
+            if (!force && tabCache.notifications) {
+                renderNotifications(allNotifications);
+                return;
+            }
             try {
                 const response = await fetch(`${API_BASE}/admin/notifications?limit=1000`);
                 const data = await response.json();
@@ -2429,20 +2734,38 @@
                 updateTabCount('notifications', allNotifications.length);
                 applyHeaderSortIndicators('notifications');
                 applyNotificationFilters();
+                tabCache.notifications = true;
             } catch (error) {
                 console.error('Failed to load notifications:', error);
                 document.getElementById('notificationsTableBody').innerHTML = '<tr><td colspan="8" class="empty-state">Failed to load notifications</td></tr>';
             }
         }
 
-        async function loadUpcoming() {
+        // Upcoming episodes cache (30s TTL). The /admin/upcoming-episodes
+        // endpoint hits Sonarr + Sonarr-Anime + a /series call so we want to
+        // avoid re-fetching on every tab switch within the same session.
+        const UPCOMING_TTL_MS = 30 * 1000;
+        const _upcomingCache = { key: null, ts: 0, payload: null };
+        async function loadUpcoming(force) {
             try {
                 const days = document.getElementById('upcomingDays')?.value || 30;
-                const response = await fetch(`${API_BASE}/admin/upcoming-episodes?days=${days}`);
-                const data = await response.json();
+                const cacheKey = String(days);
+                const now = Date.now();
+                let data;
+                if (!force && _upcomingCache.key === cacheKey && _upcomingCache.payload &&
+                    (now - _upcomingCache.ts) < UPCOMING_TTL_MS) {
+                    data = _upcomingCache.payload;
+                } else {
+                    const response = await fetch(`${API_BASE}/admin/upcoming-episodes?days=${days}`);
+                    data = await response.json();
+                    _upcomingCache.key = cacheKey;
+                    _upcomingCache.ts = now;
+                    _upcomingCache.payload = data;
+                }
                 allUpcoming = data.upcoming || [];
                 updateTabCount('upcoming', allUpcoming.length);
                 applyHeaderSortIndicators('upcoming');
+                tabCache.upcoming = true;
 
                 // Populate user filter
                 const userFilter = document.getElementById('upcomingUserFilter');
@@ -2852,12 +3175,17 @@
 
         // ===== Issues Management =====
         
-        async function loadIssues() {
+        async function loadIssues(force) {
+            if (!force && tabCache.issues) {
+                renderIssues(allIssues);
+                return;
+            }
             try {
                 const response = await fetch(`${API_BASE}/admin/issues`);
                 allIssues = await response.json();
                 updateTabCount('issues', Array.isArray(allIssues) ? allIssues.length : 0);
                 filterIssues();
+                tabCache.issues = true;
             } catch (error) {
                 console.error('Failed to load issues:', error);
                 document.getElementById('issuesTableBody').innerHTML =
@@ -2948,7 +3276,7 @@
         }
         
         async function fixIssue(issueId) {
-            if (!confirm('Blacklist the current file and trigger a new search?\n\nThis will remove the existing file and search for a new one from a different source.')) {
+            if (!(await showConfirm('This will remove the existing file and search for a new one from a different source.', { title: 'Blacklist & re-search?', okText: 'Blacklist', danger: true }))) {
                 return;
             }
             
@@ -2969,7 +3297,7 @@
         }
         
         async function resolveIssue(issueId) {
-            if (!confirm('Mark this issue as resolved without re-downloading?')) {
+            if (!(await showConfirm('Mark this issue as resolved without re-downloading?', { title: 'Resolve issue?', okText: 'Mark resolved' }))) {
                 return;
             }
             
@@ -2990,7 +3318,7 @@
         }
         
         async function deleteIssue(issueId) {
-            if (!confirm('Delete this issue record?')) {
+            if (!(await showConfirm('Delete this issue record?', { title: 'Delete issue?', okText: 'Delete', danger: true }))) {
                 return;
             }
             
@@ -3015,32 +3343,37 @@
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
             const targetTab = document.querySelector(`.tab[onclick*="'${tabName}'"]`);
             if (targetTab) targetTab.classList.add('active');
-            
+
             // Update tab content
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-            document.getElementById(tabName + 'Tab').classList.add('active');
-            
-            // Load data if not loaded
-            if (tabName === 'users' && allUsers.length === 0) loadUsers();
-            if (tabName === 'requests' && allRequests.length === 0) loadRequests();
-            if (tabName === 'notifications') {
-                // Always show ALL notifications when clicking the tab (reset filter)
-                if (allNotifications.length === 0) {
-                    loadNotifications();
-                } else {
-                    renderNotifications(allNotifications);
-                }
+            const tabEl = document.getElementById(tabName + 'Tab');
+            if (tabEl) tabEl.classList.add('active');
+
+            // Lazy-load: only fetch when first visited, or reuse cached data on subsequent visits.
+            // Explicit Refresh buttons (per tab) bypass cache via force=true.
+            if (tabName === 'users') loadUsers();
+            else if (tabName === 'requests') loadRequests();
+            else if (tabName === 'notifications') {
+                // Always reset filter when clicking the tab itself (not via deep-link helpers)
+                loadNotifications();
             }
-            if (tabName === 'upcoming' && allUpcoming.length === 0) loadUpcoming();
-            if (tabName === 'issues' && allIssues.length === 0) loadIssues();
-            if (tabName === 'backup') loadBackups();
-            if (tabName === 'maintenance') loadMaintenanceWindows();
-            if (tabName === 'settings') loadConfig();
-            if (tabName === 'logs' && !allLogs) loadLogs();
+            else if (tabName === 'upcoming') loadUpcoming();
+            else if (tabName === 'issues') loadIssues();
+            else if (tabName === 'backup') {
+                // Backups change frequently; load once per session, force via Refresh
+                if (!tabCache.backup) { loadBackups(); tabCache.backup = true; }
+            }
+            else if (tabName === 'maintenance') {
+                if (!tabCache.maintenance) { loadMaintenanceWindows(); tabCache.maintenance = true; }
+            }
+            else if (tabName === 'settings') {
+                if (!tabCache.settings) { loadConfig(); tabCache.settings = true; }
+            }
+            else if (tabName === 'logs' && !allLogs) loadLogs();
         }
 
         async function syncUsers() {
-            if (!confirm('Sync users from Jellyseerr?\n\nThis is safe and won\'t affect requests.')) {
+            if (!(await showConfirm("This is safe and won't affect requests.", { title: 'Sync users from Jellyseerr?', okText: 'Sync' }))) {
                 return;
             }
             
@@ -3062,7 +3395,7 @@
         }
 
         async function syncRequests() {
-            if (!confirm('⚠️ WARNING: This will pull ALL requests from Jellyseerr (including old/completed ones).\n\nSince you\'re using webhooks, you probably don\'t need this.\n\nContinue anyway?')) {
+            if (!(await showConfirm("This will pull ALL requests from Jellyseerr (including old/completed ones).\n\nSince you're using webhooks, you probably don't need this.\n\nContinue anyway?", { title: '⚠️ Sync ALL requests?', okText: 'Sync anyway', danger: true }))) {
                 return;
             }
             
@@ -3084,7 +3417,7 @@
         }
 
         async function importAllEpisodes() {
-            if (!confirm('This will import existing episodes for ALL TV show requests. Continue?')) return;
+            if (!(await showConfirm('This will import existing episodes for ALL TV show requests.', { title: 'Import all episodes?', okText: 'Import' }))) return;
             
             const btn = document.getElementById('importEpisodesBtn');
             btn.disabled = true;
@@ -3133,7 +3466,7 @@
         }
 
         async function clearOldNotifications() {
-            if (!confirm('Mark all notifications older than 24 hours as sent WITHOUT emailing? This cannot be undone!')) {
+            if (!(await showConfirm('Mark all notifications older than 24 hours as sent WITHOUT emailing?\n\nThis cannot be undone.', { title: '🗑️ Clear old notifications?', okText: 'Clear old', danger: true }))) {
                 return;
             }
             
@@ -3162,7 +3495,7 @@
         }
 
         async function clearAllPending() {
-            if (!confirm('⚠️ WARNING: Mark ALL pending notifications as sent WITHOUT emailing?\n\nThis will clear EVERYTHING in the queue!\n\nThis cannot be undone!')) {
+            if (!(await showConfirm('Mark ALL pending notifications as sent WITHOUT emailing?\n\nThis will clear EVERYTHING in the queue.\n\nThis cannot be undone.', { title: '⚠️ Clear ALL pending?', okText: 'Clear ALL', danger: true }))) {
                 return;
             }
             
@@ -3263,16 +3596,33 @@
         }
 
         async function refreshData() {
+            // Always refresh stats. Then refresh whichever tab is currently
+            // visible (lazy-load the rest until the user clicks them). Other
+            // tab caches are invalidated so they re-fetch on next visit.
+            invalidateTabCache();
+            // Bypass the upcoming TTL cache too
+            _upcomingCache.ts = 0;
             await loadStats();
-            await loadUsers();
-            await loadRequests();
-            await loadNotifications();
-            await loadUpcoming();
+            const activeTab = document.querySelector('.tab-content.active');
+            const activeId = activeTab ? activeTab.id.replace(/Tab$/, '') : 'users';
+            const map = {
+                users: () => loadUsers(true),
+                requests: () => loadRequests(true),
+                notifications: () => loadNotifications(true),
+                upcoming: () => loadUpcoming(true),
+                issues: () => loadIssues(true),
+                backup: () => loadBackups(),
+                maintenance: () => loadMaintenanceWindows(),
+                settings: () => loadConfig(),
+                logs: () => loadLogs()
+            };
+            const fn = map[activeId];
+            if (fn) await fn();
             document.getElementById('lastSync').textContent = 'Last sync: ' + new Date().toLocaleString();
         }
 
         async function doLogout() {
-            if (!confirm('Log out of the admin panel?')) return;
+            if (!(await showConfirm('Log out of the admin panel?', { title: 'Log out?', okText: 'Log out' }))) return;
             try {
                 await fetch('/auth/logout', { method: 'POST' });
             } catch(e) {}
@@ -3293,6 +3643,98 @@
             } catch(e) {}
         }
         checkAuthStatus();
+
+        // ============ Compact action toolbar ============
+        function toggleActionsToolbar() {
+            const tb = document.getElementById('actionsToolbar');
+            if (tb) tb.classList.toggle('open');
+        }
+
+        // ============ Keyboard shortcuts ============
+        // g+letter chord to switch tabs, '/' to focus search, '?' for help.
+        // Skip when typing in an input/textarea/contenteditable.
+        const _shortcutTabMap = {
+            u: 'users',
+            r: 'requests',
+            n: 'notifications',
+            e: 'upcoming',
+            i: 'issues',
+            s: 'settings',
+            b: 'backup',
+            m: 'maintenance',
+            l: 'logs'
+        };
+        let _gPending = false;
+        let _gPendingTimer = null;
+        function _isTypingTarget(el) {
+            if (!el) return false;
+            if (el.isContentEditable) return true;
+            const tag = (el.tagName || '').toUpperCase();
+            return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+        }
+        function showShortcutHelp() {
+            const m = document.getElementById('shortcutHelpModal');
+            if (m) m.style.display = 'flex';
+        }
+        function hideShortcutHelp() {
+            const m = document.getElementById('shortcutHelpModal');
+            if (m) m.style.display = 'none';
+        }
+        function _focusVisibleSearch() {
+            // Find the search input inside the currently-active tab
+            const active = document.querySelector('.tab-content.active');
+            if (!active) return false;
+            const input = active.querySelector('input[type="text"].search-box, input.search-box, input[placeholder^="Search" i]');
+            if (input) {
+                input.focus();
+                if (input.select) input.select();
+                return true;
+            }
+            return false;
+        }
+        document.addEventListener('keydown', (e) => {
+            // Allow Escape to close help even if focused inside a control
+            if (e.key === 'Escape') {
+                const helpOpen = document.getElementById('shortcutHelpModal');
+                if (helpOpen && helpOpen.style.display === 'flex') {
+                    e.preventDefault();
+                    hideShortcutHelp();
+                    return;
+                }
+            }
+            if (_isTypingTarget(document.activeElement)) {
+                // Allow nothing while typing (Esc handled above)
+                return;
+            }
+            if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+            if (_gPending) {
+                _gPending = false;
+                if (_gPendingTimer) { clearTimeout(_gPendingTimer); _gPendingTimer = null; }
+                const target = _shortcutTabMap[e.key.toLowerCase()];
+                if (target) {
+                    e.preventDefault();
+                    switchTab(target);
+                }
+                return;
+            }
+            if (e.key === 'g') {
+                _gPending = true;
+                _gPendingTimer = setTimeout(() => { _gPending = false; }, 1200);
+                return;
+            }
+            if (e.key === '/') {
+                if (_focusVisibleSearch()) {
+                    e.preventDefault();
+                }
+                return;
+            }
+            if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
+                e.preventDefault();
+                showShortcutHelp();
+                return;
+            }
+        });
 
         async function runReconciliation() {
             const btn = document.getElementById('reconcileBtn');
@@ -3413,19 +3855,107 @@
             return div.innerHTML;
         }
 
-        function showSuccess(message) {
-            const el = document.getElementById('successMessage');
-            el.textContent = message;
-            el.style.display = 'block';
-            setTimeout(() => el.style.display = 'none', 5000);
+        // ============ Toast / Confirm helpers ============
+        let _toastSeq = 0;
+        function showToast(type, message, opts) {
+            opts = opts || {};
+            const container = document.getElementById('toastContainer');
+            if (!container) {
+                // Fallback if DOM not ready
+                console.log('[toast]', type, message);
+                return null;
+            }
+            const allowed = { success: '✓', error: '⚠', warn: '!', info: 'ℹ' };
+            const cls = allowed[type] ? type : 'info';
+            const icon = allowed[cls];
+            const toast = document.createElement('div');
+            toast.className = 'toast toast-' + cls;
+            const id = 'toast-' + (++_toastSeq);
+            toast.id = id;
+
+            const iconEl = document.createElement('span');
+            iconEl.className = 'toast-icon';
+            iconEl.textContent = icon;
+
+            const msg = document.createElement('span');
+            msg.className = 'toast-msg';
+            msg.textContent = String(message == null ? '' : message);
+
+            const close = document.createElement('button');
+            close.className = 'toast-close';
+            close.setAttribute('aria-label', 'Dismiss');
+            close.textContent = '×';
+            close.addEventListener('click', () => dismissToast(id));
+
+            toast.appendChild(iconEl);
+            toast.appendChild(msg);
+            toast.appendChild(close);
+            container.appendChild(toast);
+
+            const timeout = opts.duration != null ? opts.duration : 4000;
+            if (timeout > 0) {
+                setTimeout(() => dismissToast(id), timeout);
+            }
+            return id;
+        }
+        function dismissToast(id) {
+            const t = document.getElementById(id);
+            if (!t) return;
+            t.classList.add('toast-leaving');
+            setTimeout(() => { if (t.parentNode) t.parentNode.removeChild(t); }, 200);
         }
 
-        function showError(message) {
-            const el = document.getElementById('errorMessage');
-            el.textContent = message;
-            el.style.display = 'block';
-            setTimeout(() => el.style.display = 'none', 5000);
+        // showConfirm(message, options?) -> Promise<boolean>
+        // options: { title, okText, cancelText, danger }
+        function showConfirm(message, options) {
+            options = options || {};
+            return new Promise((resolve) => {
+                const modal = document.getElementById('confirmModal');
+                const titleEl = document.getElementById('confirmTitle');
+                const msgEl = document.getElementById('confirmMsg');
+                const okBtn = document.getElementById('confirmOkBtn');
+                const cancelBtn = document.getElementById('confirmCancelBtn');
+                if (!modal) {
+                    // Fallback to native confirm if modal not in DOM yet
+                    resolve(window.confirm(message));
+                    return;
+                }
+                titleEl.textContent = options.title || 'Confirm';
+                msgEl.textContent = String(message == null ? '' : message);
+                okBtn.textContent = options.okText || 'Confirm';
+                cancelBtn.textContent = options.cancelText || 'Cancel';
+                okBtn.className = options.danger ? 'confirm-ok-danger' : '';
+
+                function cleanup(result) {
+                    modal.classList.remove('open');
+                    okBtn.removeEventListener('click', onOk);
+                    cancelBtn.removeEventListener('click', onCancel);
+                    document.removeEventListener('keydown', onKey);
+                    modal.removeEventListener('click', onBackdrop);
+                    resolve(result);
+                }
+                function onOk() { cleanup(true); }
+                function onCancel() { cleanup(false); }
+                function onKey(e) {
+                    if (e.key === 'Escape') { e.preventDefault(); cleanup(false); }
+                    else if (e.key === 'Enter') { e.preventDefault(); cleanup(true); }
+                }
+                function onBackdrop(e) {
+                    if (e.target === modal) cleanup(false);
+                }
+                okBtn.addEventListener('click', onOk);
+                cancelBtn.addEventListener('click', onCancel);
+                document.addEventListener('keydown', onKey);
+                modal.addEventListener('click', onBackdrop);
+                modal.classList.add('open');
+                setTimeout(() => okBtn.focus(), 30);
+            });
         }
+
+        function showSuccess(message) { showToast('success', message); }
+        function showError(message)   { showToast('error', message); }
+        function showWarn(message)    { showToast('warn', message); }
+        function showInfo(message)    { showToast('info', message); }
 
         function sortTable(tableName, column) {
             const state = sortState[tableName];
@@ -3452,8 +3982,10 @@
             else if (tableName === 'upcoming') filterUpcoming();
         }
 
-        function showSentNotifications() {
+        async function showSentNotifications() {
             switchTab('notifications');
+            // Make sure data is loaded (may not be cached yet)
+            await loadNotifications();
             // Filter to show only sent notifications
             const sent = allNotifications.filter(n => n.sent);
             renderNotifications(sent);
@@ -3461,8 +3993,8 @@
 
         async function showPendingNotifications() {
             switchTab('notifications');
-            // Reload fresh data first
-            await loadNotifications();
+            // Reload fresh data first (force, since pending changes quickly)
+            await loadNotifications(true);
             // Filter to show only pending notifications
             const pending = allNotifications.filter(n => !n.sent);
             renderNotifications(pending);
@@ -3470,8 +4002,8 @@
 
         async function showTrackingRequests() {
             switchTab('requests');
-            // Reload fresh data first
-            await loadRequests();
+            // Reload fresh data first (force)
+            await loadRequests(true);
             // Filter to approved/pending requests that are not yet available
             const tracking = allRequests.filter(r => r.status !== 'available');
             renderRequests(tracking);
@@ -3521,7 +4053,7 @@
         }
 
         async function notifyEpisodeNow(requestId, seriesId, seasonNumber, episodeNumber) {
-            if (!confirm(`Send notification now for this episode?`)) return;
+            if (!(await showConfirm('Send notification now for this episode?', { title: 'Send notification?', okText: 'Send' }))) return;
             
             try {
                 const response = await fetch(`${API_BASE}/admin/notify-episode?request_id=${requestId}&series_id=${seriesId}&season_number=${seasonNumber}&episode_number=${episodeNumber}`, {
@@ -3543,7 +4075,7 @@
         }
 
         async function resendNotification(notificationId) {
-            if (!confirm('Resend this notification?')) return;
+            if (!(await showConfirm('Resend this notification?', { title: 'Resend?', okText: 'Resend' }))) return;
             
             try {
                 const response = await fetch(`${API_BASE}/admin/resend-notification/${notificationId}`, {
@@ -3624,7 +4156,7 @@
                 return;
             }
             
-            if (!confirm('Are you sure? This will replace ALL current data with the backup. This action cannot be undone!')) {
+            if (!(await showConfirm('This will replace ALL current data with the backup.\n\nThis action cannot be undone.', { title: '⚠️ Restore backup?', okText: 'Restore', danger: true }))) {
                 return;
             }
             
@@ -3661,7 +4193,7 @@
         }
 
         async function deleteBackup(filename) {
-            if (!confirm(`Delete backup ${filename}?`)) return;
+            if (!(await showConfirm(`Delete backup ${filename}?`, { title: 'Delete backup?', okText: 'Delete', danger: true }))) return;
             
             try {
                 const response = await fetch(`${API_BASE}/admin/backup/delete/${filename}`, { method: 'DELETE' });
@@ -3865,11 +4397,9 @@
         }
 
         async function saveConfig() {
-            if (!confirm('⚠️ Save configuration changes?\n\nYou will need to restart the container for changes to take effect.\n\nContinue?')) {
-                return;
-            }
-            
             const btn = document.getElementById('saveConfigBtn');
+            // Capture scroll position so the user stays where they were after save
+            const scrollY = window.scrollY;
             btn.disabled = true;
             btn.textContent = '⏳ Saving...';
             
@@ -3976,7 +4506,7 @@
                 const result = await response.json();
                 
                 if (response.ok) {
-                    showSuccess(result.message || 'Configuration saved! Please restart the container.');
+                    showToast('success', 'Settings saved — restart to apply password / secret-key changes.', { duration: 5000 });
                 } else {
                     showError(result.detail || 'Failed to save configuration');
                 }
@@ -3985,11 +4515,13 @@
             } finally {
                 btn.disabled = false;
                 btn.textContent = '💾 Save Configuration';
+                // Restore scroll position so the page doesn't jump after save
+                window.scrollTo({ top: scrollY, behavior: 'instant' in window ? 'instant' : 'auto' });
             }
         }
 
         async function restartContainer() {
-            if (!confirm('🔄 Restart the Docker container?\n\nThis will apply any configuration changes and briefly interrupt service.\n\nContinue?')) {
+            if (!(await showConfirm('This will apply any configuration changes and briefly interrupt service.', { title: '🔄 Restart container?', okText: 'Restart', danger: true }))) {
                 return;
             }
             
@@ -4100,7 +4632,7 @@
                     showSuccess(data.message || 'User added successfully!');
                     
                     // Ask if they want to notify about existing downloaded episodes
-                    if (confirm('User added! Do you want to send notifications for episodes that have already been downloaded?\n\n(This will notify the new user about any episodes they missed)')) {
+                    if (await showConfirm('Do you want to send notifications for episodes that have already been downloaded?\n\n(This will notify the new user about any episodes they missed)', { title: 'User added — notify about existing episodes?', okText: 'Send notifications', cancelText: 'Skip' })) {
                         await notifyNewUserAboutExistingEpisodes(window.currentRequestId, userId);
                     }
                     
@@ -4141,7 +4673,7 @@
         }
 
         async function removeSharedUser(userId) {
-            if (!confirm('Remove this user from the request?')) return;
+            if (!(await showConfirm('Remove this user from the request?', { title: 'Remove user?', okText: 'Remove', danger: true }))) return;
             
             try {
                 const response = await fetch(`${API_BASE}/admin/requests/${window.currentRequestId}/share/${userId}`, {
@@ -4163,12 +4695,32 @@
             }
         }
 
-        // Initialize when page loads
+        // Initialize when page loads.
+        // Lazy-load: only fetch stats + the currently visible tab on initial
+        // load. Other tabs fetch on first click (see switchTab + tabCache).
         window.addEventListener("load", function() {
+            // Restore persisted sort + filter UI state first so when each tab
+            // mounts its data, the saved column/direction/search are already in
+            // place. Then lazy-load: only stats + the visible tab; the rest
+            // load on first switchTab().
             restorePersistedState();
-            refreshData();
-            // Issues lazy-load on tab switch, but restore filter UI eagerly so
-            // the controls reflect the saved state if the user opens the tab.
+            loadStats();
+            const activeTab = document.querySelector('.tab-content.active');
+            const activeId = activeTab ? activeTab.id.replace(/Tab$/, '') : 'users';
+            const map = {
+                users: loadUsers,
+                requests: loadRequests,
+                notifications: loadNotifications,
+                upcoming: loadUpcoming,
+                issues: loadIssues,
+                backup: loadBackups,
+                maintenance: loadMaintenanceWindows,
+                settings: loadConfig,
+                logs: loadLogs
+            };
+            const fn = map[activeId];
+            if (fn) fn();
+            document.getElementById('lastSync').textContent = 'Last sync: ' + new Date().toLocaleString();
         });
 
         function restorePersistedState() {
@@ -4444,7 +4996,10 @@
             const endDate = new Date(endTime);
             if (endDate <= startDate) { showError('End time must be after start time'); return; }
             
-            if (!confirm(`Schedule maintenance "${title}"?\n\nStart: ${startDate.toLocaleString()}\nEnd: ${endDate.toLocaleString()}\n\n${sendAnnouncement ? 'An announcement email will be sent to ALL users immediately.' : 'No announcement email will be sent.'}`)) {
+            if (!(await showConfirm(
+                `Start: ${startDate.toLocaleString()}\nEnd: ${endDate.toLocaleString()}\n\n${sendAnnouncement ? 'An announcement email will be sent to ALL users immediately.' : 'No announcement email will be sent.'}`,
+                { title: `Schedule maintenance "${title}"?`, okText: 'Schedule' }
+            ))) {
                 return;
             }
             
@@ -4490,7 +5045,7 @@
         }
 
         async function completeMaintenance(id) {
-            if (!confirm('Mark this maintenance as complete?\n\nA "We\'re Back!" email will be sent to all users.')) return;
+            if (!(await showConfirm("A \"We're Back!\" email will be sent to all users.", { title: 'Complete maintenance?', okText: 'Mark complete' }))) return;
             
             try {
                 const response = await fetch(`/admin/maintenance/${id}/complete`, { method: 'POST' });
@@ -4509,7 +5064,7 @@
         }
 
         async function cancelMaintenance(id) {
-            if (!confirm('Cancel this maintenance window?\n\nA cancellation email will be sent to all users if an announcement was already sent.')) return;
+            if (!(await showConfirm('A cancellation email will be sent to all users if an announcement was already sent.', { title: 'Cancel maintenance window?', okText: 'Cancel maintenance', cancelText: 'Keep', danger: true }))) return;
             
             try {
                 const response = await fetch(`/admin/maintenance/${id}/cancel`, { 
@@ -4528,7 +5083,7 @@
         }
 
         async function deleteMaintenanceWindow(id) {
-            if (!confirm('Delete this maintenance window?\n\nNo email will be sent. This cannot be undone.')) return;
+            if (!(await showConfirm('No email will be sent. This cannot be undone.', { title: 'Delete maintenance window?', okText: 'Delete', danger: true }))) return;
             
             try {
                 const response = await fetch(`/admin/maintenance/${id}`, { method: 'DELETE' });
@@ -4543,7 +5098,7 @@
         }
 
         async function sendMaintenanceReminder(id) {
-            if (!confirm('Send a reminder email to all users now?')) return;
+            if (!(await showConfirm('Send a reminder email to all users now?', { title: 'Send reminder?', okText: 'Send' }))) return;
             
             try {
                 const response = await fetch(`/admin/maintenance/${id}/send-reminder`, { method: 'POST' });
@@ -4784,6 +5339,10 @@
         });
     }
     </script>
+
+    <div id="shortcutHint" onclick="showShortcutHelp()" title="Keyboard shortcuts">
+        Press <kbd>?</kbd> for shortcuts
+    </div>
 
     <footer style="text-align: center; padding: 20px 15px; margin-top: 40px; border-top: 1px solid rgba(255,255,255,0.06); color: #555; font-size: 12px;">
         <span>© 2026 BingeAlert <span id="footer-version"></span></span>
