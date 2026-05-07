@@ -1,15 +1,40 @@
 import aiosmtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from jinja2 import Template
+from jinja2 import Environment, select_autoescape
 import logging
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 
 from app.config import settings
 from app.database import Notification
 
 logger = logging.getLogger(__name__)
+
+
+# All notification templates render through this single Environment so HTML
+# autoescape applies uniformly. Variables like series_title, episode title,
+# issue_message, and the maintenance description are user-supplied (or
+# upstream-supplied) strings; without autoescape, anything containing < > "
+# was injected verbatim into the resulting email -- stored XSS for any HTML
+# email client that renders scripts.
+_template_env = Environment(autoescape=select_autoescape(["html", "xml"]))
+
+
+def _safe_url(url: Optional[str]) -> Optional[str]:
+    """Return url only if it's a sane http(s) link. Used for poster URLs to
+    prevent javascript:/data: schemes slipping into <img src="...">."""
+    if not url:
+        return None
+    u = url.strip()
+    return u if u.startswith(("http://", "https://")) else None
+
+
+def Template(source):  # noqa: N802 -- preserve the existing call sites
+    # Drop-in shim: previous code did `from jinja2 import Template; Template(...)`.
+    # Routing through the autoescape-enabled Environment without rewriting every
+    # call site. Same callable shape, escapes by default.
+    return _template_env.from_string(source)
 
 
 class EmailService:
@@ -110,7 +135,7 @@ class EmailService:
         </html>
         """)
         
-        return template.render(series_title=series_title, episodes=episodes, poster_url=poster_url)
+        return template.render(series_title=series_title, episodes=episodes, poster_url=_safe_url(poster_url))
     
     def render_movie_notification(self, movie_title: str, year: int = None, poster_url: str = None) -> str:
         """Render HTML email for new movie notification"""
@@ -152,7 +177,7 @@ class EmailService:
         </html>
         """)
         
-        return template.render(movie_title=movie_title, year=year, poster_url=poster_url)
+        return template.render(movie_title=movie_title, year=year, poster_url=_safe_url(poster_url))
     
     async def process_pending_notifications(self, db):
         """Process all pending notifications with smart batching (respects send_after delay)"""
@@ -458,7 +483,7 @@ class EmailService:
             media_label=media_label,
             media_icon=media_icon,
             premiere_date=premiere_date,
-            poster_url=poster_url
+            poster_url=_safe_url(poster_url)
         )
     
     def render_quality_waiting_notification(self, title: str, media_type: str, quality_profile: str, poster_url: str = None) -> str:
@@ -540,7 +565,7 @@ class EmailService:
             media_label=media_label,
             media_icon=media_icon,
             quality_profile=quality_profile,
-            poster_url=poster_url
+            poster_url=_safe_url(poster_url)
         )
     
     def render_issue_resolved_notification(self, title: str, media_type: str, issue_type: str = None, poster_url: str = None) -> str:
@@ -623,7 +648,7 @@ class EmailService:
             media_label=media_label,
             media_icon=media_icon,
             issue_label=issue_label,
-            poster_url=poster_url
+            poster_url=_safe_url(poster_url)
         )
     
     def render_issue_reported_admin_notification(self, title: str, media_type: str, issue_type: str,
