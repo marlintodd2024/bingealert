@@ -323,7 +323,8 @@
             background: rgba(255, 255, 255, 0.05);
             backdrop-filter: blur(10px);
             border-radius: 12px;
-            overflow: hidden;
+            overflow: auto;
+            max-height: 70vh;
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
@@ -333,7 +334,7 @@
         }
 
         th {
-            background: rgba(229, 160, 13, 0.1);
+            background: #1f2540;
             padding: 15px;
             text-align: left;
             font-weight: 600;
@@ -341,11 +342,13 @@
             border-bottom: 2px solid rgba(229, 160, 13, 0.3);
             cursor: pointer;
             user-select: none;
-            position: relative;
+            position: sticky;
+            top: 0;
+            z-index: 5;
         }
 
         th:hover {
-            background: rgba(229, 160, 13, 0.15);
+            background: #2a2f55;
         }
 
         th.sortable::after {
@@ -413,6 +416,109 @@
         .badge.tv {
             background: rgba(33, 150, 243, 0.2);
             color: #2196f3;
+        }
+
+        .tab-count {
+            display: inline-block;
+            margin-left: 6px;
+            padding: 1px 8px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #999;
+            min-width: 18px;
+            text-align: center;
+        }
+
+        .tab.active .tab-count {
+            background: rgba(229, 160, 13, 0.18);
+            color: #e5a00d;
+        }
+
+        .status-pill {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            line-height: 1.4;
+        }
+        .status-pill::before {
+            content: '';
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            margin-right: 6px;
+            vertical-align: middle;
+            background: currentColor;
+        }
+        .status-pill.pending {
+            background: rgba(229, 160, 13, 0.18);
+            color: #e5a00d;
+            border: 1px solid rgba(229, 160, 13, 0.35);
+        }
+        .status-pill.sent {
+            background: rgba(76, 175, 80, 0.18);
+            color: #4caf50;
+            border: 1px solid rgba(76, 175, 80, 0.35);
+        }
+        .status-pill.failed {
+            background: rgba(244, 67, 54, 0.18);
+            color: #f44336;
+            border: 1px solid rgba(244, 67, 54, 0.35);
+        }
+
+        .pagination-bar {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-top: 12px;
+            padding: 10px 14px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 8px;
+            color: #aaa;
+            font-size: 13px;
+        }
+        .pagination-bar .page-info {
+            color: #999;
+            font-variant-numeric: tabular-nums;
+        }
+        .pagination-bar button {
+            padding: 6px 14px;
+            background: rgba(229, 160, 13, 0.15);
+            color: #e5a00d;
+            border: 1px solid rgba(229, 160, 13, 0.35);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            transition: background 0.15s;
+        }
+        .pagination-bar button:hover:not(:disabled) {
+            background: rgba(229, 160, 13, 0.25);
+        }
+        .pagination-bar button:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
+
+        .empty-hint {
+            text-align: center;
+            padding: 50px 20px;
+            color: #999;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .empty-hint .empty-icon {
+            font-size: 32px;
+            margin-bottom: 10px;
+            opacity: 0.6;
         }
 
         .loading {
@@ -1133,11 +1239,11 @@
         </div>
 
         <div class="tabs">
-            <div class="tab active" onclick="switchTab('users', event)">👥 Users</div>
-            <div class="tab" onclick="switchTab('requests', event)">📋 Requests</div>
-            <div class="tab" onclick="switchTab('notifications', event)">📧 Notifications</div>
-            <div class="tab" onclick="switchTab('issues', event)">🚨 Issues</div>
-            <div class="tab" onclick="switchTab('upcoming', event)">📅 Upcoming Episodes</div>
+            <div class="tab active" onclick="switchTab('users', event)">👥 Users<span class="tab-count" id="tabCount-users" style="display:none;">0</span></div>
+            <div class="tab" onclick="switchTab('requests', event)">📋 Requests<span class="tab-count" id="tabCount-requests" style="display:none;">0</span></div>
+            <div class="tab" onclick="switchTab('notifications', event)">📧 Notifications<span class="tab-count" id="tabCount-notifications" style="display:none;">0</span></div>
+            <div class="tab" onclick="switchTab('issues', event)">🚨 Issues<span class="tab-count" id="tabCount-issues" style="display:none;">0</span></div>
+            <div class="tab" onclick="switchTab('upcoming', event)">📅 Upcoming Episodes<span class="tab-count" id="tabCount-upcoming" style="display:none;">0</span></div>
             <div class="tab" onclick="switchTab('backup', event)">💾 Backup</div>
             <div class="tab" onclick="switchTab('maintenance', event)">🔧 Maintenance</div>
             <div class="tab" onclick="switchTab('settings', event)">⚙️ Settings</div>
@@ -1193,6 +1299,11 @@
                     </tbody>
                 </table>
             </div>
+            <div class="pagination-bar" id="requestsPagination" style="display:none;">
+                <span class="page-info" id="requestsPageInfo">Page 1 of 1</span>
+                <button type="button" onclick="changePage('requests', -1)" id="requestsPrevBtn">← Prev</button>
+                <button type="button" onclick="changePage('requests', 1)" id="requestsNextBtn">Next →</button>
+            </div>
         </div>
 
         <div id="notificationsTab" class="tab-content">
@@ -1220,6 +1331,11 @@
                         <tr><td colspan="7" class="loading"><div class="spinner"></div>Loading notifications...</td></tr>
                     </tbody>
                 </table>
+            </div>
+            <div class="pagination-bar" id="notificationsPagination" style="display:none;">
+                <span class="page-info" id="notificationsPageInfo">Page 1 of 1</span>
+                <button type="button" onclick="changePage('notifications', -1)" id="notificationsPrevBtn">← Prev</button>
+                <button type="button" onclick="changePage('notifications', 1)" id="notificationsNextBtn">Next →</button>
             </div>
         </div>
 
@@ -2096,6 +2212,121 @@
             upcoming: { column: 'air_date', direction: 'asc' }  // Upcoming should be chronological (soonest first)
         };
 
+        // Pagination state (Notifications + Requests)
+        const PAGE_SIZE = 50;
+        let pageState = {
+            requests: { page: 1 },
+            notifications: { page: 1 }
+        };
+
+        // ----- sessionStorage persistence helpers -----
+        const SS_PREFIX = 'ba.adminTable.';
+        function ssLoad(key, fallback) {
+            try {
+                const raw = sessionStorage.getItem(SS_PREFIX + key);
+                if (raw == null) return fallback;
+                return JSON.parse(raw);
+            } catch (e) { return fallback; }
+        }
+        function ssSave(key, val) {
+            try { sessionStorage.setItem(SS_PREFIX + key, JSON.stringify(val)); } catch (e) {}
+        }
+        function persistSort(tab) { ssSave('sort.' + tab, sortState[tab]); }
+        function persistFilter(tab, payload) { ssSave('filter.' + tab, payload); }
+        function loadPersistedSort() {
+            ['users','requests','notifications','upcoming'].forEach(tab => {
+                const saved = ssLoad('sort.' + tab, null);
+                if (saved && saved.column) sortState[tab] = saved;
+            });
+        }
+
+        function applyHeaderSortIndicators(tab) {
+            const tabEl = document.getElementById(tab + 'Tab');
+            if (!tabEl) return;
+            tabEl.querySelectorAll('th').forEach(th => th.classList.remove('sort-asc', 'sort-desc'));
+            const st = sortState[tab];
+            if (!st || !st.column) return;
+            // Match exact "sortTable('<tab>', '<col>')" to disambiguate columns
+            // whose names overlap (e.g. 'sent' vs 'sent_at').
+            const needle = `sortTable('${tab}', '${st.column}')`;
+            const target = [...tabEl.querySelectorAll('th[onclick]')].find(th =>
+                (th.getAttribute('onclick') || '').includes(needle)
+            );
+            if (target) target.classList.add(st.direction === 'asc' ? 'sort-asc' : 'sort-desc');
+        }
+
+        function sortDataset(data, tab) {
+            const st = sortState[tab];
+            if (!st || !st.column) return data;
+            const column = st.column;
+            const direction = st.direction;
+            return data.slice().sort((a, b) => {
+                let aVal = a[column];
+                let bVal = b[column];
+                if (column.includes('_at') || column === 'air_date') {
+                    aVal = new Date(aVal || 0);
+                    bVal = new Date(bVal || 0);
+                }
+                if (typeof aVal === 'number' && typeof bVal === 'number') {
+                    return direction === 'asc' ? aVal - bVal : bVal - aVal;
+                }
+                aVal = String(aVal == null ? '' : aVal).toLowerCase();
+                bVal = String(bVal == null ? '' : bVal).toLowerCase();
+                if (direction === 'asc') return aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+                return bVal < aVal ? -1 : bVal > aVal ? 1 : 0;
+            });
+        }
+
+        function updateTabCount(tab, count) {
+            const el = document.getElementById('tabCount-' + tab);
+            if (!el) return;
+            el.textContent = (count || 0).toLocaleString();
+            el.style.display = 'inline-block';
+        }
+
+        function paginate(tab, items) {
+            const total = items.length;
+            const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+            if (pageState[tab].page > totalPages) pageState[tab].page = totalPages;
+            if (pageState[tab].page < 1) pageState[tab].page = 1;
+            const start = (pageState[tab].page - 1) * PAGE_SIZE;
+            const slice = items.slice(start, start + PAGE_SIZE);
+            renderPaginationBar(tab, total, totalPages);
+            return slice;
+        }
+
+        function renderPaginationBar(tab, total, totalPages) {
+            const bar = document.getElementById(tab + 'Pagination');
+            const info = document.getElementById(tab + 'PageInfo');
+            const prev = document.getElementById(tab + 'PrevBtn');
+            const next = document.getElementById(tab + 'NextBtn');
+            if (!bar || !info || !prev || !next) return;
+            if (total <= PAGE_SIZE) {
+                bar.style.display = 'none';
+                return;
+            }
+            bar.style.display = 'flex';
+            const start = (pageState[tab].page - 1) * PAGE_SIZE + 1;
+            const end = Math.min(total, pageState[tab].page * PAGE_SIZE);
+            info.textContent = `Showing ${start.toLocaleString()}–${end.toLocaleString()} of ${total.toLocaleString()} • Page ${pageState[tab].page} of ${totalPages}`;
+            prev.disabled = pageState[tab].page <= 1;
+            next.disabled = pageState[tab].page >= totalPages;
+        }
+
+        function changePage(tab, delta) {
+            pageState[tab].page = (pageState[tab].page || 1) + delta;
+            if (tab === 'requests') applyRequestFilters();
+            else if (tab === 'notifications') applyNotificationFilters();
+        }
+
+        function resetPage(tab) {
+            if (pageState[tab]) pageState[tab].page = 1;
+        }
+
+        function emptyHintRow(colspan, icon, message) {
+            return `<tr><td colspan="${colspan}"><div class="empty-hint"><div class="empty-icon">${icon}</div><div>${message}</div></div></td></tr>`;
+        }
+
         // API Base URL
         const API_BASE = '';
         
@@ -2146,9 +2377,9 @@
                 const response = await fetch(`${API_BASE}/admin/users?limit=1000`);
                 const data = await response.json();
                 allUsers = data.users || [];
-                // Sort by default
-                allUsers.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-                renderUsers(allUsers);
+                updateTabCount('users', allUsers.length);
+                applyHeaderSortIndicators('users');
+                filterUsers();
             } catch (error) {
                 console.error('Failed to load users:', error);
                 document.getElementById('usersTableBody').innerHTML = '<tr><td colspan="6" class="empty-state">Failed to load users</td></tr>';
@@ -2181,9 +2412,9 @@
                 const response = await fetch(`${API_BASE}/admin/requests?limit=1000`);
                 const data = await response.json();
                 allRequests = data.requests || [];
-                // Sort by default
-                allRequests.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-                renderRequests(allRequests);
+                updateTabCount('requests', allRequests.length);
+                applyHeaderSortIndicators('requests');
+                applyRequestFilters();
             } catch (error) {
                 console.error('Failed to load requests:', error);
                 document.getElementById('requestsTableBody').innerHTML = '<tr><td colspan="7" class="empty-state">Failed to load requests</td></tr>';
@@ -2195,9 +2426,9 @@
                 const response = await fetch(`${API_BASE}/admin/notifications?limit=1000`);
                 const data = await response.json();
                 allNotifications = data.notifications || [];
-                // Sort by default - newest first
-                allNotifications.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-                renderNotifications(allNotifications);
+                updateTabCount('notifications', allNotifications.length);
+                applyHeaderSortIndicators('notifications');
+                applyNotificationFilters();
             } catch (error) {
                 console.error('Failed to load notifications:', error);
                 document.getElementById('notificationsTableBody').innerHTML = '<tr><td colspan="8" class="empty-state">Failed to load notifications</td></tr>';
@@ -2210,18 +2441,20 @@
                 const response = await fetch(`${API_BASE}/admin/upcoming-episodes?days=${days}`);
                 const data = await response.json();
                 allUpcoming = data.upcoming || [];
-                // Sort by air date - soonest first
-                allUpcoming.sort((a, b) => new Date(a.air_date) - new Date(b.air_date));
-                
-                
+                updateTabCount('upcoming', allUpcoming.length);
+                applyHeaderSortIndicators('upcoming');
+
                 // Populate user filter
                 const userFilter = document.getElementById('upcomingUserFilter');
                 const uniqueUsers = [...new Set(allUpcoming.map(ep => ep.user_name).filter(Boolean))].sort();
-                const currentSelection = userFilter.value;
-                userFilter.innerHTML = '<option value="all">All Users</option>' + 
+                const persisted = ssLoad('filter.upcoming', null);
+                const currentSelection = (persisted && persisted.userFilter) || userFilter.value;
+                userFilter.innerHTML = '<option value="all">All Users</option>' +
                     uniqueUsers.map(user => `<option value="${user}">${user}</option>`).join('');
-                userFilter.value = currentSelection;
-                
+                if ([...userFilter.options].some(o => o.value === currentSelection)) {
+                    userFilter.value = currentSelection;
+                }
+
                 // Apply filter
                 filterUpcoming();
             } catch (error) {
@@ -2232,11 +2465,12 @@
 
         function renderUsers(users) {
             const tbody = document.getElementById('usersTableBody');
+            users = sortDataset(users, 'users');
             if (users.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><div>No users found</div></td></tr>';
+                tbody.innerHTML = emptyHintRow(6, '👥', 'No users yet — sync from Jellyseerr to populate this list.');
                 return;
             }
-            
+
             tbody.innerHTML = users.map(user => `
                 <tr style="${user.is_active === false ? 'opacity: 0.55;' : ''}">
                     <td>${user.id}</td>
@@ -2258,12 +2492,15 @@
 
         function renderRequests(requests) {
             const tbody = document.getElementById('requestsTableBody');
-            if (requests.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="empty-state"><div>No requests found</div></td></tr>';
+            const sorted = sortDataset(requests, 'requests');
+            if (sorted.length === 0) {
+                document.getElementById('requestsPagination').style.display = 'none';
+                tbody.innerHTML = emptyHintRow(7, '📋', 'No requests match your filters yet.');
                 return;
             }
-            
-            tbody.innerHTML = requests.map(req => `
+            const pageItems = paginate('requests', sorted);
+
+            tbody.innerHTML = pageItems.map(req => `
                 <tr>
                     <td>${req.id}</td>
                     <td>${req.user_email}</td>
@@ -2279,14 +2516,30 @@
             `).join('');
         }
 
+        function notificationStatus(notif) {
+            if (notif.sent) return 'sent';
+            // Heuristic: a pending notification whose send_after is more than 24h in the past
+            // is treated as failed (worker should have processed it by now).
+            if (notif.send_after) {
+                const sendAfterMs = new Date(notif.send_after).getTime();
+                if (!Number.isNaN(sendAfterMs) && (Date.now() - sendAfterMs) > 24 * 60 * 60 * 1000) {
+                    return 'failed';
+                }
+            }
+            return 'pending';
+        }
+
         function renderNotifications(notifications) {
             const tbody = document.getElementById('notificationsTableBody');
-            if (notifications.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" class="empty-state"><div>No notifications found</div></td></tr>';
+            const sorted = sortDataset(notifications, 'notifications');
+            if (sorted.length === 0) {
+                document.getElementById('notificationsPagination').style.display = 'none';
+                tbody.innerHTML = emptyHintRow(8, '📧', 'No notifications yet — they will appear here once webhooks arrive.');
                 return;
             }
-            
-            tbody.innerHTML = notifications.map(notif => {
+            const pageItems = paginate('notifications', sorted);
+
+            tbody.innerHTML = pageItems.map(notif => {
                 // For pending notifications, show when they'll be sent
                 let sentAtDisplay = '-';
                 if (notif.sent && notif.sent_at) {
@@ -2295,14 +2548,17 @@
                     const sendTime = new Date(notif.send_after);
                     sentAtDisplay = `<span style="color: #e5a00d;">⏰ ${sendTime.toLocaleString()}</span>`;
                 }
-                
+
+                const status = notificationStatus(notif);
+                const statusLabels = { pending: 'Pending', sent: 'Sent', failed: 'Failed' };
+
                 return `
                 <tr>
                     <td>${notif.id}</td>
                     <td>${notif.user_email}</td>
                     <td>${notif.type}</td>
                     <td>${notif.subject}</td>
-                    <td><span class="badge ${notif.sent ? 'sent' : 'pending-email'}">${notif.sent ? 'Sent' : 'Pending'}</span></td>
+                    <td><span class="status-pill ${status}">${statusLabels[status]}</span></td>
                     <td>${new Date(notif.created_at).toLocaleString()}</td>
                     <td>${sentAtDisplay}</td>
                     <td>
@@ -2334,9 +2590,10 @@
 
         function renderUpcomingGrouped(upcoming) {
             const container = document.getElementById('upcomingGroupedContent');
-            
+
             if (upcoming.length === 0) {
-                container.innerHTML = '<div style="text-align: center; padding: 40px; color: #666;"><div>No upcoming episodes found for requested shows</div></div>';
+                const days = document.getElementById('upcomingDays')?.value || 30;
+                container.innerHTML = `<div class="empty-hint"><div class="empty-icon">📅</div><div>No upcoming episodes in the next ${days} days.</div></div>`;
                 return;
             }
             
@@ -2446,11 +2703,13 @@
 
         function renderUpcoming(upcoming) {
             const tbody = document.getElementById('upcomingTableBody');
+            upcoming = sortDataset(upcoming, 'upcoming');
             if (upcoming.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" class="empty-state"><div>No upcoming episodes found for requested shows</div></td></tr>';
+                const days = document.getElementById('upcomingDays')?.value || 30;
+                tbody.innerHTML = emptyHintRow(8, '📅', `No upcoming episodes in the next ${days} days.`);
                 return;
             }
-            
+
             tbody.innerHTML = upcoming.map(ep => {
                 const airDate = new Date(ep.air_date);
                 const isToday = airDate.toDateString() === new Date().toDateString();
@@ -2478,33 +2737,37 @@
 
         function filterUsers() {
             const search = document.getElementById('userSearch').value.toLowerCase();
-            const filtered = allUsers.filter(u => 
-                u.username.toLowerCase().includes(search) || 
+            persistFilter('users', { search });
+            const filtered = allUsers.filter(u =>
+                u.username.toLowerCase().includes(search) ||
                 u.email.toLowerCase().includes(search)
             );
             renderUsers(filtered);
         }
 
         function filterRequests() {
+            resetPage('requests');
             applyRequestFilters();
         }
 
         function filterNotifications() {
+            resetPage('notifications');
             applyNotificationFilters();
         }
 
         function filterUpcoming() {
             const search = document.getElementById('upcomingSearch').value.toLowerCase();
             const userFilter = document.getElementById('upcomingUserFilter').value;
-            
+            persistFilter('upcoming', { search, userFilter });
+
             let filtered = allUpcoming.filter(ep => {
-                const matchesSearch = ep.series_title.toLowerCase().includes(search) || 
+                const matchesSearch = ep.series_title.toLowerCase().includes(search) ||
                                      (ep.episode_title && ep.episode_title.toLowerCase().includes(search)) ||
                                      (ep.user_email && ep.user_email.toLowerCase().includes(search));
                 const matchesUser = userFilter === 'all' || ep.user_name === userFilter;
                 return matchesSearch && matchesUser;
             });
-            
+
             // Render based on current view mode
             if (upcomingViewMode === 'grouped') {
                 renderUpcomingGrouped(filtered);
@@ -2519,65 +2782,71 @@
 
         function filterRequestsByType(type) {
             currentRequestFilter = type;
-            
+
             // Update button styles
             document.getElementById('requestFilterAll').style.background = type === 'all' ? '#e5a00d' : 'transparent';
             document.getElementById('requestFilterTV').style.background = type === 'tv' ? '#e5a00d' : 'transparent';
             document.getElementById('requestFilterMovie').style.background = type === 'movie' ? '#e5a00d' : 'transparent';
-            
+
+            // Reset pagination on filter change
+            resetPage('requests');
             // Apply both search and type filters
             applyRequestFilters();
         }
 
         function filterNotificationsByType(type) {
             currentNotificationFilter = type;
-            
+
             // Update button styles
             document.getElementById('notificationFilterAll').style.background = type === 'all' ? '#e5a00d' : 'transparent';
             document.getElementById('notificationFilterTV').style.background = type === 'episode' ? '#e5a00d' : 'transparent';
             document.getElementById('notificationFilterMovie').style.background = type === 'movie' ? '#e5a00d' : 'transparent';
-            
+
+            // Reset pagination on filter change
+            resetPage('notifications');
             // Apply both search and type filters
             applyNotificationFilters();
         }
 
         function applyRequestFilters() {
             const search = document.getElementById('requestSearch').value.toLowerCase();
+            persistFilter('requests', { search, typeFilter: currentRequestFilter });
             let filtered = allRequests;
-            
+
             // Apply type filter
             if (currentRequestFilter !== 'all') {
                 filtered = filtered.filter(r => r.media_type === currentRequestFilter);
             }
-            
+
             // Apply search filter
             if (search) {
-                filtered = filtered.filter(r => 
-                    r.title.toLowerCase().includes(search) || 
+                filtered = filtered.filter(r =>
+                    r.title.toLowerCase().includes(search) ||
                     r.user_email.toLowerCase().includes(search)
                 );
             }
-            
+
             renderRequests(filtered);
         }
 
         function applyNotificationFilters() {
             const search = document.getElementById('notificationSearch').value.toLowerCase();
+            persistFilter('notifications', { search, typeFilter: currentNotificationFilter });
             let filtered = allNotifications;
-            
+
             // Apply type filter
             if (currentNotificationFilter !== 'all') {
                 filtered = filtered.filter(n => n.type === currentNotificationFilter);
             }
-            
+
             // Apply search filter
             if (search) {
-                filtered = filtered.filter(n => 
-                    n.subject.toLowerCase().includes(search) || 
+                filtered = filtered.filter(n =>
+                    n.subject.toLowerCase().includes(search) ||
                     n.user_email.toLowerCase().includes(search)
                 );
             }
-            
+
             renderNotifications(filtered);
         }
 
@@ -2587,19 +2856,20 @@
             try {
                 const response = await fetch(`${API_BASE}/admin/issues`);
                 allIssues = await response.json();
-                renderIssues(allIssues);
+                updateTabCount('issues', Array.isArray(allIssues) ? allIssues.length : 0);
+                filterIssues();
             } catch (error) {
                 console.error('Failed to load issues:', error);
-                document.getElementById('issuesTableBody').innerHTML = 
+                document.getElementById('issuesTableBody').innerHTML =
                     '<tr><td colspan="8" style="color: #f44336;">Failed to load issues</td></tr>';
             }
         }
         
         function renderIssues(issues) {
             const tbody = document.getElementById('issuesTableBody');
-            
+
             if (!issues || issues.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" style="color: #666; text-align: center; padding: 40px;">No issues reported yet. Issues reported in Seerr will appear here.</td></tr>';
+                tbody.innerHTML = emptyHintRow(8, '🎉', 'No reported issues — your library is in good shape.');
                 return;
             }
             
@@ -2663,7 +2933,8 @@
         function filterIssues() {
             const search = document.getElementById('issueSearch').value.toLowerCase();
             const statusFilter = document.getElementById('issueStatusFilter').value;
-            
+            persistFilter('issues', { search, statusFilter });
+
             const filtered = allIssues.filter(issue => {
                 const matchesSearch = !search || 
                     issue.title.toLowerCase().includes(search) || 
@@ -3158,7 +3429,7 @@
 
         function sortTable(tableName, column) {
             const state = sortState[tableName];
-            
+
             // Toggle direction if same column, otherwise default to asc
             if (state.column === column) {
                 state.direction = state.direction === 'asc' ? 'desc' : 'asc';
@@ -3166,51 +3437,19 @@
                 state.column = column;
                 state.direction = 'asc';
             }
-            
-            // Update header classes
-            document.querySelectorAll(`#${tableName}Tab th`).forEach(th => {
-                th.classList.remove('sort-asc', 'sort-desc');
-            });
-            event.target.classList.add(state.direction === 'asc' ? 'sort-asc' : 'sort-desc');
-            
-            // Sort the data
-            let data;
-            if (tableName === 'users') data = allUsers;
-            else if (tableName === 'requests') data = allRequests;
-            else if (tableName === 'notifications') data = allNotifications;
-            else if (tableName === 'upcoming') data = allUpcoming;
-            
-            data.sort((a, b) => {
-                let aVal = a[column];
-                let bVal = b[column];
-                
-                // Handle dates
-                if (column.includes('_at') || column === 'air_date') {
-                    aVal = new Date(aVal || 0);
-                    bVal = new Date(bVal || 0);
-                }
-                
-                // Handle numbers
-                if (typeof aVal === 'number' && typeof bVal === 'number') {
-                    return state.direction === 'asc' ? aVal - bVal : bVal - aVal;
-                }
-                
-                // Handle strings
-                aVal = String(aVal || '').toLowerCase();
-                bVal = String(bVal || '').toLowerCase();
-                
-                if (state.direction === 'asc') {
-                    return aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
-                } else {
-                    return bVal < aVal ? -1 : bVal > aVal ? 1 : 0;
-                }
-            });
-            
-            // Re-render
-            if (tableName === 'users') renderUsers(data);
-            else if (tableName === 'requests') renderRequests(data);
-            else if (tableName === 'notifications') renderNotifications(data);
-            else if (tableName === 'upcoming') renderUpcoming(data);
+
+            persistSort(tableName);
+            applyHeaderSortIndicators(tableName);
+
+            // Reset pagination on sort change for paginated tables
+            resetPage(tableName);
+
+            // Re-render via the active filter pipeline so sort + filter + pagination
+            // stay consistent.
+            if (tableName === 'users') filterUsers();
+            else if (tableName === 'requests') applyRequestFilters();
+            else if (tableName === 'notifications') applyNotificationFilters();
+            else if (tableName === 'upcoming') filterUpcoming();
         }
 
         function showSentNotifications() {
@@ -3926,8 +4165,70 @@
 
         // Initialize when page loads
         window.addEventListener("load", function() {
+            restorePersistedState();
             refreshData();
+            // Issues lazy-load on tab switch, but restore filter UI eagerly so
+            // the controls reflect the saved state if the user opens the tab.
         });
+
+        function restorePersistedState() {
+            // Sort
+            loadPersistedSort();
+
+            // Per-tab filters
+            const usersF = ssLoad('filter.users', null);
+            if (usersF && document.getElementById('userSearch')) {
+                document.getElementById('userSearch').value = usersF.search || '';
+            }
+
+            const reqF = ssLoad('filter.requests', null);
+            if (reqF) {
+                if (document.getElementById('requestSearch')) {
+                    document.getElementById('requestSearch').value = reqF.search || '';
+                }
+                if (reqF.typeFilter) {
+                    currentRequestFilter = reqF.typeFilter;
+                    const all = document.getElementById('requestFilterAll');
+                    const tv = document.getElementById('requestFilterTV');
+                    const mv = document.getElementById('requestFilterMovie');
+                    if (all) all.style.background = currentRequestFilter === 'all' ? '#e5a00d' : 'transparent';
+                    if (tv) tv.style.background = currentRequestFilter === 'tv' ? '#e5a00d' : 'transparent';
+                    if (mv) mv.style.background = currentRequestFilter === 'movie' ? '#e5a00d' : 'transparent';
+                }
+            }
+
+            const notifF = ssLoad('filter.notifications', null);
+            if (notifF) {
+                if (document.getElementById('notificationSearch')) {
+                    document.getElementById('notificationSearch').value = notifF.search || '';
+                }
+                if (notifF.typeFilter) {
+                    currentNotificationFilter = notifF.typeFilter;
+                    const all = document.getElementById('notificationFilterAll');
+                    const tv = document.getElementById('notificationFilterTV');
+                    const mv = document.getElementById('notificationFilterMovie');
+                    if (all) all.style.background = currentNotificationFilter === 'all' ? '#e5a00d' : 'transparent';
+                    if (tv) tv.style.background = currentNotificationFilter === 'episode' ? '#e5a00d' : 'transparent';
+                    if (mv) mv.style.background = currentNotificationFilter === 'movie' ? '#e5a00d' : 'transparent';
+                }
+            }
+
+            const upF = ssLoad('filter.upcoming', null);
+            if (upF && document.getElementById('upcomingSearch')) {
+                document.getElementById('upcomingSearch').value = upF.search || '';
+                // userFilter restored after loadUpcoming() repopulates the select
+            }
+
+            const issF = ssLoad('filter.issues', null);
+            if (issF) {
+                if (document.getElementById('issueSearch')) {
+                    document.getElementById('issueSearch').value = issF.search || '';
+                }
+                if (document.getElementById('issueStatusFilter') && issF.statusFilter) {
+                    document.getElementById('issueStatusFilter').value = issF.statusFilter;
+                }
+            }
+        }
 
         // Add User to Request Modal Functions - REMOVED (use 👥 Users button instead)
         let currentRequestId = null;
