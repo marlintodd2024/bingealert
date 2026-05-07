@@ -1,3 +1,11 @@
+// PWA service worker. Scope is "/" (mounted at /service-worker.js).
+//
+// Aikido flagged the previous version for SSRF: the fetch handler called
+// fetch(event.request) without validating the URL, so a script on the page
+// could trick the worker into forwarding to an attacker-controlled origin.
+// buildValidatedUrl() locks fetches to http/https + same hostname and
+// rejects path-traversal sequences before they reach fetch().
+
 const CACHE_NAME = 'bingealert-v1';
 const STATIC_ASSETS = [
   '/',
@@ -6,6 +14,31 @@ const STATIC_ASSETS = [
   '/static/icons/icon-192.png',
   '/static/icons/icon-512.png'
 ];
+
+function buildValidatedUrl(requestUrl) {
+  try {
+    // Reject obvious path-traversal patterns (literal and URL-encoded).
+    if (requestUrl.includes('/../') || /\/%2e%2e\//i.test(requestUrl)) {
+      throw new Error('Invalid path');
+    }
+
+    const url = new URL(requestUrl);
+
+    // Only http(s) -- blocks javascript:, data:, blob:, file:, ws:.
+    if (!['http:', 'https:'].includes(url.protocol)) {
+      throw new Error('Invalid protocol');
+    }
+
+    // Same origin only -- the worker must never proxy to another host.
+    if (url.hostname !== self.location.hostname) {
+      throw new Error('Invalid host');
+    }
+
+    return url.href;
+  } catch {
+    throw new Error('Invalid URL');
+  }
+}
 
 // Install - cache static assets
 self.addEventListener('install', event => {
@@ -32,7 +65,7 @@ self.addEventListener('activate', event => {
 // Fetch - network first, fallback to cache (dashboard needs fresh data)
 self.addEventListener('fetch', event => {
   // Skip non-GET and API/webhook requests
-  if (event.request.method !== 'GET' || 
+  if (event.request.method !== 'GET' ||
       event.request.url.includes('/api/') ||
       event.request.url.includes('/webhooks/') ||
       event.request.url.includes('/admin/') ||
@@ -41,17 +74,20 @@ self.addEventListener('fetch', event => {
   }
 
   event.respondWith(
-    fetch(event.request)
-      .then(response => {
+    (async () => {
+      try {
+        const validatedUrl = buildValidatedUrl(event.request.url);
+        const response = await fetch(validatedUrl);
+
         // Cache successful responses for static assets
         if (response.ok && STATIC_ASSETS.some(a => event.request.url.endsWith(a))) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
         }
         return response;
-      })
-      .catch(() => {
+      } catch {
         return caches.match(event.request);
-      })
+      }
+    })()
   );
 });
