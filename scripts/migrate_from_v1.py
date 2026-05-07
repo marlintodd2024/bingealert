@@ -160,6 +160,9 @@ def copy_table(src: Engine, dst: Engine, table_name: str, batch_size: int) -> tu
     return (src_count, inserted)
 
 
+_ALLOWED_TABLES = frozenset(TABLE_ORDER)
+
+
 def reset_sqlite_sequences(dst: Engine, tables: list[str]) -> None:
     """SQLite uses sqlite_sequence to remember the last autoincrement value.
 
@@ -169,30 +172,39 @@ def reset_sqlite_sequences(dst: Engine, tables: list[str]) -> None:
     # sqlite_sequence is only auto-created when a table uses AUTOINCREMENT.
     # Our schema uses plain `INTEGER PRIMARY KEY`, where SQLite's rowid logic
     # picks max(id)+1 on its own -- no manual reset needed. We still try to
-    # update the counter when sqlite_sequence DOES exist (some installs may
-    # have AUTOINCREMENT in custom migrations), but skip silently otherwise.
+    # update the counter when sqlite_sequence DOES exist, but skip otherwise.
+    from sqlalchemy import func, select, text
+
     with dst.begin() as conn:
-        seq_exists = conn.exec_driver_sql(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='sqlite_sequence'"
+        seq_exists = conn.execute(
+            text("SELECT name FROM sqlite_master WHERE type='table' AND name='sqlite_sequence'")
         ).fetchone()
         if not seq_exists:
             return
-        # Table names come from our hardcoded TABLE_ORDER, not user input.
         for t in tables:
-            row = conn.exec_driver_sql(f"SELECT MAX(id) FROM {t}").fetchone()
-            if row is None or row[0] is None:
+            # Defense-in-depth: caller passes names from TABLE_ORDER, but assert
+            # before any name reaches a SQL identifier position.
+            if t not in _ALLOWED_TABLES:
+                raise ValueError(f"reset_sqlite_sequences: unknown table {t!r}")
+            meta = MetaData()
+            meta.reflect(bind=conn, only=[t])
+            tbl = meta.tables[t]
+            max_id = conn.execute(select(func.max(tbl.c.id))).scalar()
+            if max_id is None:
                 continue
-            max_id = row[0]
-            existing = conn.exec_driver_sql(
-                f"SELECT name FROM sqlite_sequence WHERE name = '{t}'"
+            existing = conn.execute(
+                text("SELECT name FROM sqlite_sequence WHERE name = :n"),
+                {"n": t},
             ).fetchone()
             if existing is None:
-                conn.exec_driver_sql(
-                    f"INSERT INTO sqlite_sequence (name, seq) VALUES ('{t}', {max_id})"
+                conn.execute(
+                    text("INSERT INTO sqlite_sequence (name, seq) VALUES (:n, :s)"),
+                    {"n": t, "s": max_id},
                 )
             else:
-                conn.exec_driver_sql(
-                    f"UPDATE sqlite_sequence SET seq = {max_id} WHERE name = '{t}'"
+                conn.execute(
+                    text("UPDATE sqlite_sequence SET seq = :s WHERE name = :n"),
+                    {"n": t, "s": max_id},
                 )
 
 
