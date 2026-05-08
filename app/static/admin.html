@@ -2632,7 +2632,16 @@
                 document.getElementById('episodesTracked').textContent = data.episodes_tracked || 0;
                 document.getElementById('notificationsSent').textContent = data.notifications.sent || 0;
                 document.getElementById('notificationsPending').textContent = data.notifications.pending || 0;
-                
+
+                // Populate every tab-count badge upfront so they don't pop in
+                // when the user first clicks a tab. Upcoming has no cheap server
+                // count (Sonarr-bound) — initialized via a background fetch in
+                // the page-load init.
+                updateTabCount('users', data.users || 0);
+                updateTabCount('requests', data.requests.total || 0);
+                updateTabCount('notifications', data.notifications.total || 0);
+                updateTabCount('issues', data.issues || 0);
+
                 console.log('Pending notifications:', data.notifications.pending);
             } catch (error) {
                 console.error('Failed to load stats:', error);
@@ -4720,6 +4729,11 @@
             };
             const fn = map[activeId];
             if (fn) fn();
+            // Upcoming has no cheap server count — fetch in the background so
+            // its tab-count badge populates without blocking the page or
+            // waiting for the user to click the tab. Skip if it's already the
+            // active tab (the line above already kicked it off).
+            if (activeId !== 'upcoming') loadUpcoming();
             document.getElementById('lastSync').textContent = 'Last sync: ' + new Date().toLocaleString();
         });
 

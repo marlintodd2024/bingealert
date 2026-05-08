@@ -53,9 +53,11 @@ async def process_notifications(db: Session = Depends(get_db)):
 async def get_stats(db: Session = Depends(get_db)):
     """Get system statistics"""
     try:
+        from app.database import ReportedIssue
+
         total_users = db.query(func.count(User.id)).scalar()
         active_users = db.query(func.count(User.id)).filter(User.is_active == True).scalar()
-        
+
         stats = {
             "users": total_users,
             "active_users": active_users,
@@ -71,7 +73,10 @@ async def get_stats(db: Session = Depends(get_db)):
                 "total": db.query(func.count(Notification.id)).scalar(),
                 "sent": db.query(func.count(Notification.id)).filter(Notification.sent == True).scalar(),
                 "pending": db.query(func.count(Notification.id)).filter(Notification.sent == False).scalar(),
-            }
+            },
+            # Lets the dashboard populate every tab-count badge on initial load
+            # instead of waiting for each tab's first click to fetch its data.
+            "issues": db.query(func.count(ReportedIssue.id)).scalar(),
         }
         return stats
     except Exception as e:
