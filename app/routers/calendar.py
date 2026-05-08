@@ -100,9 +100,16 @@ def _parse_air_date(value: str) -> datetime | None:
 
 
 def _build_uid(user_id: int, series_id: int, season: int, episode: int) -> str:
-    """Stable UID per user × episode. Calendar apps key off this for updates."""
+    """Stable UID per user × episode. Calendar apps key off this for updates.
+
+    Uses SHA-256 (truncated to 16 hex chars) purely as a fingerprint — there's
+    no security boundary here, the input is already unique by structure, and
+    SHA-1 with usedforsecurity=False would be equivalent — but CodeQL's
+    weak-hash rule flags SHA-1 on string data either way, so SHA-256 keeps
+    the rule satisfied at zero cost.
+    """
     raw = f"{user_id}:{series_id}:S{season:02d}E{episode:02d}"
-    digest = hashlib.sha1(raw.encode("utf-8"), usedforsecurity=False).hexdigest()[:16]
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
     return f"{digest}-bingealert@local"
 
 
