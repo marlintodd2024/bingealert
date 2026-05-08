@@ -1892,6 +1892,13 @@
                                style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
                         <small style="color: #666; font-size: 11px;">Stuck-download alerts, weekly summaries, and other admin-only notifications go here.</small>
                     </div>
+                    <div style="margin-top: 15px;">
+                        <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">External-facing URL (for links in emails)</label>
+                        <input type="url" id="config-public-base-url" placeholder="https://bingealert.example.com"
+                               pattern="https?://.*"
+                               style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
+                        <small style="color: #666; font-size: 11px;">Where users reach this BingeAlert from outside your network. Used for the "Subscribe to your calendar" link in notification emails (and future password-reset links). Leave blank to omit those links. Must start with http:// or https://.</small>
+                    </div>
                 </div>
             </div>
 
@@ -4301,7 +4308,8 @@
                 document.getElementById('config-smtp-user').value = config.smtp.user || '';
                 document.getElementById('config-smtp-password').value = config.smtp.password || '';
                 document.getElementById('config-admin-email').value = config.admin_email || '';
-                
+                document.getElementById('config-public-base-url').value = config.public_base_url || '';
+
                 // Populate Jellyseerr fields
                 const jellyseerr = splitUrl(config.jellyseerr.url);
                 document.getElementById('config-jellyseerr-host').value = jellyseerr.host;
@@ -4447,6 +4455,7 @@
                         password: document.getElementById('config-smtp-password').value
                     },
                     admin_email: document.getElementById('config-admin-email').value.trim(),
+                    public_base_url: document.getElementById('config-public-base-url').value.trim(),
                     jellyseerr: {
                         url: buildUrl('config-jellyseerr-host', 'config-jellyseerr-port'),
                         api_key: document.getElementById('config-jellyseerr-api').value

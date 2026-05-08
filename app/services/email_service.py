@@ -114,8 +114,13 @@ class EmailService:
         """
         if not user or not user.calendar_token:
             return html_body
-        base = (settings.public_base_url or "").rstrip("/")
-        if not base:
+        base = (settings.public_base_url or "").strip().rstrip("/")
+        # Defensive scheme check: the value flows into an <a href> in the
+        # recipient's mailbox, so a non-http(s) scheme (e.g. javascript:) would
+        # render as a clickable XSS vector. The /admin/config saver validates
+        # this on write, but skip again here so a hand-edited config.json
+        # can't bypass it.
+        if not base or not base.startswith(("http://", "https://")):
             return html_body
         if "</body>" not in html_body:
             return html_body

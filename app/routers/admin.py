@@ -1116,6 +1116,7 @@ async def get_config():
                 "mode": _s.issue_autofix_mode,
             },
             "admin_email": _s.admin_email or "",
+            "public_base_url": _s.public_base_url or "",
             "seerr_anime": {
                 "server_id": _s.seerr_anime_server_id if _s.seerr_anime_server_id is not None else "",
                 "profile_id": _s.seerr_anime_profile_id if _s.seerr_anime_profile_id is not None else "",
@@ -1220,6 +1221,21 @@ async def update_config(config: dict, db: Session = Depends(get_db)):
     take(["smtp", "user"], "smtp_user", allow_empty=True)
     take(["smtp", "password"], "smtp_password", secret=True)
     take(["admin_email"], "admin_email", allow_empty=True)
+
+    # External-facing URL used for absolute links in outbound emails (calendar
+    # subscribe footer; future password-reset). Validated here because the
+    # value lands inside an <a href="..."> in the recipient's mailbox -- a
+    # javascript: scheme would render as a clickable XSS vector. Trailing
+    # slash trimmed; empty allowed (footer injection skips when blank).
+    def _normalize_public_base_url(v):
+        s = str(v).strip().rstrip("/")
+        if not s:
+            return ""
+        if not s.startswith(("http://", "https://")):
+            raise ValueError("must start with http:// or https://")
+        return s
+    take(["public_base_url"], "public_base_url",
+         transform=_normalize_public_base_url, allow_empty=True)
 
     # Seerr / Sonarr / Radarr / Plex
     take(["jellyseerr", "url"], "jellyseerr_url")
