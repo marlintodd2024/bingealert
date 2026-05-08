@@ -7,7 +7,7 @@ from typing import List, Optional
 from datetime import datetime
 
 from app.config import settings
-from app.database import Notification
+from app.database import Notification, User
 
 logger = logging.getLogger(__name__)
 
@@ -55,14 +55,25 @@ class EmailService:
         self.use_auth = bool(self.smtp_user and self.smtp_password and 
                             self.smtp_user.lower() not in ['none', ''])
     
-    async def send_email(self, to_email: str, subject: str, html_body: str) -> bool:
-        """Send an email via SMTP"""
+    async def send_email(
+        self,
+        to_email: str,
+        subject: str,
+        html_body: str,
+        user: Optional[User] = None,
+    ) -> bool:
+        """Send an email via SMTP. When `user` is supplied AND
+        settings.public_base_url is configured AND the user has a
+        calendar_token, a footer with their per-user .ics subscription URL is
+        injected just before </body>. Skipping any of those three quietly
+        omits the footer — the email still goes out."""
         try:
+            html_body = self._inject_calendar_footer(html_body, user)
             message = MIMEMultipart("alternative")
             message["From"] = self.smtp_from
             message["To"] = to_email
             message["Subject"] = subject
-            
+
             # Add HTML body
             html_part = MIMEText(html_body, "html")
             message.attach(html_part)
@@ -92,6 +103,47 @@ class EmailService:
             logger.error(f"Failed to send email to {to_email}: {e}")
             return False
     
+    def _inject_calendar_footer(self, html_body: str, user: Optional[User]) -> str:
+        """Append a 'Subscribe to your upcoming-episodes calendar' footer.
+
+        Returns html_body unchanged if any prerequisite is missing (no user,
+        no public_base_url configured, no calendar_token on the row, no
+        </body> close tag in the rendered HTML). All three substitutions are
+        server-controlled values, so we build the URL with f-strings and
+        rely on the secret token being a urlsafe random string.
+        """
+        if not user or not user.calendar_token:
+            return html_body
+        base = (settings.public_base_url or "").rstrip("/")
+        if not base:
+            return html_body
+        if "</body>" not in html_body:
+            return html_body
+
+        url_https = f"{base}/calendar/{user.calendar_token}.ics"
+        # webcal:// triggers the OS calendar-subscribe handler on most
+        # platforms; the https URL is the literal fallback users can paste
+        # into clients that don't honor the scheme rewrite.
+        url_webcal = url_https
+        for scheme in ("https://", "http://"):
+            if url_webcal.startswith(scheme):
+                url_webcal = "webcal://" + url_webcal[len(scheme):]
+                break
+
+        footer = (
+            '<div style="max-width:600px;margin:24px auto 0;padding:16px 20px;'
+            "border-top:1px solid #e5e5e5;font-family:-apple-system,Segoe UI,"
+            'Roboto,sans-serif;font-size:13px;color:#555;">'
+            "<p style=\"margin:0 0 6px;\">📅 <strong>Subscribe to your "
+            "upcoming-episodes calendar.</strong></p>"
+            f'<p style="margin:0 0 6px;"><a href="{url_webcal}" '
+            'style="color:#e5a00d;text-decoration:none;">Add to your calendar app</a></p>'
+            '<p style="margin:0;font-size:11px;color:#888;">Or paste this URL '
+            f'into your calendar app: <code>{url_https}</code></p>'
+            "</div>\n"
+        )
+        return html_body.replace("</body>", footer + "</body>", 1)
+
     def render_episode_notification(self, series_title: str, episodes: List[dict], poster_url: str = None) -> str:
         """Render HTML email for new episode(s) notification"""
         template = Template("""
@@ -350,9 +402,10 @@ class EmailService:
                 success = await self.send_email(
                     to_email=notif.user.email,
                     subject=subject,
-                    html_body=html_body
+                    html_body=html_body,
+                    user=notif.user,
                 )
-                
+
                 # Mark all batched notifications as sent
                 for b in batch:
                     if success:
@@ -367,7 +420,8 @@ class EmailService:
                 success = await self.send_email(
                     to_email=notif.user.email,
                     subject=notif.subject,
-                    html_body=notif.body
+                    html_body=notif.body,
+                    user=notif.user,
                 )
                 
                 if success:
@@ -385,7 +439,8 @@ class EmailService:
             success = await self.send_email(
                 to_email=notif.user.email,
                 subject=notif.subject,
-                html_body=notif.body
+                html_body=notif.body,
+                user=notif.user,
             )
             
             if success:
@@ -401,7 +456,8 @@ class EmailService:
             success = await self.send_email(
                 to_email=notif.user.email,
                 subject=notif.subject,
-                html_body=notif.body
+                html_body=notif.body,
+                user=notif.user,
             )
             
             if success:

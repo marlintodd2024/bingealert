@@ -55,6 +55,9 @@ _PUBLIC_PATHS = (
     "/api/setup/status",
     # Version probe so the login page footer can render the running version.
     "/api/version",
+    # Per-user .ics calendar feed -- the URL embeds a long random token that
+    # IS the credential, so calendar apps subscribe without a login session.
+    "/calendar/",
 )
 
 

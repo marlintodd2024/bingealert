@@ -111,6 +111,12 @@ class Settings(BaseSettings):
     app_secret_key: Optional[str] = None  # HMAC for session cookies; wizard generates
     environment: str = "production"
 
+    # External-facing base URL (e.g. "https://bingealert.example.com"). Used to
+    # build absolute links inside notification emails (per-user calendar feed,
+    # future password-reset links). When unset, calendar footers are omitted —
+    # email send paths still work, just without the absolute link.
+    public_base_url: Optional[str] = None
+
     # ------------------------------------------------------------------
     # Derived
     # ------------------------------------------------------------------
