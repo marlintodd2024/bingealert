@@ -648,22 +648,24 @@ async def check_request_quality_status(request_id: int):
         await asyncio.sleep(10)
         
         db = next(get_db())
-        request = db.query(MediaRequest).filter(MediaRequest.id == request_id).first()
-        
-        if not request:
-            logger.warning(f"Request {request_id} not found for quality check")
-            return
-        
-        monitor = QualityReleaseMonitor()
-        
-        if request.media_type == 'tv':
-            await monitor._check_tv_show(request, db)
-        elif request.media_type == 'movie':
-            await monitor._check_movie(request, db)
-        
-        db.close()
-        logger.info(f"Completed immediate quality check for request {request_id}")
-        
+        try:
+            request = db.query(MediaRequest).filter(MediaRequest.id == request_id).first()
+
+            if not request:
+                logger.warning(f"Request {request_id} not found for quality check")
+                return
+
+            monitor = QualityReleaseMonitor()
+
+            if request.media_type == 'tv':
+                await monitor._check_tv_show(request, db)
+            elif request.media_type == 'movie':
+                await monitor._check_movie(request, db)
+
+            logger.info(f"Completed immediate quality check for request {request_id}")
+        finally:
+            db.close()
+
     except Exception as e:
         logger.error(f"Failed to check request quality: {e}")
 

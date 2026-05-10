@@ -29,6 +29,7 @@ prod-files.txt
 
 # Claude Code per-project settings (user-local)
 .claude/settings.local.json
+CLAUDE.md
 
 # Docker
 docker-compose.override.yml
