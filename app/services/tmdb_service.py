@@ -1,6 +1,7 @@
 import httpx
 import logging
 from typing import Optional
+from app.security import normalize_http_url
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +13,7 @@ class TMDBService:
     
     def __init__(self, jellyseerr_url: str = None, jellyseerr_api_key: str = None):
         """Initialize with Jellyseerr credentials to use as TMDB proxy"""
-        self.jellyseerr_url = jellyseerr_url.rstrip('/') if jellyseerr_url else None
+        self.jellyseerr_url = normalize_http_url(jellyseerr_url) if jellyseerr_url else None
         self.jellyseerr_api_key = jellyseerr_api_key
         self.use_jellyseerr = bool(jellyseerr_url and jellyseerr_api_key)
     

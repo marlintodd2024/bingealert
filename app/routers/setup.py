@@ -29,6 +29,7 @@ from pydantic import BaseModel, Field
 
 from app.auth import hash_password
 from app.config import settings
+from app.security import normalize_http_url, validate_ip_or_cidr_csv
 
 
 logger = logging.getLogger(__name__)
@@ -86,6 +87,8 @@ class WizardPayload(BaseModel):
     )
     environment: str = "production"
     webhook_allowed_ips: str = ""
+    webhook_secret: Optional[str] = None
+    trusted_proxy_cidrs: str = "127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
 
 
 # ---------------------------------------------------------------------------
@@ -146,6 +149,25 @@ async def save_setup(
 
     # Translate the wire payload into the on-disk config shape.
     config: dict = payload.model_dump(exclude={"admin_password"}, exclude_none=False)
+    try:
+        config["jellyseerr_url"] = normalize_http_url(payload.jellyseerr_url)
+        config["sonarr_url"] = normalize_http_url(payload.sonarr_url)
+        config["radarr_url"] = normalize_http_url(payload.radarr_url)
+        config["sonarr_anime_url"] = normalize_http_url(
+            payload.sonarr_anime_url, allow_empty=True
+        )
+        config["plex_url"] = normalize_http_url(payload.plex_url, allow_empty=True)
+        config["local_network_cidrs"] = validate_ip_or_cidr_csv(
+            payload.local_network_cidrs
+        )
+        config["webhook_allowed_ips"] = validate_ip_or_cidr_csv(
+            payload.webhook_allowed_ips
+        )
+        config["trusted_proxy_cidrs"] = validate_ip_or_cidr_csv(
+            payload.trusted_proxy_cidrs
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     if payload.admin_password:
         config["admin_password_hash"] = hash_password(payload.admin_password)

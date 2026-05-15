@@ -12,9 +12,11 @@ from typing import Optional
 from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
+from pydantic import Field
 
 from app.auth import (
     AuthMiddleware,
+    clear_login_attempts,
     create_session_token,
     get_client_ip,
     is_local_network,
@@ -75,8 +77,8 @@ async def auth_check(request: Request) -> dict:
 
 
 class LoginPayload(BaseModel):
-    password: str
-    turnstile_token: Optional[str] = None
+    password: str = Field(min_length=1, max_length=256)
+    turnstile_token: Optional[str] = Field(default=None, max_length=4096)
 
 
 @router.post("/auth/login")
@@ -115,6 +117,7 @@ async def auth_login(payload: LoginPayload, request: Request) -> JSONResponse:
         )
 
     token = create_session_token(settings.app_secret_key)
+    clear_login_attempts(client_ip)
     response = JSONResponse(content={"success": True})
     response.set_cookie(
         key=AuthMiddleware.SESSION_COOKIE,
@@ -122,7 +125,7 @@ async def auth_login(payload: LoginPayload, request: Request) -> JSONResponse:
         max_age=settings.session_max_age_seconds,
         httponly=True,
         samesite="lax",
-        secure=False,  # flip to True when fronted with HTTPS
+        secure=request.url.scheme == "https",
     )
     logger.info(f"login from {client_ip}")
     return response

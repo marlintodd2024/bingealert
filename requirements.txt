@@ -1,4 +1,5 @@
-fastapi==0.109.0
+fastapi==0.115.6
+starlette==0.41.3
 uvicorn[standard]==0.27.0
 sqlalchemy==2.0.25
 alembic==1.13.1

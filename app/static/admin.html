@@ -2208,6 +2208,31 @@
                         <small style="color: #666; font-size: 11px;">Only these IPs can send webhooks from Sonarr/Radarr/Seerr. Leave blank to allow all IPs (not recommended for external access).</small>
                     </div>
                 </div>
+
+                <!-- Webhook Shared Secret -->
+                <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                    <h4 style="color: #fff; margin-bottom: 10px; font-size: 14px;">🔑 Webhook Shared Secret</h4>
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">Shared Secret</label>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="password" id="config-webhook-secret" placeholder="••••••••"
+                                   style="flex: 1; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
+                            <button onclick="generateWebhookSecret()" class="secondary" style="white-space: nowrap; padding: 8px 12px; font-size: 12px;" title="Generate a strong webhook secret">🎲 Generate</button>
+                        </div>
+                        <small style="color: #666; font-size: 11px;" id="config-webhook-secret-hint">Send this as <code>X-BingeAlert-Webhook-Secret</code>, <code>X-Webhook-Secret</code>, or <code>?token=...</code>. Leave blank to keep webhooks secretless.</small>
+                    </div>
+                </div>
+
+                <!-- Trusted Proxy CIDRs -->
+                <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                    <h4 style="color: #fff; margin-bottom: 10px; font-size: 14px;">↪️ Trusted Proxy CIDRs</h4>
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; color: #999; font-size: 12px;">Trusted Proxies (comma-separated CIDRs)</label>
+                        <input type="text" id="config-trusted-proxy-cidrs" placeholder="127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16"
+                               style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
+                        <small style="color: #666; font-size: 11px;">Only these immediate proxy IPs may supply X-Forwarded-For, X-Real-IP, or CF-Connecting-IP for auth bypass and webhook checks.</small>
+                    </div>
+                </div>
                 
                 <!-- Environment Mode -->
                 <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
@@ -4239,6 +4264,17 @@
             document.getElementById('config-secret-key-hint').style.color = '#e5a00d';
         }
 
+        function generateWebhookSecret() {
+            const array = new Uint8Array(32);
+            crypto.getRandomValues(array);
+            const key = Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
+            const input = document.getElementById('config-webhook-secret');
+            input.type = 'text';
+            input.value = key;
+            document.getElementById('config-webhook-secret-hint').innerHTML = '✅ New webhook secret generated — <strong>save settings</strong>, then update Sonarr/Radarr/Seerr webhook headers or URLs.';
+            document.getElementById('config-webhook-secret-hint').style.color = '#e5a00d';
+        }
+
         function updateSecurityChecklist(config) {
             const el = document.getElementById('security-checklist');
             if (!el) return;
@@ -4248,12 +4284,16 @@
             const hasPassword = config.auth?.has_password === true;
             const hasCidr = !!config.auth?.local_network_cidr;
             const hasWebhookIps = !!config.security?.webhook_allowed_ips;
+            const hasWebhookSecret = !!config.security?.webhook_secret;
+            const hasTrustedProxyCidrs = !!config.security?.trusted_proxy_cidrs;
             const isProd = config.security?.environment === 'production';
             const hasStrongKey = config.security?.secret_key_status === 'strong';
             
             checks.push(`<span style="color: ${hasAuth && hasPassword ? '#4caf50' : '#ff5252'};">${hasAuth && hasPassword ? '✅' : '❌'} Authentication ${hasAuth ? 'enabled' : 'disabled'}${hasAuth && !hasPassword ? ' (no password set!)' : ''}</span>`);
             checks.push(`<span style="color: ${hasCidr ? '#4caf50' : '#ff9800'};">${hasCidr ? '✅' : '⚠️'} Local network CIDR ${hasCidr ? 'configured' : 'not set'}</span>`);
             checks.push(`<span style="color: ${hasWebhookIps ? '#4caf50' : '#ff9800'};">${hasWebhookIps ? '✅' : '⚠️'} Webhook IP allowlist ${hasWebhookIps ? 'configured' : 'not set (all IPs allowed)'}</span>`);
+            checks.push(`<span style="color: ${hasWebhookSecret ? '#4caf50' : '#ff9800'};">${hasWebhookSecret ? '✅' : '⚠️'} Webhook shared secret ${hasWebhookSecret ? 'configured' : 'not set'}</span>`);
+            checks.push(`<span style="color: ${hasTrustedProxyCidrs ? '#4caf50' : '#ff9800'};">${hasTrustedProxyCidrs ? '✅' : '⚠️'} Trusted proxy CIDRs ${hasTrustedProxyCidrs ? 'configured' : 'not set'}</span>`);
             checks.push(`<span style="color: ${isProd ? '#4caf50' : '#ff9800'};">${isProd ? '✅' : '⚠️'} Environment: ${config.security?.environment || 'production'} ${!isProd ? '(API docs exposed!)' : ''}</span>`);
             checks.push(`<span style="color: ${hasStrongKey ? '#4caf50' : '#ff5252'};">${hasStrongKey ? '✅' : '❌'} Secret key ${hasStrongKey ? 'is strong' : 'is weak/default — generate a new one!'}</span>`);
             
@@ -4390,6 +4430,17 @@
                 // Populate Security fields
                 if (config.security) {
                     document.getElementById('config-webhook-allowed-ips').value = config.security.webhook_allowed_ips || '';
+                    document.getElementById('config-webhook-secret').value = config.security.webhook_secret || '';
+                    document.getElementById('config-webhook-secret').type = 'password';
+                    const webhookSecretHint = document.getElementById('config-webhook-secret-hint');
+                    if (config.security.webhook_secret) {
+                        webhookSecretHint.textContent = '✅ Webhook secret is set. Generate or type a new value to replace it.';
+                        webhookSecretHint.style.color = '#666';
+                    } else {
+                        webhookSecretHint.innerHTML = 'Send this as <code>X-BingeAlert-Webhook-Secret</code>, <code>X-Webhook-Secret</code>, or <code>?token=...</code>. Leave blank to keep webhooks secretless.';
+                        webhookSecretHint.style.color = '#666';
+                    }
+                    document.getElementById('config-trusted-proxy-cidrs').value = config.security.trusted_proxy_cidrs || '';
                     document.getElementById('config-environment').value = config.security.environment || 'production';
                     const secretInput = document.getElementById('config-app-secret-key');
                     secretInput.value = config.security.secret_key_status === 'strong' ? '••••••••' : '';
@@ -4506,6 +4557,8 @@
                     },
                     security: {
                         webhook_allowed_ips: document.getElementById('config-webhook-allowed-ips').value.trim(),
+                        webhook_secret: document.getElementById('config-webhook-secret').value,
+                        trusted_proxy_cidrs: document.getElementById('config-trusted-proxy-cidrs').value.trim(),
                         environment: document.getElementById('config-environment').value,
                         app_secret_key: (() => {
                             const input = document.getElementById('config-app-secret-key');

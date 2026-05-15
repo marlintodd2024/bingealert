@@ -3,13 +3,14 @@ import logging
 from typing import Optional, Dict
 
 from app.config import settings
+from app.security import normalize_http_url
 
 logger = logging.getLogger(__name__)
 
 
 class RadarrService:
     def __init__(self):
-        self.base_url = settings.radarr_url.rstrip('/')
+        self.base_url = normalize_http_url(settings.radarr_url)
         self.api_key = settings.radarr_api_key
         self.headers = {
             "X-Api-Key": self.api_key,

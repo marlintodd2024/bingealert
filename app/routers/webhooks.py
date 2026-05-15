@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Request
-import os
+import hmac
 import ipaddress
 from sqlalchemy.orm import Session
 import logging
@@ -10,22 +10,38 @@ from app.database import get_db, MediaRequest, EpisodeTracking, Notification, Us
 from app.schemas import SonarrWebhook, RadarrWebhook, WebhookResponse
 from app.services.email_service import EmailService
 from app.services.sonarr_service import SonarrService
+from app.config import settings
+from app.security import clean_email_address, sanitize_for_log
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _check_webhook_ip(request: Request):
+def _check_webhook_auth(request: Request):
     """
-    SECURITY FIX [HIGH-1]: Validate webhook source IP.
-    If WEBHOOK_ALLOWED_IPS is set, only those IPs can send webhooks.
+    Validate webhook source IP and optional shared secret.
+    If webhook_allowed_ips is set, only those IPs can send webhooks.
+    If webhook_secret is set, callers must send it as a header or ?token=.
     If not set, all IPs are allowed (backwards compatible).
     """
-    allowed = os.getenv("WEBHOOK_ALLOWED_IPS", "").strip()
-    if not allowed:
-        return
     from app.auth import get_client_ip
     client_ip = get_client_ip(request)
+
+    secret = (settings.webhook_secret or "").strip()
+    if secret:
+        supplied = (
+            request.headers.get("x-bingealert-webhook-secret")
+            or request.headers.get("x-webhook-secret")
+            or request.query_params.get("token")
+            or ""
+        )
+        if not hmac.compare_digest(supplied, secret):
+            logger.warning("Webhook rejected: invalid shared secret from %s", client_ip)
+            raise HTTPException(status_code=403, detail="Forbidden")
+
+    allowed = (settings.webhook_allowed_ips or "").strip()
+    if not allowed:
+        return
     allowed_list = [ip.strip() for ip in allowed.split(",") if ip.strip()]
     for allowed_ip in allowed_list:
         try:
@@ -37,7 +53,7 @@ def _check_webhook_ip(request: Request):
                     return
         except ValueError:
             continue
-    logger.warning(f"Webhook rejected: IP {client_ip} not in allowed list")
+    logger.warning("Webhook rejected: IP %s not in allowed list", client_ip)
     raise HTTPException(status_code=403, detail="Forbidden")
 
 email_service = EmailService()
@@ -50,7 +66,7 @@ async def sonarr_webhook(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
-    _check_webhook_ip(request)
+    _check_webhook_auth(request)
     """
     Handle webhooks from Sonarr
     Supported events: Grab, Download, Test
@@ -65,7 +81,7 @@ async def sonarr_webhook(
         try:
             tmdb_id = webhook.series.tmdbId
             if not tmdb_id:
-                logger.warning(f"Series {webhook.series.title} has no TMDB ID")
+                logger.warning("Series %s has no TMDB ID", sanitize_for_log(webhook.series.title))
                 return WebhookResponse(success=False, message="Series has no TMDB ID")
             
             # Find all requests for this series
@@ -90,7 +106,11 @@ async def sonarr_webhook(
             db.commit()
             
             if cancelled_count > 0:
-                logger.info(f"Grab event: Cancelled {cancelled_count} pending quality_waiting notification(s) for {webhook.series.title} - download started")
+                logger.info(
+                    "Grab event: Cancelled %s pending quality_waiting notification(s) for %s - download started",
+                    cancelled_count,
+                    sanitize_for_log(webhook.series.title),
+                )
             
             return WebhookResponse(
                 success=True,
@@ -109,7 +129,7 @@ async def sonarr_webhook(
         # Get series TMDB ID
         tmdb_id = webhook.series.tmdbId
         if not tmdb_id:
-            logger.warning(f"Series {webhook.series.title} has no TMDB ID")
+            logger.warning("Series %s has no TMDB ID", sanitize_for_log(webhook.series.title))
             return WebhookResponse(success=False, message="Series has no TMDB ID")
         
         # Find all requests for this series
@@ -122,7 +142,7 @@ async def sonarr_webhook(
             logger.info(f"No requests found for series TMDB ID {tmdb_id}")
             return WebhookResponse(success=True, message="No matching requests found")
         
-        logger.info(f"Found {len(requests)} request(s) for series: {webhook.series.title}")
+        logger.info("Found %s request(s) for series: %s", len(requests), sanitize_for_log(webhook.series.title))
         
         # Process episodes - batch by user
         # Structure: {user_id: {request_id: [episodes]}}
@@ -314,7 +334,7 @@ async def radarr_webhook(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
-    _check_webhook_ip(request)
+    _check_webhook_auth(request)
     """
     Handle webhooks from Radarr
     Supported events: Grab, Download, Test
@@ -484,7 +504,7 @@ async def jellyseerr_webhook(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
-    _check_webhook_ip(request)
+    _check_webhook_auth(request)
     """
     Handle webhooks from Seerr for request events and issue reports
     Supports: MEDIA_PENDING, MEDIA_APPROVED, MEDIA_AUTO_APPROVED, MEDIA_AVAILABLE,
@@ -927,14 +947,12 @@ async def _send_issue_admin_notification(issue_id: int, reported_by: str):
             if not issue:
                 return
             
-            admin_email = os.getenv("ADMIN_EMAIL") or app_settings.admin_email or app_settings.smtp_from
+            admin_email = clean_email_address(
+                os.getenv("ADMIN_EMAIL") or app_settings.admin_email or app_settings.smtp_from
+            )
             if not admin_email:
-                logger.warning("No admin email configured, skipping issue notification")
+                logger.warning("No valid admin email configured, skipping issue notification")
                 return
-            
-            # Clean admin email (handle "Name <email>" format)
-            if '<' in admin_email and '>' in admin_email:
-                admin_email = admin_email.split('<')[1].split('>')[0]
             
             autofix_mode = os.getenv("ISSUE_AUTOFIX_MODE", app_settings.issue_autofix_mode)
             
@@ -953,7 +971,7 @@ async def _send_issue_admin_notification(issue_id: int, reported_by: str):
                 subject=f"🚨 Issue Reported: {issue.title}",
                 html_body=html_body
             )
-            logger.info(f"Sent issue notification to admin: {admin_email}")
+            logger.info("Sent issue notification to admin: %s", sanitize_for_log(admin_email))
         finally:
             db.close()
     except Exception as e:
@@ -1089,4 +1107,3 @@ async def _check_issue_resolution(tmdb_id: int, media_type: str):
             db.close()
     except Exception as e:
         logger.error(f"Failed to check issue resolution for TMDB {tmdb_id}: {e}")
-

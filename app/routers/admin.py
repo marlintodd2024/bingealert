@@ -8,6 +8,12 @@ from datetime import datetime
 from app.database import get_db, User, MediaRequest, EpisodeTracking, Notification, SharedRequest, SystemConfig, MaintenanceWindow
 from app.services.jellyseerr_sync import JellyseerrSyncService
 from app.services.email_service import EmailService
+from app.security import (
+    clean_email_address,
+    normalize_http_url,
+    sanitize_for_log,
+    validate_ip_or_cidr_csv,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -1124,6 +1130,8 @@ async def get_config():
             },
             "security": {
                 "webhook_allowed_ips": _s.webhook_allowed_ips,
+                "webhook_secret": _mask_secret(_s.webhook_secret),
+                "trusted_proxy_cidrs": _s.trusted_proxy_cidrs,
                 "environment": _s.environment,
                 "secret_key_status": "strong" if _s.app_secret_key and len(_s.app_secret_key) >= 32 else "weak",
             },
@@ -1196,6 +1204,7 @@ async def update_config(config: dict, db: Session = Depends(get_db)):
 
     updates: dict = {}
     label_updates: list = []
+    validation_errors: list[str] = []
 
     def take(json_path, settings_key, label=None, transform=None,
              secret=False, allow_empty=False):
@@ -1211,6 +1220,7 @@ async def update_config(config: dict, db: Session = Depends(get_db)):
         try:
             updates[settings_key] = transform(node) if transform else node
         except (TypeError, ValueError):
+            validation_errors.append(label or settings_key)
             return
         label_updates.append(label or settings_key.upper())
 
@@ -1220,33 +1230,28 @@ async def update_config(config: dict, db: Session = Depends(get_db)):
     take(["smtp", "from"], "smtp_from")
     take(["smtp", "user"], "smtp_user", allow_empty=True)
     take(["smtp", "password"], "smtp_password", secret=True)
-    take(["admin_email"], "admin_email", allow_empty=True)
+    take(["admin_email"], "admin_email", transform=clean_email_address, allow_empty=True)
 
     # External-facing URL used for absolute links in outbound emails (calendar
     # subscribe footer; future password-reset). Validated here because the
     # value lands inside an <a href="..."> in the recipient's mailbox -- a
     # javascript: scheme would render as a clickable XSS vector. Trailing
     # slash trimmed; empty allowed (footer injection skips when blank).
-    def _normalize_public_base_url(v):
-        s = str(v).strip().rstrip("/")
-        if not s:
-            return ""
-        if not s.startswith(("http://", "https://")):
-            raise ValueError("must start with http:// or https://")
-        return s
     take(["public_base_url"], "public_base_url",
-         transform=_normalize_public_base_url, allow_empty=True)
+         transform=lambda v: normalize_http_url(v, allow_empty=True), allow_empty=True)
 
     # Seerr / Sonarr / Radarr / Plex
-    take(["jellyseerr", "url"], "jellyseerr_url")
+    take(["jellyseerr", "url"], "jellyseerr_url", transform=normalize_http_url)
     take(["jellyseerr", "api_key"], "jellyseerr_api_key", secret=True)
-    take(["sonarr", "url"], "sonarr_url")
+    take(["sonarr", "url"], "sonarr_url", transform=normalize_http_url)
     take(["sonarr", "api_key"], "sonarr_api_key", secret=True)
-    take(["sonarr_anime", "url"], "sonarr_anime_url", allow_empty=True)
+    take(["sonarr_anime", "url"], "sonarr_anime_url",
+         transform=lambda v: normalize_http_url(v, allow_empty=True), allow_empty=True)
     take(["sonarr_anime", "api_key"], "sonarr_anime_api_key", secret=True)
-    take(["radarr", "url"], "radarr_url")
+    take(["radarr", "url"], "radarr_url", transform=normalize_http_url)
     take(["radarr", "api_key"], "radarr_api_key", secret=True)
-    take(["plex", "url"], "plex_url", allow_empty=True)
+    take(["plex", "url"], "plex_url",
+         transform=lambda v: normalize_http_url(v, allow_empty=True), allow_empty=True)
     take(["plex", "token"], "plex_token", secret=True)
 
     # Quality monitor + issue autofix
@@ -1265,7 +1270,11 @@ async def update_config(config: dict, db: Session = Depends(get_db)):
     take(["seerr_anime", "root_folder"], "seerr_anime_root_folder", allow_empty=True)
 
     # Security
-    take(["security", "webhook_allowed_ips"], "webhook_allowed_ips", allow_empty=True)
+    take(["security", "webhook_allowed_ips"], "webhook_allowed_ips",
+         transform=validate_ip_or_cidr_csv, allow_empty=True)
+    take(["security", "webhook_secret"], "webhook_secret", secret=True, allow_empty=True)
+    take(["security", "trusted_proxy_cidrs"], "trusted_proxy_cidrs",
+         transform=validate_ip_or_cidr_csv, allow_empty=True)
     if config.get("security", {}).get("environment") in ("production", "development"):
         updates["environment"] = config["security"]["environment"]
         label_updates.append("ENVIRONMENT")
@@ -1282,14 +1291,14 @@ async def update_config(config: dict, db: Session = Depends(get_db)):
             updates["admin_password_hash"] = hash_password(new_password)
             label_updates.append("AUTH_PASSWORD")
         if "local_network_cidr" in auth:
-            updates["local_network_cidrs"] = auth["local_network_cidr"]
+            updates["local_network_cidrs"] = validate_ip_or_cidr_csv(auth["local_network_cidr"])
             label_updates.append("LOCAL_NETWORK_CIDRS")
         if "session_timeout_hours" in auth:
             try:
                 updates["session_max_age_seconds"] = int(auth["session_timeout_hours"]) * 3600
                 label_updates.append("SESSION_MAX_AGE_SECONDS")
             except (TypeError, ValueError):
-                pass
+                validation_errors.append("SESSION_TIMEOUT_HOURS")
         if "turnstile_site_key" in auth:
             updates["turnstile_site_key"] = auth["turnstile_site_key"] or None
             label_updates.append("TURNSTILE_SITE_KEY")
@@ -1322,6 +1331,12 @@ async def update_config(config: dict, db: Session = Depends(get_db)):
         except Exception as e:
             logger.error(f"Failed to save reconciliation settings: {e}")
             db.rollback()
+
+    if validation_errors:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid setting value(s): {', '.join(validation_errors)}",
+        )
 
     if updates:
         from app.config import reload_from_disk
@@ -1968,7 +1983,7 @@ async def request_on_behalf(
         from app.config import settings
         import httpx
         
-        jellyseerr_url = settings.jellyseerr_url.rstrip('/')
+        jellyseerr_url = normalize_http_url(settings.jellyseerr_url)
         api_key = settings.jellyseerr_api_key
         
         # First, get the media details
@@ -2061,7 +2076,7 @@ async def get_seerr_sonarr_servers():
         import httpx
         from app.config import settings
         
-        jellyseerr_url = settings.jellyseerr_url.rstrip('/')
+        jellyseerr_url = normalize_http_url(settings.jellyseerr_url)
         api_key = settings.jellyseerr_api_key
         
         async with httpx.AsyncClient() as client:
@@ -2127,7 +2142,7 @@ async def test_jellyseerr_connection(data: dict):
     try:
         import httpx
         
-        url = data.get('url', '').rstrip('/')
+        url = normalize_http_url(data.get('url', ''))
         api_key = data.get('api_key')
         
         async with httpx.AsyncClient() as client:
@@ -2150,7 +2165,7 @@ async def test_sonarr_connection(data: dict):
     try:
         import httpx
         
-        url = data.get('url', '').rstrip('/')
+        url = normalize_http_url(data.get('url', ''))
         api_key = data.get('api_key')
         
         async with httpx.AsyncClient() as client:
@@ -2173,7 +2188,7 @@ async def test_radarr_connection(data: dict):
     try:
         import httpx
         
-        url = data.get('url', '').rstrip('/')
+        url = normalize_http_url(data.get('url', ''))
         api_key = data.get('api_key')
         
         async with httpx.AsyncClient() as client:
@@ -2281,7 +2296,12 @@ async def create_maintenance_window(data: dict, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(window)
         
-        logger.info(f"Created maintenance window '{title}' ({start_time} - {end_time})")
+        logger.info(
+            "Created maintenance window '%s' (%s - %s)",
+            sanitize_for_log(title),
+            start_time,
+            end_time,
+        )
         
         # Send announcement email
         email_result = None
@@ -2354,7 +2374,11 @@ async def update_maintenance_window(window_id: int, data: dict, db: Session = De
             window.announcement_sent = True
             db.commit()
         
-        logger.info(f"Updated maintenance window '{window.title}' (id={window_id})")
+        logger.info(
+            "Updated maintenance window '%s' (id=%s)",
+            sanitize_for_log(window.title),
+            window_id,
+        )
         return {
             "success": True,
             "message": "Maintenance window updated",
@@ -2391,7 +2415,11 @@ async def complete_maintenance_window(window_id: int, db: Session = Depends(get_
         window.updated_at = datetime.utcnow()
         db.commit()
         
-        logger.info(f"Manually completed maintenance window '{window.title}' (id={window_id})")
+        logger.info(
+            "Manually completed maintenance window '%s' (id=%s)",
+            sanitize_for_log(window.title),
+            window_id,
+        )
         return {
             "success": True,
             "message": "Maintenance marked as complete — emails sent",
@@ -2432,7 +2460,11 @@ async def cancel_maintenance_window(window_id: int, data: dict = None, db: Sessi
         window.updated_at = datetime.utcnow()
         db.commit()
         
-        logger.info(f"Cancelled maintenance window '{window.title}' (id={window_id})")
+        logger.info(
+            "Cancelled maintenance window '%s' (id=%s)",
+            sanitize_for_log(window.title),
+            window_id,
+        )
         return {
             "success": True,
             "message": f"Maintenance window cancelled{' — cancellation emails sent' if email_result else ''}",
@@ -2459,7 +2491,11 @@ async def delete_maintenance_window(window_id: int, db: Session = Depends(get_db
         db.delete(window)
         db.commit()
         
-        logger.info(f"Deleted maintenance window '{title}' (id={window_id})")
+        logger.info(
+            "Deleted maintenance window '%s' (id=%s)",
+            sanitize_for_log(title),
+            window_id,
+        )
         return {"success": True, "message": f"Maintenance window '{title}' deleted"}
         
     except HTTPException:
@@ -2487,7 +2523,7 @@ async def send_maintenance_reminder(window_id: int, db: Session = Depends(get_db
         window.reminder_sent = True
         db.commit()
         
-        logger.info(f"Manually sent reminder for maintenance window '{window.title}'")
+        logger.info("Manually sent reminder for maintenance window '%s'", sanitize_for_log(window.title))
         return {
             "success": True,
             "message": "Reminder emails sent",
@@ -2500,4 +2536,3 @@ async def send_maintenance_reminder(window_id: int, db: Session = Depends(get_db
         logger.error(f"Failed to send maintenance reminder: {e}")
         db.rollback()
         raise HTTPException(status_code=500, detail="Internal server error")
-

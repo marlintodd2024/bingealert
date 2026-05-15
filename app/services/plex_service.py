@@ -4,6 +4,7 @@ Plex service for checking if media exists in Plex library
 import httpx
 import logging
 from app.config import settings
+from app.security import normalize_http_url
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +17,7 @@ class PlexService:
         # instantiated even before plex is configured. Calls will fail at
         # request time with a clear connection error, which the workers
         # already handle.
-        self.base_url = (settings.plex_url or "").rstrip("/")
+        self.base_url = normalize_http_url(settings.plex_url, allow_empty=True)
         self.token = settings.plex_token or ""
         
     async def _get(self, endpoint: str):

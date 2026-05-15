@@ -102,10 +102,18 @@ class Settings(BaseSettings):
 
     # Comma-separated CIDRs / IPs allowed to POST to /webhooks/*. Empty = allow all.
     webhook_allowed_ips: str = ""
+    # Optional shared secret required on webhook requests. Send as
+    # X-BingeAlert-Webhook-Secret, X-Webhook-Secret, or ?token=... .
+    webhook_secret: Optional[str] = None
 
     # Optional Cloudflare Turnstile (CAPTCHA on login)
     turnstile_site_key: Optional[str] = None
     turnstile_secret_key: Optional[str] = None
+
+    # Reverse-proxy client-IP headers are trusted only when the immediate peer
+    # is in one of these CIDRs. This prevents direct clients spoofing
+    # X-Forwarded-For to trigger the local-network auth bypass.
+    trusted_proxy_cidrs: str = "127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
 
     # ----- Application -----
     app_secret_key: Optional[str] = None  # HMAC for session cookies; wizard generates

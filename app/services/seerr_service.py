@@ -3,6 +3,7 @@ import logging
 from typing import Optional
 
 from app.config import settings
+from app.security import normalize_http_url
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +12,7 @@ class SeerrService:
     """Service for interacting with the Seerr API (issue management)"""
     
     def __init__(self):
-        self.base_url = settings.jellyseerr_url.rstrip('/')
+        self.base_url = normalize_http_url(settings.jellyseerr_url)
         self.api_key = settings.jellyseerr_api_key
         self.headers = {
             "X-Api-Key": self.api_key,

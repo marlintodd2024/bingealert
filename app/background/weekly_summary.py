@@ -9,6 +9,7 @@ from sqlalchemy import func
 from app.database import SessionLocal, Notification, User
 from app.services.email_service import EmailService
 from app.config import settings
+from app.security import clean_email_address, html_escape, sanitize_for_log
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -74,11 +75,13 @@ def generate_summary_html(user_stats, start_date, end_date, total_count):
     
     user_rows = []
     for user in sorted_users:
+        username = html_escape(user["username"])
+        email = html_escape(user["email"])
         # Generate notification list
         notif_list = '<ul style="margin: 5px 0; padding-left: 20px; font-size: 13px; color: #666;">'
         for notif in user['notifications'][:10]:  # Show first 10
             icon = '📺' if notif['type'] == 'episode' else '🎬'
-            notif_list += f'<li>{icon} {notif["subject"]}</li>'
+            notif_list += f'<li>{icon} {html_escape(notif["subject"])}</li>'
         
         if len(user['notifications']) > 10:
             notif_list += f'<li style="color: #999;">... and {len(user["notifications"]) - 10} more</li>'
@@ -87,8 +90,8 @@ def generate_summary_html(user_stats, start_date, end_date, total_count):
         user_rows.append(f'''
             <tr>
                 <td style="padding: 15px; border-bottom: 1px solid #eee;">
-                    <div style="font-weight: bold; color: #333;">{user['username']}</div>
-                    <div style="font-size: 13px; color: #999;">{user['email']}</div>
+                    <div style="font-weight: bold; color: #333;">{username}</div>
+                    <div style="font-size: 13px; color: #999;">{email}</div>
                 </td>
                 <td style="padding: 15px; border-bottom: 1px solid #eee; text-align: center;">
                     <div style="font-size: 24px; font-weight: bold; color: #e5a00d;">{user['total']}</div>
@@ -197,7 +200,10 @@ async def send_weekly_summary():
         email_service = EmailService()
         
         # Send to admin email (from settings, or fallback to smtp_from)
-        admin_email = settings.admin_email or settings.smtp_from
+        admin_email = clean_email_address(settings.admin_email or settings.smtp_from)
+        if not admin_email:
+            logger.warning("No valid admin email configured, skipping weekly summary")
+            return
         
         await email_service.send_email(
             to_email=admin_email,
@@ -205,7 +211,7 @@ async def send_weekly_summary():
             html_body=html
         )
         
-        logger.info(f"✅ Weekly summary sent to {admin_email}")
+        logger.info("Weekly summary sent to %s", sanitize_for_log(admin_email))
         
     except Exception as e:
         logger.error(f"Weekly summary failed: {e}")

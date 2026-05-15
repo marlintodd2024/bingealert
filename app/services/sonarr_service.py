@@ -3,6 +3,7 @@ import logging
 from typing import Optional, Dict
 
 from app.config import settings
+from app.security import normalize_http_url
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +15,7 @@ class SonarrService:
         If base_url/api_key not provided, uses default from settings.
         Use instance_name for logging (e.g., 'Sonarr', 'Sonarr Anime').
         """
-        self.base_url = (base_url or settings.sonarr_url).rstrip('/')
+        self.base_url = normalize_http_url(base_url or settings.sonarr_url)
         self.api_key = api_key or settings.sonarr_api_key
         self.instance_name = instance_name
         self.headers = {

@@ -113,17 +113,28 @@ def verify_session_token(token: str, secret_key: str, max_age_seconds: int) -> b
 
 
 def get_client_ip(request: Request) -> str:
-    """Return the real client IP, honouring common reverse-proxy headers."""
-    fwd = request.headers.get("x-forwarded-for")
-    if fwd:
-        return fwd.split(",")[0].strip()
-    real = request.headers.get("x-real-ip")
-    if real:
-        return real.strip()
-    cf = request.headers.get("cf-connecting-ip")
-    if cf:
-        return cf.strip()
-    return request.client.host if request.client else "0.0.0.0"
+    """Return client IP, trusting proxy headers only from trusted proxies."""
+    peer_ip = request.client.host if request.client else "0.0.0.0"
+    if is_local_network(peer_ip, settings.trusted_proxy_cidrs):
+        candidate = None
+        fwd = request.headers.get("x-forwarded-for")
+        if fwd:
+            candidate = fwd.split(",")[0].strip()
+        else:
+            real = request.headers.get("x-real-ip")
+            if real:
+                candidate = real.strip()
+            else:
+                cf = request.headers.get("cf-connecting-ip")
+                if cf:
+                    candidate = cf.strip()
+        if candidate:
+            try:
+                ipaddress.ip_address(candidate)
+                return candidate
+            except ValueError:
+                logger.warning("Ignoring invalid proxy client IP header")
+    return peer_ip
 
 
 def is_local_network(ip_str: str, cidr_csv: str) -> bool:
@@ -165,6 +176,10 @@ def login_attempt_allowed(ip: str) -> bool:
     return True
 
 
+def clear_login_attempts(ip: str) -> None:
+    _LOGIN_ATTEMPTS.pop(ip, None)
+
+
 # ---------------------------------------------------------------------------
 # Cloudflare Turnstile
 # ---------------------------------------------------------------------------
@@ -184,6 +199,7 @@ def get_auth_settings(db) -> dict:
         "auth_enabled": "true" if settings.auth_required else "false",
         "auth_password_hash": settings.admin_password_hash or "",
         "local_network_cidr": settings.local_network_cidrs or "",
+        "trusted_proxy_cidrs": settings.trusted_proxy_cidrs or "",
         "session_timeout_hours": str(timeout_hours),
         "turnstile_enabled": "true" if settings.turnstile_secret_key else "false",
         "turnstile_site_key": settings.turnstile_site_key or "",

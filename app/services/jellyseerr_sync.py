@@ -6,13 +6,14 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import User, MediaRequest, EpisodeTracking, get_db
 from app.schemas import JellyseerrUser, JellyseerrRequest
+from app.security import normalize_http_url
 
 logger = logging.getLogger(__name__)
 
 
 class JellyseerrSyncService:
     def __init__(self):
-        self.base_url = settings.jellyseerr_url.rstrip('/')
+        self.base_url = normalize_http_url(settings.jellyseerr_url)
         self.api_key = settings.jellyseerr_api_key
         self.headers = {
             "X-Api-Key": self.api_key,

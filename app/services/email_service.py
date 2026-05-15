@@ -192,7 +192,7 @@ class EmailService:
                     <p style="margin-top: 20px;">Head over to Plex to start watching!</p>
                 </div>
                 <div class="footer">
-                    <p>This is an automated notification from your BingeAlert</p>
+                    <p>This is an automated notification from BingeAlert</p>
                 </div>
             </div>
         </body>
@@ -234,7 +234,7 @@ class EmailService:
                     <p style="margin-top: 30px;">Grab some popcorn and enjoy! 🍿</p>
                 </div>
                 <div class="footer">
-                    <p>This is an automated notification from your BingeAlert</p>
+                    <p>This is an automated notification from BingeAlert</p>
                 </div>
             </div>
         </body>
@@ -1108,4 +1108,3 @@ class EmailService:
         
         logger.info(f"Maintenance {email_type} email: sent={sent}, failed={failed}, total={len(users)}")
         return {"sent": sent, "failed": failed, "total": len(users)}
-
