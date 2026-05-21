@@ -1670,6 +1670,8 @@ async def get_issues(db: Session = Depends(get_db)):
                 "tmdb_id": issue.tmdb_id,
                 "issue_type": issue.issue_type,
                 "issue_message": issue.issue_message,
+                "season_number": issue.season_number,
+                "episode_number": issue.episode_number,
                 "status": issue.status,
                 "action_taken": issue.action_taken,
                 "error_message": issue.error_message,
@@ -1710,7 +1712,11 @@ async def fix_issue(issue_id: int, db: Session = Depends(get_db)):
             from app.services.sonarr_service import SonarrService, get_all_sonarr_instances
             result = {"success": False, "message": "Series not found in any Sonarr instance"}
             for sonarr_svc in get_all_sonarr_instances():
-                r = await sonarr_svc.blacklist_and_research_series(issue.tmdb_id)
+                r = await sonarr_svc.blacklist_and_research_series(
+                    issue.tmdb_id,
+                    season_number=issue.season_number,
+                    episode_number=issue.episode_number,
+                )
                 if r["success"]:
                     result = r
                     break

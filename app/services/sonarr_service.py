@@ -160,8 +160,14 @@ class SonarrService:
             response.raise_for_status()
             return True
     
-    async def blacklist_and_research_series(self, tmdb_id: int) -> dict:
-        """Blacklist current episode files for a series and trigger a new search.
+    async def blacklist_and_research_series(
+        self,
+        tmdb_id: int,
+        season_number: int = None,
+        episode_number: int = None,
+        allow_full_series: bool = False,
+    ) -> dict:
+        """Blacklist current episode files for a series/season/episode and trigger a new search.
         Returns dict with 'success', 'message', and optionally 'details'."""
         try:
             # Step 1: Find the series in Sonarr by TMDB ID
@@ -170,31 +176,101 @@ class SonarrService:
                 return {"success": False, "message": f"Series with TMDB ID {tmdb_id} not found in Sonarr"}
             
             series_id = series.get("id")
-            
-            # Step 2: Get episode files for this series
+
+            if season_number is None and not allow_full_series:
+                return {
+                    "success": False,
+                    "message": (
+                        "TV issue is missing an affected season; skipped full-series "
+                        "blacklist/search safety guard"
+                    ),
+                    "details": {
+                        "series_id": series_id,
+                        "season_number": None,
+                        "episode_number": episode_number,
+                        "search_scope": "blocked_full_series",
+                        "blacklisted_files": 0,
+                    },
+                }
+
+            # Step 2: Get episode files for this series. When Seerr sent a
+            # season/episode scoped issue, keep Sonarr actions scoped too.
             try:
                 episode_files = await self._get(f"/episodefile?seriesId={series_id}")
             except Exception:
                 episode_files = []
+
+            episode_file_ids = []
+            scoped_episode_ids = []
+
+            if season_number is not None:
+                episodes = await self.get_episodes_by_series(series_id) or []
+                for episode in episodes:
+                    if episode.get("seasonNumber") != season_number:
+                        continue
+                    if episode_number is not None and episode.get("episodeNumber") != episode_number:
+                        continue
+                    if episode.get("id"):
+                        scoped_episode_ids.append(episode["id"])
+                    episode_file_id = episode.get("episodeFileId") or episode.get("episodeFile", {}).get("id")
+                    if episode_file_id:
+                        episode_file_ids.append(episode_file_id)
+
+                if not episode_file_ids and episode_files:
+                    scoped_files = []
+                    for episode_file in episode_files:
+                        if episode_file.get("seasonNumber") != season_number:
+                            continue
+                        if episode_number is not None and episode_file.get("episodeNumber") != episode_number:
+                            continue
+                        scoped_files.append(episode_file)
+                    episode_file_ids = [episode_file["id"] for episode_file in scoped_files if episode_file.get("id")]
+            elif episode_files:
+                episode_file_ids = [episode_file["id"] for episode_file in episode_files if episode_file.get("id")]
             
             blacklisted_count = 0
-            if episode_files:
-                # Blacklist each episode file
-                for ef in episode_files:
+            if episode_file_ids:
+                # Blacklist each scoped episode file
+                for episode_file_id in sorted(set(episode_file_ids)):
                     try:
-                        await self._delete(f"/episodefile/{ef['id']}", params={"addImportExclusion": "true"})
+                        await self._delete(f"/episodefile/{episode_file_id}", params={"addImportExclusion": "true"})
                         blacklisted_count += 1
                     except Exception as e:
-                        logger.warning(f"Failed to blacklist episode file {ef['id']}: {e}")
+                        logger.warning(f"Failed to blacklist episode file {episode_file_id}: {e}")
             
-            # Step 3: Trigger a series search
-            logger.info(f"Triggering new search for series {series.get('title')}")
-            await self._post("/command", {"name": "SeriesSearch", "seriesId": series_id})
+            # Step 3: Trigger a scoped search when possible.
+            if season_number is not None and episode_number is not None and scoped_episode_ids:
+                logger.info(
+                    f"Triggering episode search for {series.get('title')} S{season_number:02d}E{episode_number:02d}"
+                )
+                await self._post("/command", {"name": "EpisodeSearch", "episodeIds": scoped_episode_ids})
+                scope_message = f"{series.get('title')} S{season_number:02d}E{episode_number:02d}"
+                search_scope = "episode"
+            elif season_number is not None:
+                logger.info(f"Triggering season search for {series.get('title')} season {season_number}")
+                await self._post("/command", {
+                    "name": "SeasonSearch",
+                    "seriesId": series_id,
+                    "seasonNumber": season_number,
+                })
+                scope_message = f"{series.get('title')} season {season_number}"
+                search_scope = "season"
+            else:
+                logger.info(f"Triggering new search for series {series.get('title')}")
+                await self._post("/command", {"name": "SeriesSearch", "seriesId": series_id})
+                scope_message = series.get("title")
+                search_scope = "series"
             
             return {
                 "success": True,
-                "message": f"Blacklisted {blacklisted_count} file(s) and triggered re-search for {series.get('title')}",
-                "details": {"series_id": series_id, "blacklisted_files": blacklisted_count}
+                "message": f"Blacklisted {blacklisted_count} file(s) and triggered re-search for {scope_message}",
+                "details": {
+                    "series_id": series_id,
+                    "season_number": season_number,
+                    "episode_number": episode_number,
+                    "search_scope": search_scope,
+                    "blacklisted_files": blacklisted_count,
+                }
             }
             
         except Exception as e:

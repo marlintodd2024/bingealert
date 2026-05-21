@@ -198,6 +198,8 @@ class ReportedIssue(Base):
     title = Column(String, nullable=False)
     issue_type = Column(String, nullable=True)  # 'video' | 'audio' | 'subtitle' | 'other'
     issue_message = Column(Text, nullable=True)
+    season_number = Column(Integer, nullable=True)
+    episode_number = Column(Integer, nullable=True)
     status = Column(String, nullable=False, default="reported")
     action_taken = Column(String, nullable=True)
     resolved_at = Column(DateTime, nullable=True)

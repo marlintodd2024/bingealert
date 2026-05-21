@@ -4,7 +4,7 @@ import ipaddress
 from sqlalchemy.orm import Session
 import logging
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 from app.database import get_db, MediaRequest, EpisodeTracking, Notification, User
 from app.schemas import SonarrWebhook, RadarrWebhook, WebhookResponse
@@ -15,6 +15,101 @@ from app.security import clean_email_address, sanitize_for_log
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _coerce_positive_int(value) -> Optional[int]:
+    """Return a positive integer from Seerr's mixed template values."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value >= 0 else None
+    if isinstance(value, float):
+        return int(value) if value.is_integer() and value >= 0 else None
+    if isinstance(value, str):
+        import re
+
+        match = re.search(r"\d+", value)
+        if match:
+            return int(match.group(0))
+    return None
+
+
+def _extract_issue_scope(webhook: dict) -> tuple[Optional[int], Optional[int]]:
+    """Extract season/episode scope from the inconsistent Seerr issue payload."""
+    issue = webhook.get("issue") or {}
+    media = webhook.get("media") or {}
+    extra = webhook.get("extra") or []
+    candidates: list[tuple[str, object]] = []
+
+    for container in (issue, media, webhook):
+        if not isinstance(container, dict):
+            continue
+        for key, value in container.items():
+            candidates.append((str(key), value))
+
+    for item in extra:
+        if not isinstance(item, dict):
+            continue
+        label = item.get("name") or item.get("label") or item.get("key") or ""
+        candidates.append((str(label), item.get("value")))
+
+    season_number = None
+    episode_number = None
+
+    season_keys = {
+        "season",
+        "season number",
+        "season_number",
+        "seasonnumber",
+        "seasonNumber",
+        "season_number_short",
+    }
+    episode_keys = {
+        "episode",
+        "episode number",
+        "episode_number",
+        "episodenumber",
+        "episodeNumber",
+    }
+
+    for raw_key, value in candidates:
+        key = raw_key.strip()
+        normalized = key.lower().replace("-", " ").replace("_", " ")
+        compact = normalized.replace(" ", "")
+
+        if season_number is None and (
+            normalized in season_keys
+            or compact in season_keys
+            or ("season" in normalized and "count" not in normalized)
+        ):
+            season_number = _coerce_positive_int(value)
+        if episode_number is None and (
+            normalized in episode_keys
+            or compact in episode_keys
+            or "episode" in normalized
+        ):
+            episode_number = _coerce_positive_int(value)
+
+    if season_number is None or episode_number is None:
+        import re
+
+        haystack = " ".join(
+            str(value)
+            for key, value in candidates
+            if value is not None and any(token in key.lower() for token in ("season", "episode", "reported media"))
+        )
+        if season_number is None:
+            match = re.search(r"\bS(?:eason)?\s*(\d+)\b", haystack, re.IGNORECASE)
+            if match:
+                season_number = int(match.group(1))
+        if episode_number is None:
+            match = re.search(r"\bE(?:pisode)?\s*(\d+)\b", haystack, re.IGNORECASE)
+            if match:
+                episode_number = int(match.group(1))
+
+    return season_number, episode_number
 
 
 def _check_webhook_auth(request: Request):
@@ -701,6 +796,7 @@ async def _handle_issue_webhook(webhook: dict, background_tasks: BackgroundTasks
         extra = webhook.get('extra', [])
         subject = webhook.get('subject', '')
         message_text = webhook.get('message', '')
+        season_number, episode_number = _extract_issue_scope(webhook)
         
         media_type = media.get('media_type', '')
         tmdb_id = media.get('tmdbId')
@@ -816,13 +912,20 @@ async def _handle_issue_webhook(webhook: dict, background_tasks: BackgroundTasks
             title=title,
             issue_type=issue_type,
             issue_message=issue_message,
+            season_number=season_number,
+            episode_number=episode_number,
             status="reported"
         )
         db.add(reported_issue)
         db.commit()
         db.refresh(reported_issue)
         
-        logger.info(f"Issue reported: {title} ({media_type}) - Type: {issue_type} - By: {reported_by_username or 'Unknown'}")
+        scope = ""
+        if season_number is not None:
+            scope = f" S{season_number:02d}"
+            if episode_number is not None:
+                scope += f"E{episode_number:02d}"
+        logger.info(f"Issue reported: {title}{scope} ({media_type}) - Type: {issue_type} - By: {reported_by_username or 'Unknown'}")
         
         # Get autofix mode
         import os
@@ -1006,7 +1109,11 @@ async def _auto_fix_issue(issue_id: int):
                 from app.services.sonarr_service import SonarrService, get_all_sonarr_instances
                 result = {"success": False, "message": "Series not found in any Sonarr instance"}
                 for sonarr_svc in get_all_sonarr_instances():
-                    r = await sonarr_svc.blacklist_and_research_series(issue.tmdb_id)
+                    r = await sonarr_svc.blacklist_and_research_series(
+                        issue.tmdb_id,
+                        season_number=issue.season_number,
+                        episode_number=issue.episode_number,
+                    )
                     if r["success"]:
                         result = r
                         break

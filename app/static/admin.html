@@ -3266,6 +3266,14 @@
                 const statusIcon = statusIcons[issue.status] || '❓';
                 const typeIcon = issueTypeIcons[issue.issue_type] || '❓';
                 const mediaIcon = issue.media_type === 'movie' ? '🎬' : '📺';
+                let scopeLabel = '';
+                if (issue.season_number !== null && issue.season_number !== undefined) {
+                    scopeLabel = ` <span style="color: #999; font-size: 12px;">S${String(issue.season_number).padStart(2, '0')}`;
+                    if (issue.episode_number !== null && issue.episode_number !== undefined) {
+                        scopeLabel += `E${String(issue.episode_number).padStart(2, '0')}`;
+                    }
+                    scopeLabel += '</span>';
+                }
                 
                 const date = issue.created_at ? new Date(issue.created_at).toLocaleDateString() : '';
                 const message = issue.issue_message ? 
@@ -3274,7 +3282,7 @@
                 
                 let actions = '';
                 if (issue.status === 'reported' || issue.status === 'failed') {
-                    actions += `<button onclick="fixIssue(${issue.id})" style="padding: 4px 10px; background: #2196f3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; margin-right: 4px;" title="Blacklist current file and search for new one">🔧 Fix</button>`;
+                    actions += `<button onclick="fixIssue(${issue.id})" style="padding: 4px 10px; background: #2196f3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; margin-right: 4px;" title="Blacklist only the affected movie, season, or episode and search for a replacement">🔧 Fix</button>`;
                     actions += `<button onclick="resolveIssue(${issue.id})" style="padding: 4px 10px; background: #4caf50; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; margin-right: 4px;" title="Mark as resolved without re-downloading">✅</button>`;
                 }
                 if (issue.status === 'fixing') {
@@ -3284,7 +3292,7 @@
                 
                 return `
                     <tr>
-                        <td>${mediaIcon} ${issue.title}</td>
+                        <td>${mediaIcon} ${issue.title}${scopeLabel}</td>
                         <td>${issue.media_type}</td>
                         <td>${typeIcon} ${issue.issue_type || 'other'}</td>
                         <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis;" title="${issue.issue_message || ''}">${message}</td>
