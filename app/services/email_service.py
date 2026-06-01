@@ -6,7 +6,7 @@ import logging
 from typing import List, Optional
 from datetime import datetime
 
-from app.config import settings
+from app.config import normalize_smtp_security, settings
 from app.database import Notification, User
 
 logger = logging.getLogger(__name__)
@@ -48,6 +48,14 @@ class EmailService:
     def __init__(self):
         self.smtp_host = settings.smtp_host
         self.smtp_port = settings.smtp_port
+        try:
+            self.smtp_security = normalize_smtp_security(settings.smtp_security)
+        except ValueError:
+            logger.warning(
+                "Invalid smtp_security %r; falling back to STARTTLS",
+                settings.smtp_security,
+            )
+            self.smtp_security = "starttls"
         self.smtp_user = settings.smtp_user
         self.smtp_password = settings.smtp_password
         self.smtp_from = settings.smtp_from
@@ -77,6 +85,11 @@ class EmailService:
             # Add HTML body
             html_part = MIMEText(html_body, "html")
             message.attach(html_part)
+
+            tls_kwargs = {
+                "use_tls": self.smtp_security == "ssl",
+                "start_tls": self.smtp_security == "starttls",
+            }
             
             # Send email with or without authentication
             if self.use_auth:
@@ -86,14 +99,15 @@ class EmailService:
                     port=self.smtp_port,
                     username=self.smtp_user,
                     password=self.smtp_password,
-                    start_tls=True
+                    **tls_kwargs,
                 )
             else:
                 # No authentication
                 await aiosmtplib.send(
                     message,
                     hostname=self.smtp_host,
-                    port=self.smtp_port
+                    port=self.smtp_port,
+                    **tls_kwargs,
                 )
             
             logger.info(f"Email sent successfully to {to_email}")

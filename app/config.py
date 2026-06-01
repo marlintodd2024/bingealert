@@ -27,6 +27,27 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # non-standard path (e.g. /var/lib/bingealert).
 DATA_DIR = Path(os.getenv("DATA_DIR", "/data"))
 CONFIG_FILE = DATA_DIR / "config.json"
+SMTP_SECURITY_MODES = {"starttls", "ssl", "none"}
+
+
+def normalize_smtp_security(value: Any) -> str:
+    """Normalize SMTP connection security mode."""
+    raw = str(value or "starttls").strip().lower().replace("-", "_")
+    aliases = {
+        "tls": "starttls",
+        "start_tls": "starttls",
+        "ssl_tls": "ssl",
+        "smtps": "ssl",
+        "plain": "none",
+        "no_ssl": "none",
+        "no_tls": "none",
+        "off": "none",
+        "false": "none",
+    }
+    mode = aliases.get(raw, raw)
+    if mode not in SMTP_SECURITY_MODES:
+        raise ValueError("smtp_security must be one of: starttls, ssl, none")
+    return mode
 
 
 def _read_config_file() -> dict[str, Any]:
@@ -71,6 +92,7 @@ class Settings(BaseSettings):
     # ----- SMTP -----
     smtp_host: Optional[str] = None
     smtp_port: int = 587
+    smtp_security: str = "starttls"  # starttls | ssl | none
     smtp_user: Optional[str] = None
     smtp_password: Optional[str] = None
     smtp_from: Optional[str] = None

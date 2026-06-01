@@ -66,6 +66,7 @@ class BackupService:
                     'plex_url': os.getenv('PLEX_URL'),
                     'smtp_host': os.getenv('SMTP_HOST'),
                     'smtp_port': os.getenv('SMTP_PORT'),
+                    'smtp_security': os.getenv('SMTP_SECURITY'),
                     'smtp_from': os.getenv('SMTP_FROM'),
                     # Note: API keys and passwords are NOT included for security
                     'note': 'API keys and passwords must be manually configured after restore'

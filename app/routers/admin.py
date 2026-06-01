@@ -1072,9 +1072,14 @@ async def get_config():
     raw os.environ. We render the response in the v1-nested shape so the
     existing admin.html JS keeps working without modification.
     """
-    from app.config import settings as _s
+    from app.config import normalize_smtp_security, settings as _s
 
     try:
+        try:
+            smtp_security = normalize_smtp_security(_s.smtp_security)
+        except ValueError:
+            smtp_security = "starttls"
+
         # NOTIFICATION_* timing values were never actually consumed by any worker
         # in v1 -- the email service has its own hardcoded thresholds. They're
         # echoed back unchanged so the admin UI keeps showing fields the user
@@ -1089,6 +1094,7 @@ async def get_config():
             "smtp": {
                 "host": _s.smtp_host or "",
                 "port": str(_s.smtp_port),
+                "security": smtp_security,
                 "from": _s.smtp_from or "",
                 "user": _s.smtp_user or "",
                 "password": _mask_secret(_s.smtp_password),
@@ -1200,7 +1206,7 @@ async def update_config(config: dict, db: Session = Depends(get_db)):
     the worker reads them lazily each cycle so they apply without restart.
     """
     from app.auth import hash_password
-    from app.config import settings as _s
+    from app.config import normalize_smtp_security, settings as _s
 
     updates: dict = {}
     label_updates: list = []
@@ -1227,6 +1233,7 @@ async def update_config(config: dict, db: Session = Depends(get_db)):
     # SMTP / email
     take(["smtp", "host"], "smtp_host")
     take(["smtp", "port"], "smtp_port", transform=int)
+    take(["smtp", "security"], "smtp_security", transform=normalize_smtp_security)
     take(["smtp", "from"], "smtp_from")
     take(["smtp", "user"], "smtp_user", allow_empty=True)
     take(["smtp", "password"], "smtp_password", secret=True)
@@ -2119,21 +2126,27 @@ async def get_seerr_sonarr_servers():
 async def test_email_connection(data: dict):
     """Test SMTP email connection"""
     try:
-        from app.services.email_service import EmailService
+        from app.config import normalize_smtp_security
         import smtplib
-        from email.mime.text import MIMEText
         
         host = data.get('host')
-        port = data.get('port', 587)
+        port = int(data.get('port') or 587)
+        security = normalize_smtp_security(data.get('security', 'starttls'))
         user = data.get('user')
         password = data.get('password')
-        from_addr = data.get('from')
         
         # Test connection
-        server = smtplib.SMTP(host, port)
-        server.starttls()
-        server.login(user, password)
-        server.quit()
+        if security == "ssl":
+            server = smtplib.SMTP_SSL(host, port, timeout=15)
+        else:
+            server = smtplib.SMTP(host, port, timeout=15)
+            if security == "starttls":
+                server.starttls()
+        try:
+            if user or password:
+                server.login(user, password)
+        finally:
+            server.quit()
         
         return {"success": True, "message": "SMTP connection successful!"}
         

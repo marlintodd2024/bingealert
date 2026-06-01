@@ -28,7 +28,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from app.auth import hash_password
-from app.config import settings
+from app.config import normalize_smtp_security, settings
 from app.security import normalize_http_url, validate_ip_or_cidr_csv
 
 
@@ -47,6 +47,7 @@ class WizardPayload(BaseModel):
     # SMTP
     smtp_host: str
     smtp_port: int = 587
+    smtp_security: str = "starttls"
     smtp_user: Optional[str] = None
     smtp_password: Optional[str] = None
     smtp_from: str
@@ -151,6 +152,7 @@ async def save_setup(
     config: dict = payload.model_dump(exclude={"admin_password"}, exclude_none=False)
     try:
         config["jellyseerr_url"] = normalize_http_url(payload.jellyseerr_url)
+        config["smtp_security"] = normalize_smtp_security(payload.smtp_security)
         config["sonarr_url"] = normalize_http_url(payload.sonarr_url)
         config["radarr_url"] = normalize_http_url(payload.radarr_url)
         config["sonarr_anime_url"] = normalize_http_url(

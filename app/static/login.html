@@ -151,6 +151,65 @@
             font-size: 11px;
             color: rgba(255, 255, 255, 0.2);
         }
+
+        .coffee-toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            max-width: min(360px, calc(100vw - 40px));
+            padding: 12px 14px;
+            background: #1e2140;
+            border: 1px solid rgba(255,255,255,0.12);
+            border-left: 4px solid var(--accent-primary);
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            animation: coffeeToastIn 0.18s ease-out;
+        }
+
+        .coffee-toast.leaving {
+            animation: coffeeToastOut 0.2s ease-in forwards;
+        }
+
+        .coffee-toast a {
+            color: var(--accent-secondary);
+            font-size: 14px;
+            line-height: 1.4;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .coffee-toast a:hover {
+            color: #fff;
+        }
+
+        .coffee-toast button {
+            flex: 0 0 auto;
+            background: transparent;
+            border: none;
+            color: #999;
+            cursor: pointer;
+            font-size: 18px;
+            padding: 0 4px;
+            line-height: 1;
+        }
+
+        .coffee-toast button:hover {
+            color: var(--text-primary);
+        }
+
+        @keyframes coffeeToastIn {
+            from { transform: translateX(110%); opacity: 0; }
+            to   { transform: translateX(0); opacity: 1; }
+        }
+
+        @keyframes coffeeToastOut {
+            from { transform: translateX(0); opacity: 1; }
+            to   { transform: translateX(110%); opacity: 0; }
+        }
     </style>
 </head>
 <body>
@@ -296,7 +355,55 @@
         init();
     </script>
 
-    <footer style="position: fixed; bottom: 16px; right: 20px; color: #555; font-size: 11px; text-align: right;">
+    <script>
+        const BUYMEACOFFEE_URL = 'https://buymeacoffee.com/marlintodd';
+        const COFFEE_TOAST_KEY = 'bingealert:coffee-toast-shown:' + window.location.pathname;
+
+        function shouldShowCoffeeToast() {
+            try {
+                if (sessionStorage.getItem(COFFEE_TOAST_KEY)) return false;
+                sessionStorage.setItem(COFFEE_TOAST_KEY, '1');
+            } catch (_) {}
+            return true;
+        }
+
+        function dismissCoffeeToast(toast) {
+            if (!toast) return;
+            toast.classList.add('leaving');
+            setTimeout(() => {
+                if (toast.parentNode) toast.parentNode.removeChild(toast);
+            }, 200);
+        }
+
+        function showCoffeeToast() {
+            if (!shouldShowCoffeeToast()) return;
+
+            const toast = document.createElement('div');
+            toast.className = 'coffee-toast';
+
+            const link = document.createElement('a');
+            link.href = BUYMEACOFFEE_URL;
+            link.target = '_blank';
+            link.rel = 'noopener';
+            link.textContent = 'Enjoying BingeAlert? Buy Me a Coffee!';
+
+            const close = document.createElement('button');
+            close.type = 'button';
+            close.setAttribute('aria-label', 'Dismiss');
+            close.textContent = '×';
+            close.addEventListener('click', () => dismissCoffeeToast(toast));
+
+            toast.appendChild(link);
+            toast.appendChild(close);
+            document.body.appendChild(toast);
+
+            setTimeout(() => dismissCoffeeToast(toast), 9000);
+        }
+
+        window.addEventListener('load', () => setTimeout(showCoffeeToast, 1500));
+    </script>
+
+    <footer style="position: fixed; bottom: 16px; left: 20px; right: 20px; color: #555; font-size: 11px; text-align: right; line-height: 1.8;">
         <span>© 2026 BingeAlert <span id="footer-version"></span></span>
         <span style="margin: 0 6px;">·</span>
         <a href="https://github.com/marlintodd2024/bingealert" target="_blank" style="color: #777; text-decoration: none;">GitHub</a>
@@ -304,6 +411,8 @@
         <a href="https://github.com/marlintodd2024/bingealert/issues/new?template=bug_report.yml" target="_blank" style="color: #777; text-decoration: none;">Report a Bug</a>
         <span style="margin: 0 6px;">·</span>
         <a href="https://github.com/marlintodd2024/bingealert/issues/new?template=feature_request.yml" target="_blank" style="color: #777; text-decoration: none;">Request a Feature</a>
+        <span style="margin: 0 6px;">·</span>
+        <a href="https://buymeacoffee.com/marlintodd" target="_blank" rel="noopener" style="color: #e5a00d; text-decoration: none;">Buy Me a Coffee</a>
     </footer>
     <script>
       fetch('/api/version').then(r => r.ok ? r.json() : null)
