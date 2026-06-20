@@ -1,9 +1,16 @@
 FROM python:3.11-slim
 
+ARG BUILD_SHA=unknown
+ARG BUILD_TAG=dev
+
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
-    DATA_DIR=/data
+    DATA_DIR=/data \
+    BINGEALERT_BUILD_SHA=${BUILD_SHA} \
+    BINGEALERT_BUILD_TAG=${BUILD_TAG}
+
+LABEL org.opencontainers.image.source="https://github.com/marlintodd2024/bingealert"
 
 # tini = proper PID 1 (reaps zombies, forwards signals to uvicorn)
 # gcc kept for any source-build wheel fallback on arm64

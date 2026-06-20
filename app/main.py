@@ -19,6 +19,7 @@ import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import httpx
 from fastapi import FastAPI, Request
@@ -45,32 +46,95 @@ logging.basicConfig(
 logger = logging.getLogger("bingealert")
 
 _STATIC_DIR = Path(__file__).resolve().parent / "static"
+_REPOSITORY = "marlintodd2024/bingealert"
 _LATEST_RELEASE_API_URL = (
-    "https://api.github.com/repos/marlintodd2024/bingealert/releases/latest"
+    f"https://api.github.com/repos/{_REPOSITORY}/releases/latest"
 )
-_LATEST_RELEASE_URL = "https://github.com/marlintodd2024/bingealert/releases/latest"
+_REPOSITORY_URL = f"https://github.com/{_REPOSITORY}"
+_LATEST_RELEASE_URL = f"{_REPOSITORY_URL}/releases/latest"
+_SECURITY_ALERTS_URL = f"{_REPOSITORY_URL}/security/dependabot"
+_DEPENDENCY_GRAPH_URL = f"{_REPOSITORY_URL}/network/dependencies"
+_ACTIONS_SECURITY_URL = f"{_REPOSITORY_URL}/actions/workflows/dependency-audit.yml"
+_DOCKER_IMAGE = "ghcr.io/marlintodd2024/bingealert"
+_DOCKER_PACKAGE_URL = f"{_REPOSITORY_URL}/pkgs/container/bingealert"
 _VERSION_CACHE_TTL_SECONDS = 6 * 60 * 60
 _VERSION_ERROR_CACHE_TTL_SECONDS = 30 * 60
 _version_cache: dict[str, object] = {"payload": None, "expires_at": 0.0}
 _version_cache_lock = asyncio.Lock()
+_SEMVER_RE = re.compile(
+    r"^v?"
+    r"(?P<major>0|[1-9]\d*)\."
+    r"(?P<minor>0|[1-9]\d*)\."
+    r"(?P<patch>0|[1-9]\d*)"
+    r"(?:-(?P<prerelease>[0-9A-Za-z.-]+))?"
+    r"(?:\+[0-9A-Za-z.-]+)?$"
+)
 
 
 def _normalize_version(value: str) -> str:
     return value.strip().lstrip("vV")
 
 
-def _version_key(value: str) -> tuple[int, int, int]:
-    match = re.match(r"^(\d+)(?:\.(\d+))?(?:\.(\d+))?", _normalize_version(value))
+def _parse_version(value: str) -> tuple[int, int, int, list[str] | None]:
+    normalized = _normalize_version(value)
+    match = _SEMVER_RE.match(normalized)
+    if match:
+        prerelease = match.group("prerelease")
+        return (
+            int(match.group("major")),
+            int(match.group("minor")),
+            int(match.group("patch")),
+            prerelease.split(".") if prerelease else None,
+        )
+
+    match = re.match(r"^(\d+)(?:\.(\d+))?(?:\.(\d+))?", normalized)
     if not match:
-        return (0, 0, 0)
-    return tuple(int(part or 0) for part in match.groups())
+        return (0, 0, 0, None)
+    major, minor, patch = (int(part or 0) for part in match.groups())
+    return (major, minor, patch, None)
+
+
+def _compare_prerelease(left: list[str] | None, right: list[str] | None) -> int:
+    if left is None and right is None:
+        return 0
+    if left is None:
+        return 1
+    if right is None:
+        return -1
+
+    for left_part, right_part in zip(left, right):
+        left_numeric = left_part.isdigit()
+        right_numeric = right_part.isdigit()
+        if left_numeric and right_numeric:
+            left_int = int(left_part)
+            right_int = int(right_part)
+            if left_int != right_int:
+                return 1 if left_int > right_int else -1
+        elif left_numeric != right_numeric:
+            return -1 if left_numeric else 1
+        elif left_part != right_part:
+            return 1 if left_part > right_part else -1
+
+    if len(left) == len(right):
+        return 0
+    return 1 if len(left) > len(right) else -1
+
+
+def _compare_versions(left: str, right: str) -> int:
+    left_major, left_minor, left_patch, left_pre = _parse_version(left)
+    right_major, right_minor, right_patch, right_pre = _parse_version(right)
+    left_core = (left_major, left_minor, left_patch)
+    right_core = (right_major, right_minor, right_patch)
+    if left_core != right_core:
+        return 1 if left_core > right_core else -1
+    return _compare_prerelease(left_pre, right_pre)
 
 
 def _is_newer_version(candidate: str, current: str) -> bool:
-    return _version_key(candidate) > _version_key(current)
+    return _compare_versions(candidate, current) > 0
 
 
-async def _fetch_latest_release() -> tuple[str, str]:
+async def _fetch_latest_release() -> dict[str, Any]:
     headers = {
         "Accept": "application/vnd.github+json",
         "User-Agent": f"BingeAlert/{__version__}",
@@ -83,48 +147,101 @@ async def _fetch_latest_release() -> tuple[str, str]:
     if not latest_version:
         raise ValueError("GitHub latest release response did not include a version")
     latest_url = data.get("html_url") or _LATEST_RELEASE_URL
-    return latest_version, latest_url
+    return {
+        "version": latest_version,
+        "name": data.get("name") or f"BingeAlert v{latest_version}",
+        "url": latest_url,
+        "notes": data.get("body") or "",
+        "published_at": data.get("published_at"),
+        "prerelease": data.get("prerelease") is True,
+    }
+
+
+def _build_metadata() -> dict[str, str | None]:
+    source_commit = (
+        os.getenv("BINGEALERT_BUILD_SHA")
+        or os.getenv("BUILD_SHA")
+        or os.getenv("GITHUB_SHA")
+        or ""
+    ).strip()
+    source_commit_url = (
+        f"{_REPOSITORY_URL}/commit/{source_commit}" if source_commit else None
+    )
+    return {
+        "source_commit": source_commit or None,
+        "source_commit_short": source_commit[:7] if source_commit else None,
+        "source_commit_url": source_commit_url,
+        "build_tag": os.getenv("BINGEALERT_BUILD_TAG") or None,
+    }
 
 
 def _base_version_payload() -> dict:
     return {
         "version": __version__,
+        "repository_url": _REPOSITORY_URL,
         "latest_version": None,
+        "latest_name": None,
         "latest_url": _LATEST_RELEASE_URL,
+        "latest_release_notes": "",
+        "latest_published_at": None,
         "update_available": False,
         "checked_at": None,
+        "check_error": None,
+        "security": {
+            "dependabot_url": _SECURITY_ALERTS_URL,
+            "dependency_graph_url": _DEPENDENCY_GRAPH_URL,
+            "audit_workflow_url": _ACTIONS_SECURITY_URL,
+        },
+        "docker": {
+            "image": _DOCKER_IMAGE,
+            "package_url": _DOCKER_PACKAGE_URL,
+            "current_tag": __version__,
+            "latest_tag": None,
+            "pull_command": f"docker pull {_DOCKER_IMAGE}:{__version__}",
+            "compose_command": "docker compose pull && docker compose up -d --force-recreate",
+        },
+        **_build_metadata(),
     }
 
 
-async def _version_payload() -> dict:
+async def _version_payload(force_refresh: bool = False) -> dict:
     now = time.monotonic()
     cached_payload = _version_cache.get("payload")
-    if cached_payload and now < float(_version_cache["expires_at"]):
+    if not force_refresh and cached_payload and now < float(_version_cache["expires_at"]):
         return cached_payload
 
     async with _version_cache_lock:
         now = time.monotonic()
         cached_payload = _version_cache.get("payload")
-        if cached_payload and now < float(_version_cache["expires_at"]):
+        if not force_refresh and cached_payload and now < float(_version_cache["expires_at"]):
             return cached_payload
 
         payload = _base_version_payload()
         cache_ttl = _VERSION_ERROR_CACHE_TTL_SECONDS
         try:
-            latest_version, latest_url = await _fetch_latest_release()
+            release = await _fetch_latest_release()
+            latest_version = release["version"]
             payload.update(
                 {
                     "latest_version": latest_version,
-                    "latest_url": latest_url,
+                    "latest_name": release["name"],
+                    "latest_url": release["url"],
+                    "latest_release_notes": release["notes"],
+                    "latest_published_at": release["published_at"],
                     "update_available": _is_newer_version(
                         latest_version, __version__
                     ),
                     "checked_at": datetime.now(timezone.utc).isoformat(),
                 }
             )
+            payload["docker"]["latest_tag"] = latest_version
+            payload["docker"][
+                "pull_command"
+            ] = f"docker pull {_DOCKER_IMAGE}:{latest_version}"
             cache_ttl = _VERSION_CACHE_TTL_SECONDS
         except (httpx.HTTPError, ValueError) as e:
             logger.debug("latest release check failed: %s", e)
+            payload["check_error"] = "Latest release check failed"
 
         _version_cache["payload"] = payload
         _version_cache["expires_at"] = time.monotonic() + cache_ttl
@@ -240,9 +357,10 @@ if _STATIC_DIR.is_dir():
 
 
 @app.get("/api/version")
-async def api_version() -> dict:
+async def api_version(request: Request) -> dict:
     """Public version probe -- consumed by the admin/login footer."""
-    return await _version_payload()
+    force_refresh = request.query_params.get("refresh") in {"1", "true", "yes"}
+    return await _version_payload(force_refresh=force_refresh)
 
 
 @app.get("/service-worker.js")

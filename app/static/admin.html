@@ -643,6 +643,118 @@
             to   { transform: translateX(110%); opacity: 0; }
         }
 
+        .update-banner {
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 20px;
+            padding: 14px 16px;
+            background: rgba(229, 160, 13, 0.12);
+            border: 1px solid rgba(229, 160, 13, 0.28);
+            border-left: 4px solid #e5a00d;
+            border-radius: 8px;
+        }
+        .update-banner.show { display: flex; }
+        .update-banner-title {
+            color: #f4c542;
+            font-weight: 700;
+            margin-bottom: 3px;
+        }
+        .update-banner-meta {
+            color: #c7c7c7;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+        .update-banner-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+        .update-panel-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .update-metric {
+            background: rgba(0,0,0,0.22);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 8px;
+            padding: 12px;
+            min-height: 78px;
+        }
+        .update-metric-label {
+            color: #888;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-bottom: 7px;
+        }
+        .update-metric-value {
+            color: #e4e4e4;
+            font-size: 14px;
+            line-height: 1.4;
+            word-break: break-word;
+        }
+        .update-command {
+            background: rgba(0,0,0,0.35);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 8px;
+            color: #d8d8d8;
+            font-family: "Courier New", monospace;
+            font-size: 12px;
+            line-height: 1.5;
+            padding: 12px;
+            white-space: pre-wrap;
+            word-break: break-word;
+            margin: 10px 0;
+        }
+        #releaseNotesModal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.72);
+            z-index: 100003;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        #releaseNotesModal.open { display: flex; }
+        #releaseNotesModal .release-notes-box {
+            background: #1a1a2e;
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 12px;
+            width: min(760px, 100%);
+            max-height: 86vh;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+            display: flex;
+            flex-direction: column;
+        }
+        #releaseNotesModal .release-notes-head {
+            padding: 18px 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        #releaseNotesModal h3 {
+            color: #e5a00d;
+            margin: 0;
+            font-size: 18px;
+        }
+        #releaseNotesBody {
+            padding: 18px 20px;
+            overflow-y: auto;
+            color: #e4e4e4;
+            font-family: "Courier New", monospace;
+            font-size: 12px;
+            line-height: 1.55;
+            white-space: pre-wrap;
+        }
+
         /* Confirm modal */
         #confirmModal {
             display: none;
@@ -1412,6 +1524,17 @@
         <!-- Toast notification container -->
         <div id="toastContainer" aria-live="polite" aria-atomic="true"></div>
 
+        <div id="updateBanner" class="update-banner">
+            <div>
+                <div class="update-banner-title" id="updateBannerTitle">Update available</div>
+                <div class="update-banner-meta" id="updateBannerMeta"></div>
+            </div>
+            <div class="update-banner-actions">
+                <button onclick="openReleaseNotesModal()" class="secondary" style="padding: 8px 12px; font-size: 12px;">Release Notes</button>
+                <a id="updateBannerLink" href="https://github.com/marlintodd2024/bingealert/releases/latest" target="_blank" rel="noopener" class="action-btn" style="padding: 8px 12px; font-size: 12px; text-decoration: none;">Open Release</a>
+            </div>
+        </div>
+
         <!-- Confirm modal -->
         <div id="confirmModal" role="dialog" aria-modal="true">
             <div class="confirm-box">
@@ -1443,6 +1566,17 @@
                     <tr><td><kbd>?</kbd></td><td>Show this help</td></tr>
                     <tr><td><kbd>Esc</kbd></td><td>Cancel modal / close help</td></tr>
                 </table>
+            </div>
+        </div>
+
+        <!-- Release notes modal -->
+        <div id="releaseNotesModal" role="dialog" aria-modal="true">
+            <div class="release-notes-box">
+                <div class="release-notes-head">
+                    <h3 id="releaseNotesTitle">Release Notes</h3>
+                    <button onclick="closeReleaseNotesModal()" class="secondary" style="padding: 6px 10px; font-size: 12px;">Close</button>
+                </div>
+                <pre id="releaseNotesBody"></pre>
             </div>
         </div>
 
@@ -1800,6 +1934,60 @@
         </div>
 
         <div id="settingsTab" class="tab-content">
+            <!-- System Updates Section -->
+            <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 12px; margin-bottom: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; flex-wrap: wrap;">
+                    <div>
+                        <h3 style="margin-bottom: 8px; color: #e5a00d;">⬆️ System & Updates</h3>
+                        <p style="color: #999; font-size: 13px; line-height: 1.6; margin: 0;">Version, release notes, dependency/security links, and Docker image update details.</p>
+                    </div>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button onclick="loadVersionInfo(true)" id="checkUpdatesBtn" class="secondary" style="padding: 8px 12px; font-size: 12px;">🔄 Check Updates</button>
+                        <button onclick="openReleaseNotesModal()" class="secondary" style="padding: 8px 12px; font-size: 12px;">📄 Release Notes</button>
+                    </div>
+                </div>
+
+                <div class="update-panel-grid">
+                    <div class="update-metric">
+                        <div class="update-metric-label">Current Version</div>
+                        <div class="update-metric-value" id="update-current-version">-</div>
+                    </div>
+                    <div class="update-metric">
+                        <div class="update-metric-label">Latest Release</div>
+                        <div class="update-metric-value" id="update-latest-version">-</div>
+                    </div>
+                    <div class="update-metric">
+                        <div class="update-metric-label">Last Checked</div>
+                        <div class="update-metric-value" id="update-last-checked">-</div>
+                    </div>
+                    <div class="update-metric">
+                        <div class="update-metric-label">Source Commit</div>
+                        <div class="update-metric-value" id="update-source-commit">-</div>
+                    </div>
+                </div>
+
+                <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                    <h4 style="color: #fff; margin-bottom: 10px; font-size: 14px;">🐳 Docker Image</h4>
+                    <div style="color: #cfcfcf; font-size: 13px; line-height: 1.7;">
+                        <div><strong>Image:</strong> <code id="update-docker-image">-</code></div>
+                        <div><strong>Current tag:</strong> <code id="update-docker-current-tag">-</code></div>
+                        <div><strong>Latest tag:</strong> <code id="update-docker-latest-tag">-</code></div>
+                        <div style="margin-top: 8px;">
+                            <a id="update-docker-package" href="https://github.com/marlintodd2024/bingealert/pkgs/container/bingealert" target="_blank" rel="noopener" style="color: #e5a00d; text-decoration: none;">Open GHCR package</a>
+                        </div>
+                    </div>
+                    <div class="update-command" id="update-docker-command">docker compose pull && docker compose up -d --force-recreate</div>
+                    <button onclick="copyDockerCommand()" class="secondary" style="padding: 8px 12px; font-size: 12px;">Copy Command</button>
+                </div>
+
+                <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
+                    <h4 style="color: #fff; margin-bottom: 10px; font-size: 14px;">🛡️ Dependency & Security</h4>
+                    <div id="update-security-links" style="font-size: 13px; line-height: 1.8; color: #cfcfcf;">
+                        -
+                    </div>
+                </div>
+            </div>
+
             <!-- Batch Timing Section -->
             <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 12px; margin-bottom: 20px;">
                 <h3 style="margin-bottom: 10px; color: #e5a00d;">⏱️ Smart Batching Settings</h3>
@@ -2655,6 +2843,211 @@
             }
             return resp;
         };
+
+        let latestVersionInfo = null;
+        const UPDATE_TOAST_KEY_PREFIX = 'bingealert:update-toast-shown:';
+
+        function setText(id, value) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = value == null || value === '' ? '-' : String(value);
+        }
+
+        function formatDateTime(value) {
+            if (!value) return '-';
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return '-';
+            return date.toLocaleString();
+        }
+
+        function renderVersionFooter(info) {
+            if (!info) return;
+            const versionEl = document.getElementById('footer-version');
+            if (versionEl && info.version) versionEl.textContent = 'v' + info.version;
+
+            const updateEl = document.getElementById('footer-update');
+            const separatorEl = document.getElementById('footer-update-separator');
+            if (!updateEl || !separatorEl) return;
+
+            if (info.update_available && info.latest_version) {
+                updateEl.textContent = 'Update available: v' + info.latest_version;
+                updateEl.href = info.latest_url || 'https://github.com/marlintodd2024/bingealert/releases/latest';
+                updateEl.style.display = 'inline';
+                separatorEl.style.display = 'inline';
+            } else {
+                updateEl.style.display = 'none';
+                separatorEl.style.display = 'none';
+            }
+        }
+
+        function renderUpdateBanner(info) {
+            const banner = document.getElementById('updateBanner');
+            if (!banner || !info) return;
+            if (!info.update_available || !info.latest_version) {
+                banner.classList.remove('show');
+                return;
+            }
+
+            setText('updateBannerTitle', `Update available: v${info.latest_version}`);
+            setText(
+                'updateBannerMeta',
+                `Running v${info.version}. Latest published ${formatDateTime(info.latest_published_at)}.`
+            );
+            const link = document.getElementById('updateBannerLink');
+            if (link) link.href = info.latest_url || 'https://github.com/marlintodd2024/bingealert/releases/latest';
+            banner.classList.add('show');
+        }
+
+        function renderSecurityLinks(info) {
+            const container = document.getElementById('update-security-links');
+            if (!container) return;
+            container.textContent = '';
+            const links = [
+                ['Dependabot alerts', info.security?.dependabot_url],
+                ['Dependency graph', info.security?.dependency_graph_url],
+                ['Dependency audit workflow', info.security?.audit_workflow_url]
+            ];
+            links.forEach(([label, href], idx) => {
+                if (idx > 0) container.appendChild(document.createTextNode(' · '));
+                const a = document.createElement('a');
+                a.href = href || '#';
+                a.target = '_blank';
+                a.rel = 'noopener';
+                a.style.color = '#e5a00d';
+                a.style.textDecoration = 'none';
+                a.textContent = label;
+                container.appendChild(a);
+            });
+            const status = document.createElement('div');
+            status.style.marginTop = '8px';
+            status.style.color = info.check_error ? '#ff9800' : '#999';
+            status.textContent = info.check_error
+                ? 'Latest release check failed. Use the links above for live GitHub status.'
+                : 'Live vulnerability status is tracked by GitHub; this app links to the source of truth.';
+            container.appendChild(status);
+        }
+
+        function renderUpdatePanel(info) {
+            if (!info) return;
+            setText('update-current-version', info.version ? `v${info.version}` : '-');
+            setText(
+                'update-latest-version',
+                info.latest_version
+                    ? `${info.update_available ? 'Update available: ' : ''}v${info.latest_version}`
+                    : 'Unavailable'
+            );
+            setText('update-last-checked', formatDateTime(info.checked_at));
+
+            const sourceEl = document.getElementById('update-source-commit');
+            if (sourceEl) {
+                sourceEl.textContent = '';
+                if (info.source_commit_short && info.source_commit_url) {
+                    const a = document.createElement('a');
+                    a.href = info.source_commit_url;
+                    a.target = '_blank';
+                    a.rel = 'noopener';
+                    a.style.color = '#e5a00d';
+                    a.style.textDecoration = 'none';
+                    a.textContent = info.source_commit_short;
+                    sourceEl.appendChild(a);
+                } else {
+                    sourceEl.textContent = 'Not stamped in this image';
+                }
+            }
+
+            setText('update-docker-image', info.docker?.image);
+            setText('update-docker-current-tag', info.docker?.current_tag ? `v${info.docker.current_tag}` : '-');
+            setText('update-docker-latest-tag', info.docker?.latest_tag ? `v${info.docker.latest_tag}` : '-');
+            setText('update-docker-command', info.docker?.compose_command || 'docker compose pull && docker compose up -d --force-recreate');
+            const pkgLink = document.getElementById('update-docker-package');
+            if (pkgLink && info.docker?.package_url) pkgLink.href = info.docker.package_url;
+            renderSecurityLinks(info);
+        }
+
+        function maybeShowUpdateToast(info) {
+            if (!info?.update_available || !info.latest_version) return;
+            const key = UPDATE_TOAST_KEY_PREFIX + info.latest_version;
+            try {
+                if (sessionStorage.getItem(key)) return;
+                sessionStorage.setItem(key, '1');
+            } catch (_) {}
+            showToast('info', '', {
+                duration: 12000,
+                href: info.latest_url || 'https://github.com/marlintodd2024/bingealert/releases/latest',
+                linkText: `Update available: v${info.latest_version}`
+            });
+        }
+
+        function renderVersionInfo(info, opts) {
+            opts = opts || {};
+            latestVersionInfo = info || latestVersionInfo;
+            if (!latestVersionInfo) return;
+            renderVersionFooter(latestVersionInfo);
+            renderUpdateBanner(latestVersionInfo);
+            renderUpdatePanel(latestVersionInfo);
+            if (opts.notify) maybeShowUpdateToast(latestVersionInfo);
+        }
+
+        async function loadVersionInfo(force) {
+            const btn = document.getElementById('checkUpdatesBtn');
+            if (btn && force) {
+                btn.disabled = true;
+                btn.textContent = '⏳ Checking...';
+            }
+            try {
+                const url = force ? '/api/version?refresh=1' : '/api/version';
+                const response = await fetch(url, { cache: 'no-store' });
+                const info = response.ok ? await response.json() : null;
+                if (info) {
+                    renderVersionInfo(info, { notify: true });
+                    if (force) {
+                        showToast(
+                            info.update_available ? 'info' : 'success',
+                            info.update_available
+                                ? `Update available: v${info.latest_version}`
+                                : 'BingeAlert is up to date.'
+                        );
+                    }
+                } else if (force) {
+                    showWarn('Could not check for updates.');
+                }
+            } catch (error) {
+                if (force) showWarn('Could not check for updates: ' + error.message);
+            } finally {
+                if (btn && force) {
+                    btn.disabled = false;
+                    btn.textContent = '🔄 Check Updates';
+                }
+            }
+        }
+
+        function openReleaseNotesModal() {
+            const modal = document.getElementById('releaseNotesModal');
+            if (!modal) return;
+            const info = latestVersionInfo || {};
+            const title = info.latest_name || (info.latest_version ? `BingeAlert v${info.latest_version}` : 'Release Notes');
+            setText('releaseNotesTitle', title);
+            const body = document.getElementById('releaseNotesBody');
+            if (body) {
+                body.textContent = info.latest_release_notes || 'Release notes are not available yet.';
+            }
+            modal.classList.add('open');
+        }
+
+        function closeReleaseNotesModal() {
+            const modal = document.getElementById('releaseNotesModal');
+            if (modal) modal.classList.remove('open');
+        }
+
+        async function copyDockerCommand() {
+            const command = document.getElementById('update-docker-command')?.textContent || '';
+            if (!command.trim()) return;
+            try {
+                await navigator.clipboard.writeText(command);
+                showSuccess('Docker update command copied.');
+            } catch (_) {
+                showInfo(command);
+            }
+        }
 
 
         // Load initial data
@@ -3762,6 +4155,12 @@
             // Allow Escape to close help even if focused inside a control
             if (e.key === 'Escape') {
                 const helpOpen = document.getElementById('shortcutHelpModal');
+                const notesOpen = document.getElementById('releaseNotesModal');
+                if (notesOpen && notesOpen.classList.contains('open')) {
+                    e.preventDefault();
+                    closeReleaseNotesModal();
+                    return;
+                }
                 if (helpOpen && helpOpen.style.display === 'flex') {
                     e.preventDefault();
                     hideShortcutHelp();
@@ -5491,26 +5890,7 @@
         <a href="https://buymeacoffee.com/marlintodd" target="_blank" rel="noopener" style="color: #e5a00d; text-decoration: none;">Buy Me a Coffee</a>
     </footer>
     <script>
-      function renderVersionFooter(j) {
-        if (!j) return;
-        const versionEl = document.getElementById('footer-version');
-        if (versionEl && j.version) versionEl.textContent = 'v' + j.version;
-
-        if (j.update_available && j.latest_version) {
-          const updateEl = document.getElementById('footer-update');
-          const separatorEl = document.getElementById('footer-update-separator');
-          if (updateEl) {
-            updateEl.textContent = 'Update available: v' + j.latest_version;
-            updateEl.href = j.latest_url || 'https://github.com/marlintodd2024/bingealert/releases/latest';
-            updateEl.style.display = 'inline';
-          }
-          if (separatorEl) separatorEl.style.display = 'inline';
-        }
-      }
-
-      fetch('/api/version', { cache: 'no-store' }).then(r => r.ok ? r.json() : null)
-        .then(renderVersionFooter)
-        .catch(() => {});
+      if (typeof loadVersionInfo === 'function') loadVersionInfo();
     </script>
 </body>
 </html>
