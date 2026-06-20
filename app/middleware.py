@@ -20,11 +20,13 @@ from app.config import settings
 
 
 # Paths that are reachable even when setup is incomplete. /setup serves the
-# wizard page; /api/setup is its backend; /static is required by the wizard
-# (CSS, JS); /health and /favicon.ico are housekeeping.
+# wizard page; /api/setup is its backend; /api/version powers the shared
+# footer; /static is required by the wizard (CSS, JS); /health and
+# /favicon.ico are housekeeping.
 _SETUP_MODE_ALLOWED = (
     "/setup",
     "/api/setup",
+    "/api/version",
     "/static/",
     "/health",
     "/favicon.ico",

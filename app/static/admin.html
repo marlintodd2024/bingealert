@@ -5479,6 +5479,8 @@
 
     <footer style="text-align: center; padding: 20px 15px; margin-top: 40px; border-top: 1px solid rgba(255,255,255,0.06); color: #555; font-size: 12px;">
         <span>© 2026 BingeAlert <span id="footer-version"></span></span>
+        <span id="footer-update-separator" style="display: none; margin: 0 8px;">·</span>
+        <a id="footer-update" href="https://github.com/marlintodd2024/bingealert/releases/latest" target="_blank" rel="noopener" style="display: none; color: #e5a00d; text-decoration: none; font-weight: 600;">Update available</a>
         <span style="margin: 0 8px;">·</span>
         <a href="https://github.com/marlintodd2024/bingealert" target="_blank" style="color: #777; text-decoration: none;">GitHub</a>
         <span style="margin: 0 8px;">·</span>
@@ -5489,8 +5491,25 @@
         <a href="https://buymeacoffee.com/marlintodd" target="_blank" rel="noopener" style="color: #e5a00d; text-decoration: none;">Buy Me a Coffee</a>
     </footer>
     <script>
-      fetch('/api/version').then(r => r.ok ? r.json() : null)
-        .then(j => { if (j && j.version) document.getElementById('footer-version').textContent = 'v' + j.version; })
+      function renderVersionFooter(j) {
+        if (!j) return;
+        const versionEl = document.getElementById('footer-version');
+        if (versionEl && j.version) versionEl.textContent = 'v' + j.version;
+
+        if (j.update_available && j.latest_version) {
+          const updateEl = document.getElementById('footer-update');
+          const separatorEl = document.getElementById('footer-update-separator');
+          if (updateEl) {
+            updateEl.textContent = 'Update available: v' + j.latest_version;
+            updateEl.href = j.latest_url || 'https://github.com/marlintodd2024/bingealert/releases/latest';
+            updateEl.style.display = 'inline';
+          }
+          if (separatorEl) separatorEl.style.display = 'inline';
+        }
+      }
+
+      fetch('/api/version', { cache: 'no-store' }).then(r => r.ok ? r.json() : null)
+        .then(renderVersionFooter)
         .catch(() => {});
     </script>
 </body>

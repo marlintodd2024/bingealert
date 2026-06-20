@@ -14,9 +14,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
+import time
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 
+import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -41,6 +45,90 @@ logging.basicConfig(
 logger = logging.getLogger("bingealert")
 
 _STATIC_DIR = Path(__file__).resolve().parent / "static"
+_LATEST_RELEASE_API_URL = (
+    "https://api.github.com/repos/marlintodd2024/bingealert/releases/latest"
+)
+_LATEST_RELEASE_URL = "https://github.com/marlintodd2024/bingealert/releases/latest"
+_VERSION_CACHE_TTL_SECONDS = 6 * 60 * 60
+_VERSION_ERROR_CACHE_TTL_SECONDS = 30 * 60
+_version_cache: dict[str, object] = {"payload": None, "expires_at": 0.0}
+_version_cache_lock = asyncio.Lock()
+
+
+def _normalize_version(value: str) -> str:
+    return value.strip().lstrip("vV")
+
+
+def _version_key(value: str) -> tuple[int, int, int]:
+    match = re.match(r"^(\d+)(?:\.(\d+))?(?:\.(\d+))?", _normalize_version(value))
+    if not match:
+        return (0, 0, 0)
+    return tuple(int(part or 0) for part in match.groups())
+
+
+def _is_newer_version(candidate: str, current: str) -> bool:
+    return _version_key(candidate) > _version_key(current)
+
+
+async def _fetch_latest_release() -> tuple[str, str]:
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": f"BingeAlert/{__version__}",
+    }
+    async with httpx.AsyncClient(timeout=5.0, headers=headers) as client:
+        response = await client.get(_LATEST_RELEASE_API_URL)
+    response.raise_for_status()
+    data = response.json()
+    latest_version = _normalize_version(data.get("tag_name") or data.get("name") or "")
+    if not latest_version:
+        raise ValueError("GitHub latest release response did not include a version")
+    latest_url = data.get("html_url") or _LATEST_RELEASE_URL
+    return latest_version, latest_url
+
+
+def _base_version_payload() -> dict:
+    return {
+        "version": __version__,
+        "latest_version": None,
+        "latest_url": _LATEST_RELEASE_URL,
+        "update_available": False,
+        "checked_at": None,
+    }
+
+
+async def _version_payload() -> dict:
+    now = time.monotonic()
+    cached_payload = _version_cache.get("payload")
+    if cached_payload and now < float(_version_cache["expires_at"]):
+        return cached_payload
+
+    async with _version_cache_lock:
+        now = time.monotonic()
+        cached_payload = _version_cache.get("payload")
+        if cached_payload and now < float(_version_cache["expires_at"]):
+            return cached_payload
+
+        payload = _base_version_payload()
+        cache_ttl = _VERSION_ERROR_CACHE_TTL_SECONDS
+        try:
+            latest_version, latest_url = await _fetch_latest_release()
+            payload.update(
+                {
+                    "latest_version": latest_version,
+                    "latest_url": latest_url,
+                    "update_available": _is_newer_version(
+                        latest_version, __version__
+                    ),
+                    "checked_at": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+            cache_ttl = _VERSION_CACHE_TTL_SECONDS
+        except (httpx.HTTPError, ValueError) as e:
+            logger.debug("latest release check failed: %s", e)
+
+        _version_cache["payload"] = payload
+        _version_cache["expires_at"] = time.monotonic() + cache_ttl
+        return payload
 
 
 # ---------------------------------------------------------------------------
@@ -154,7 +242,7 @@ if _STATIC_DIR.is_dir():
 @app.get("/api/version")
 async def api_version() -> dict:
     """Public version probe -- consumed by the admin/login footer."""
-    return {"version": __version__}
+    return await _version_payload()
 
 
 @app.get("/service-worker.js")
