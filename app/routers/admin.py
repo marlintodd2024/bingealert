@@ -788,7 +788,9 @@ async def notify_episode_now(
         if success:
             notification.sent = True
             from datetime import datetime
+            from app.services.notification_history import record_delivery_for_notification
             notification.sent_at = datetime.utcnow()
+            record_delivery_for_notification(db, notification, sent_at=notification.sent_at)
             db.commit()
         
         return {
@@ -867,11 +869,13 @@ async def resend_notification(notification_id: int, regenerate: bool = True, db:
         
         if success:
             from datetime import datetime
+            from app.services.notification_history import record_delivery_for_notification
             notification.sent = True
             notification.sent_at = datetime.utcnow()
             notification.error_message = None
             if regenerate:
                 notification.body = body  # Update stored body with new poster
+            record_delivery_for_notification(db, notification, sent_at=notification.sent_at)
             db.commit()
             
             return {
@@ -1367,6 +1371,7 @@ async def get_config():
             }
             config["reconciliation"] = {
                 "interval_hours": 2,
+                "notification_lookback_days": _s.notification_retention_days,
                 "issue_fixing_cutoff_hours": 1,
                 "issue_reported_cutoff_hours": 24,
                 "issue_abandon_days": 7,
@@ -1530,6 +1535,7 @@ async def update_config(config: dict, db: Session = Depends(get_db)):
             recon = config["reconciliation"]
             recon_fields = {
                 "reconciliation_interval_hours": "interval_hours",
+                "reconciliation_notification_lookback_days": "notification_lookback_days",
                 "reconciliation_issue_fixing_cutoff_hours": "issue_fixing_cutoff_hours",
                 "reconciliation_issue_reported_cutoff_hours": "issue_reported_cutoff_hours",
                 "reconciliation_issue_abandon_days": "issue_abandon_days",

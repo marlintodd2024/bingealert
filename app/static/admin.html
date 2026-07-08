@@ -3025,7 +3025,19 @@
                     </div>
                 </div>
                 
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+                    <div>
+                        <label style="display: block; margin-bottom: 8px; color: #e5a00d; font-size: 13px; font-weight: bold;">Notification Lookback</label>
+                        <select id="config-recon-notification-lookback"
+                                style="width: 100%; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
+                            <option value="30">30 days</option>
+                            <option value="60">60 days</option>
+                            <option value="90" selected>90 days</option>
+                            <option value="180">180 days</option>
+                            <option value="365">365 days</option>
+                        </select>
+                        <small style="color: #666; font-size: 11px;">Only auto-email missed availability for requests newer than this window</small>
+                    </div>
                     <div>
                         <label style="display: block; margin-bottom: 8px; color: #e5a00d; font-size: 13px; font-weight: bold;">Reported Issue Cutoff</label>
                         <select id="config-recon-reported-cutoff" 
@@ -5938,6 +5950,7 @@
                 // Populate Reconciliation fields
                 if (config.reconciliation) {
                     document.getElementById('config-recon-interval').value = config.reconciliation.interval_hours || '2';
+                    document.getElementById('config-recon-notification-lookback').value = config.reconciliation.notification_lookback_days || '90';
                     document.getElementById('config-recon-fixing-cutoff').value = config.reconciliation.issue_fixing_cutoff_hours || '1';
                     document.getElementById('config-recon-reported-cutoff').value = config.reconciliation.issue_reported_cutoff_hours || '24';
                     document.getElementById('config-recon-abandon-days').value = config.reconciliation.issue_abandon_days || '7';
@@ -6081,6 +6094,7 @@
                     },
                     reconciliation: {
                         interval_hours: parseInt(document.getElementById('config-recon-interval').value),
+                        notification_lookback_days: parseInt(document.getElementById('config-recon-notification-lookback').value),
                         issue_fixing_cutoff_hours: parseInt(document.getElementById('config-recon-fixing-cutoff').value),
                         issue_reported_cutoff_hours: parseInt(document.getElementById('config-recon-reported-cutoff').value),
                         issue_abandon_days: parseInt(document.getElementById('config-recon-abandon-days').value)

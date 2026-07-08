@@ -12,6 +12,7 @@ from app.config import settings
 from app.database import Notification, SessionLocal, SystemConfig
 from app.services.admin_activity import record_admin_activity
 from app.services.backup_service import BackupService
+from app.services.notification_history import backfill_delivery_log_from_notifications
 
 
 logger = logging.getLogger(__name__)
@@ -21,8 +22,9 @@ def purge_sent_notifications(db: Session, days_old: int) -> int:
     """Delete sent notifications older than the retention window."""
     days = max(1, min(int(days_old or 90), 3650))
     cutoff = datetime.utcnow() - timedelta(days=days)
+    backfill_delivery_log_from_notifications(db)
     deleted = db.query(Notification).filter(
-        Notification.sent == True,
+        Notification.sent.is_(True),
         func.coalesce(Notification.sent_at, Notification.created_at) < cutoff,
     ).delete(synchronize_session=False)
     return int(deleted or 0)

@@ -9,6 +9,11 @@ from typing import List, Optional
 from app.database import get_db, MediaRequest, EpisodeTracking, Notification, User, SessionLocal
 from app.schemas import SonarrWebhook, RadarrWebhook, WebhookResponse
 from app.services.email_service import EmailService
+from app.services.notification_history import (
+    episode_dedupe_key,
+    has_delivery,
+    movie_dedupe_key,
+)
 from app.services.sonarr_service import SonarrService
 from app.config import settings
 from app.security import clean_email_address, sanitize_for_log
@@ -302,9 +307,20 @@ async def sonarr_webhook(
                         Notification.notification_type == "episode",
                         Notification.subject.contains(f"S{episode.seasonNumber:02d}E{episode.episodeNumber:02d}")
                     ).first()
+                    delivered = episode_tracking.notified or has_delivery(
+                        db,
+                        user_id=user.id,
+                        request_id=request.id,
+                        notification_type="episode",
+                        dedupe_key=episode_dedupe_key(
+                            webhook.series.id,
+                            episode.seasonNumber,
+                            episode.episodeNumber,
+                        ),
+                    )
                     
                     # Only add to batch if not already notified
-                    if not existing_notification:
+                    if not existing_notification and not delivered:
                         # Initialize user batch if needed
                         if user.id not in user_episode_batches:
                             user_episode_batches[user.id] = {
@@ -323,7 +339,7 @@ async def sonarr_webhook(
                             'tracking': episode_tracking
                         })
         
-        # Now create one notification per user with all their episodes batched
+        # Now create one notification row per episode so durable dedupe remains per-episode.
         # First, check if the downloaded episodes meet quality cutoff
         quality_cutoff_met = True
         if webhook.episodeFile:
@@ -363,42 +379,38 @@ async def sonarr_webhook(
             tmdb_service = TMDBService(settings.jellyseerr_url, settings.jellyseerr_api_key)
             poster_url = await tmdb_service.get_tv_poster(batch['tmdb_id'])
             
-            # Render email with all episodes
-            html_body = email_service.render_episode_notification(
-                series_title=webhook.series.title,
-                episodes=batch['episodes'],
-                poster_url=poster_url
-            )
-            
-            # Create subject based on episode count
-            if len(batch['episodes']) == 1:
-                ep = batch['episodes'][0]
+            for ep in batch['episodes']:
+                html_body = email_service.render_episode_notification(
+                    series_title=webhook.series.title,
+                    episodes=[ep],
+                    poster_url=poster_url
+                )
                 subject = f"New Episode: {webhook.series.title} S{ep['season']:02d}E{ep['episode']:02d}"
-            else:
-                subject = f"New Episodes: {webhook.series.title} ({len(batch['episodes'])} episodes)"
-            
-            # Set send_after to 7 minutes from now (420 seconds)
-            # This gives time for: 2 min batch window + 5 min Plex indexing
-            from datetime import timedelta
-            send_after = datetime.utcnow() + timedelta(seconds=420)
-            
-            notification = Notification(
-                user_id=batch['user'].id,
-                request_id=batch['request_id'],
-                notification_type="episode",
-                subject=subject,
-                body=html_body,
-                send_after=send_after,
-                series_id=webhook.series.id  # Store series ID for smart batching
-            )
-            db.add(notification)
-            notifications_created += 1
-            
-            # NOTE: Don't mark episode_tracking.notified = True here!
-            # EpisodeTracking is shared across all users for the same episode.
-            # We rely on the Notification table to track who's been notified.
-            
-            logger.info(f"Created batched notification for {batch['user'].email}: {len(batch['episodes'])} episode(s), will send after {send_after}")
+
+                # Set send_after to 7 minutes from now (420 seconds)
+                # This gives time for: 2 min batch window + 5 min Plex indexing
+                from datetime import timedelta
+                send_after = datetime.utcnow() + timedelta(seconds=420)
+
+                notification = Notification(
+                    user_id=batch['user'].id,
+                    request_id=batch['request_id'],
+                    notification_type="episode",
+                    subject=subject,
+                    body=html_body,
+                    send_after=send_after,
+                    series_id=webhook.series.id  # Store series ID for smart batching
+                )
+                db.add(notification)
+                notifications_created += 1
+
+                logger.info(
+                    "Created episode notification for %s: S%02dE%02d, will send after %s",
+                    batch['user'].email,
+                    ep['season'],
+                    ep['episode'],
+                    send_after,
+                )
         
         try:
             db.commit()
@@ -548,8 +560,15 @@ async def radarr_webhook(
                     Notification.request_id == request.id,
                     Notification.notification_type == "movie"
                 ).first()
+                delivered = (request.status == "available") or has_delivery(
+                    db,
+                    user_id=user.id,
+                    request_id=request.id,
+                    notification_type="movie",
+                    dedupe_key=movie_dedupe_key(request.id),
+                )
                 
-                if not existing_notification:
+                if not existing_notification and not delivered:
                     # Get poster URL
                     from app.services.tmdb_service import TMDBService
                     from app.config import settings

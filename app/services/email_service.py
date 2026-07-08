@@ -7,7 +7,11 @@ from typing import List, Optional
 from datetime import datetime
 
 from app.config import normalize_smtp_security, settings
-from app.database import Notification, User
+from app.database import EpisodeTracking, Notification, User
+from app.services.notification_history import (
+    delivery_entries_for_notification,
+    record_delivery_for_notification,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +46,34 @@ def Template(source):  # noqa: N802 -- preserve the existing call sites
     # Routing through the autoescape-enabled Environment without rewriting every
     # call site. Same callable shape, escapes by default.
     return _template_env.from_string(source)
+
+
+def _record_successful_delivery(db, notification: Notification, sent_at: datetime) -> None:
+    """Persist durable dedupe state after an email sends successfully."""
+    record_delivery_for_notification(db, notification, sent_at=sent_at)
+    if notification.notification_type == "movie" and notification.request:
+        notification.request.status = "available"
+        return
+
+    if notification.notification_type != "episode":
+        return
+
+    for entry in delivery_entries_for_notification(notification):
+        if entry["notification_type"] != "episode":
+            continue
+        if entry["season_number"] is None or entry["episode_number"] is None:
+            continue
+        query = db.query(EpisodeTracking).filter(
+            EpisodeTracking.request_id == notification.request_id,
+            EpisodeTracking.season_number == entry["season_number"],
+            EpisodeTracking.episode_number == entry["episode_number"],
+        )
+        if entry["series_id"] is not None:
+            query = query.filter(EpisodeTracking.series_id == entry["series_id"])
+        tracking = query.first()
+        if tracking:
+            tracking.notified = True
+            tracking.available_in_plex = True
 
 
 class EmailService:
@@ -428,8 +460,10 @@ class EmailService:
                 # Mark all batched notifications as sent
                 for b in batch:
                     if success:
+                        sent_at = datetime.utcnow()
                         b.sent = True
-                        b.sent_at = datetime.utcnow()
+                        b.sent_at = sent_at
+                        _record_successful_delivery(db, b, sent_at)
                     else:
                         b.error_message = "SMTP send failed"
                     processed_tv.add(b.id)
@@ -444,8 +478,10 @@ class EmailService:
                 )
                 
                 if success:
+                    sent_at = datetime.utcnow()
                     notif.sent = True
-                    notif.sent_at = datetime.utcnow()
+                    notif.sent_at = sent_at
+                    _record_successful_delivery(db, notif, sent_at)
                 else:
                     notif.error_message = "SMTP send failed"
                 
@@ -463,8 +499,10 @@ class EmailService:
             )
             
             if success:
+                sent_at = datetime.utcnow()
                 notif.sent = True
-                notif.sent_at = datetime.utcnow()
+                notif.sent_at = sent_at
+                _record_successful_delivery(db, notif, sent_at)
             else:
                 notif.error_message = "SMTP send failed"
             

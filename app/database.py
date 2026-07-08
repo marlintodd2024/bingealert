@@ -321,3 +321,35 @@ class Notification(Base):
 
     user = relationship("User", back_populates="notifications")
     request = relationship("MediaRequest", back_populates="notifications")
+
+
+class NotificationDeliveryLog(Base):
+    """Durable dedupe ledger for sent notifications.
+
+    Notification rows are user-facing queue/history records and may be purged.
+    This compact ledger is intentionally not purged by notification retention,
+    so cleanup cannot make reconciliation think old content was never emailed.
+    """
+
+    __tablename__ = "notification_delivery_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    request_id = Column(Integer, ForeignKey("media_requests.id"), nullable=False, index=True)
+    notification_type = Column(String, nullable=False, index=True)
+    dedupe_key = Column(String, nullable=False)
+    series_id = Column(Integer, nullable=True, index=True)
+    season_number = Column(Integer, nullable=True)
+    episode_number = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    sent_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "request_id",
+            "notification_type",
+            "dedupe_key",
+            name="_notification_delivery_uc",
+        ),
+    )

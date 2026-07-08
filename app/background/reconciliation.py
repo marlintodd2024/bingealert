@@ -10,6 +10,12 @@ from app.services.sonarr_service import SonarrService
 from app.services.radarr_service import RadarrService
 from app.services.plex_service import PlexService
 from app.services.email_service import EmailService
+from app.services.notification_history import (
+    backfill_delivery_log_from_notifications,
+    episode_dedupe_key,
+    has_delivery,
+    movie_dedupe_key,
+)
 from app.services.tmdb_service import TMDBService
 from app.config import settings
 import logging
@@ -18,7 +24,18 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-async def reconcile_tv_episodes(db: Session):
+def _notification_lookback_cutoff(days: int) -> datetime:
+    return datetime.utcnow() - timedelta(days=max(1, int(days or 90)))
+
+
+def _request_within_notification_lookback(request: MediaRequest, days: int) -> bool:
+    created_at = request.created_at or request.updated_at
+    if not created_at:
+        return False
+    return created_at >= _notification_lookback_cutoff(days)
+
+
+async def reconcile_tv_episodes(db: Session, notification_lookback_days: int = 90):
     """Check for TV episodes that are downloaded but not notified"""
     logger.info("Starting TV episode reconciliation...")
     
@@ -50,6 +67,9 @@ async def reconcile_tv_episodes(db: Session):
                 logger.warning(f"Tracking {tracking.id} has no associated request - cleaning up")
                 db.delete(tracking)
                 continue
+
+            if tracking.notified:
+                continue
             
             # Check if notification already exists
             existing_notification = db.query(Notification).filter(
@@ -58,8 +78,19 @@ async def reconcile_tv_episodes(db: Session):
                 Notification.notification_type == "episode",
                 Notification.subject.contains(f"S{tracking.season_number:02d}E{tracking.episode_number:02d}")
             ).first()
+            delivered = has_delivery(
+                db,
+                user_id=request.user_id,
+                request_id=request.id,
+                notification_type="episode",
+                dedupe_key=episode_dedupe_key(
+                    tracking.series_id,
+                    tracking.season_number,
+                    tracking.episode_number,
+                ),
+            )
             
-            if existing_notification:
+            if existing_notification or delivered:
                 # Notification exists - mark tracking as notified if not already
                 if not tracking.notified:
                     tracking.notified = True
@@ -100,6 +131,18 @@ async def reconcile_tv_episodes(db: Session):
                 continue
             
             logger.info(f"  ✅ Episode IS in Plex!")
+
+            if not _request_within_notification_lookback(request, notification_lookback_days):
+                tracking.notified = True
+                tracking.available_in_plex = True
+                logger.info(
+                    "Suppressing stale reconciliation email for %s S%02dE%02d; request is outside %s-day notification lookback",
+                    request.title,
+                    tracking.season_number,
+                    tracking.episode_number,
+                    notification_lookback_days,
+                )
+                continue
             
             # Episode is tracked, in Plex, but never notified - CREATE NOTIFICATION!
             logger.info(f"🎯 Found orphaned episode: {series.get('title')} S{tracking.season_number:02d}E{tracking.episode_number:02d}")
@@ -204,17 +247,32 @@ async def reconcile_tv_episodes(db: Session):
                         continue  # Not in Plex yet, skip
                     
                     # Create tracking record
+                    should_notify = _request_within_notification_lookback(
+                        request,
+                        notification_lookback_days,
+                    )
                     tracking = EpisodeTracking(
                         series_id=series_id,
                         season_number=season_num,
                         episode_number=episode_num,
                         episode_title=episode.get("title"),
-                        notified=False,
+                        notified=not should_notify,
+                        available_in_plex=True,
                         request_id=request.id
                     )
                     db.add(tracking)
                     db.commit()
                     logger.info(f"Created tracking for episode: {series.get('title')} S{season_num:02d}E{episode_num:02d}")
+
+                    if not should_notify:
+                        logger.info(
+                            "Tracking stale downloaded episode without email: %s S%02dE%02d; request is outside %s-day notification lookback",
+                            series.get("title"),
+                            season_num,
+                            episode_num,
+                            notification_lookback_days,
+                        )
+                        continue
                 
                 # If already notified, skip
                 if tracking.notified:
@@ -229,6 +287,19 @@ async def reconcile_tv_episodes(db: Session):
                 
                 if not in_plex:
                     continue  # Not in Plex yet, skip
+
+                if not _request_within_notification_lookback(request, notification_lookback_days):
+                    tracking.notified = True
+                    tracking.available_in_plex = True
+                    db.commit()
+                    logger.info(
+                        "Suppressing stale reconciliation email for %s S%02dE%02d; request is outside %s-day notification lookback",
+                        series.get("title"),
+                        season_num,
+                        episode_num,
+                        notification_lookback_days,
+                    )
+                    continue
                 
                 # Check if notification already exists
                 existing_notification = db.query(Notification).filter(
@@ -237,8 +308,15 @@ async def reconcile_tv_episodes(db: Session):
                     Notification.notification_type == "episode",
                     Notification.subject.contains(f"S{season_num:02d}E{episode_num:02d}")
                 ).first()
+                delivered = has_delivery(
+                    db,
+                    user_id=request.user_id,
+                    request_id=request.id,
+                    notification_type="episode",
+                    dedupe_key=episode_dedupe_key(series_id, season_num, episode_num),
+                )
                 
-                if existing_notification:
+                if existing_notification or delivered:
                     # Notification exists but tracking wasn't marked - fix it
                     tracking.notified = True
                     db.commit()
@@ -287,7 +365,7 @@ async def reconcile_tv_episodes(db: Session):
     return total_created
 
 
-async def reconcile_movies(db: Session):
+async def reconcile_movies(db: Session, notification_lookback_days: int = 90):
     """Check for movies that are downloaded but not notified"""
     logger.info("Starting movie reconciliation...")
     
@@ -312,8 +390,16 @@ async def reconcile_movies(db: Session):
                 Notification.request_id == request.id,
                 Notification.notification_type == "movie"
             ).first()
+            delivered = has_delivery(
+                db,
+                user_id=request.user_id,
+                request_id=request.id,
+                notification_type="movie",
+                dedupe_key=movie_dedupe_key(request.id),
+            )
             
-            if existing_notification:
+            if existing_notification or delivered:
+                request.status = "available"
                 continue  # Already notified
             
             # Get movie from Radarr
@@ -339,6 +425,15 @@ async def reconcile_movies(db: Session):
             
             if not in_plex:
                 continue  # Not in Plex yet
+
+            if not _request_within_notification_lookback(request, notification_lookback_days):
+                request.status = "available"
+                logger.info(
+                    "Suppressing stale reconciliation email for movie %s; request is outside %s-day notification lookback",
+                    movie.get("title"),
+                    notification_lookback_days,
+                )
+                continue
             
             # Missing notification! Movie is downloaded but never notified
             logger.info(f"Found missed movie notification: {movie.get('title')} ({movie.get('year')})")
@@ -363,6 +458,7 @@ async def reconcile_movies(db: Session):
                 send_after=datetime.utcnow()  # Send immediately
             )
             db.add(notification)
+            request.status = "available"
             notifications_created += 1
             db.commit()
             
@@ -388,6 +484,10 @@ def get_reconciliation_settings():
                 settings_map[config.key] = config.value
             return {
                 'interval_hours': int(settings_map.get('reconciliation_interval_hours', '2')),
+                'notification_lookback_days': int(settings_map.get(
+                    'reconciliation_notification_lookback_days',
+                    str(settings.notification_retention_days),
+                )),
                 'issue_fixing_cutoff_hours': int(settings_map.get('reconciliation_issue_fixing_cutoff_hours', '1')),
                 'issue_reported_cutoff_hours': int(settings_map.get('reconciliation_issue_reported_cutoff_hours', '24')),
                 'issue_abandon_days': int(settings_map.get('reconciliation_issue_abandon_days', '7')),
@@ -398,6 +498,7 @@ def get_reconciliation_settings():
         logger.warning(f"Failed to load reconciliation settings, using defaults: {e}")
         return {
             'interval_hours': 2,
+            'notification_lookback_days': settings.notification_retention_days,
             'issue_fixing_cutoff_hours': 1,
             'issue_reported_cutoff_hours': 24,
             'issue_abandon_days': 7,
@@ -563,8 +664,12 @@ async def run_reconciliation():
     
     db = SessionLocal()
     try:
-        tv_count = await reconcile_tv_episodes(db)
-        movie_count = await reconcile_movies(db)
+        backfilled = backfill_delivery_log_from_notifications(db)
+        if backfilled:
+            db.commit()
+            logger.info("Backfilled %s notification delivery ledger row(s)", backfilled)
+        tv_count = await reconcile_tv_episodes(db, recon_settings["notification_lookback_days"])
+        movie_count = await reconcile_movies(db, recon_settings["notification_lookback_days"])
         issue_count = await reconcile_issues(db)
         
         total = tv_count + movie_count
