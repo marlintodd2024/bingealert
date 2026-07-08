@@ -6,6 +6,7 @@ import re
 from datetime import datetime
 from typing import Iterable
 
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from app.database import Notification, NotificationDeliveryLog
@@ -53,31 +54,38 @@ def record_delivery(
     episode_number: int | None = None,
     sent_at: datetime | None = None,
 ) -> bool:
-    row = db.query(NotificationDeliveryLog).filter(
-        NotificationDeliveryLog.user_id == user_id,
-        NotificationDeliveryLog.request_id == request_id,
-        NotificationDeliveryLog.notification_type == notification_type,
-        NotificationDeliveryLog.dedupe_key == dedupe_key,
-    ).first()
-    if row:
-        if sent_at and not row.sent_at:
-            row.sent_at = sent_at
-        return False
-
-    db.add(
-        NotificationDeliveryLog(
-            user_id=user_id,
-            request_id=request_id,
-            notification_type=notification_type,
-            dedupe_key=dedupe_key,
-            series_id=series_id,
-            season_number=season_number,
-            episode_number=episode_number,
-            sent_at=sent_at,
-            created_at=sent_at or datetime.utcnow(),
-        )
+    stmt = sqlite_insert(NotificationDeliveryLog).values(
+        user_id=user_id,
+        request_id=request_id,
+        notification_type=notification_type,
+        dedupe_key=dedupe_key,
+        series_id=series_id,
+        season_number=season_number,
+        episode_number=episode_number,
+        sent_at=sent_at,
+        created_at=sent_at or datetime.utcnow(),
     )
-    return True
+    stmt = stmt.on_conflict_do_nothing(
+        index_elements=[
+            "user_id",
+            "request_id",
+            "notification_type",
+            "dedupe_key",
+        ]
+    )
+    result = db.execute(stmt)
+    created = bool(result.rowcount)
+
+    if not created and sent_at:
+        db.query(NotificationDeliveryLog).filter(
+            NotificationDeliveryLog.user_id == user_id,
+            NotificationDeliveryLog.request_id == request_id,
+            NotificationDeliveryLog.notification_type == notification_type,
+            NotificationDeliveryLog.dedupe_key == dedupe_key,
+            NotificationDeliveryLog.sent_at.is_(None),
+        ).update({"sent_at": sent_at}, synchronize_session=False)
+
+    return created
 
 
 def _episode_matches(notification: Notification) -> set[tuple[int, int]]:
