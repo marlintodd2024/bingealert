@@ -15,15 +15,21 @@
     <style>
         /* Dark Mode Only - No Switching */
         :root {
-            --bg-gradient-start: #1a1a2e;
-            --bg-gradient-end: #16213e;
-            --bg-card: rgba(255, 255, 255, 0.05);
-            --bg-card-hover: rgba(255, 255, 255, 0.08);
-            --border-color: rgba(255, 255, 255, 0.1);
-            --text-primary: #e4e4e4;
-            --text-secondary: #999;
-            --accent-primary: #e5a00d;
-            --accent-secondary: #f4c542;
+            --bg-gradient-start: #101114;
+            --bg-gradient-end: #15171c;
+            --bg-card: rgba(255, 255, 255, 0.045);
+            --bg-card-hover: rgba(255, 255, 255, 0.075);
+            --surface: rgba(255, 255, 255, 0.052);
+            --surface-muted: rgba(255, 255, 255, 0.035);
+            --surface-strong: rgba(255, 255, 255, 0.08);
+            --control-bg: rgba(255, 255, 255, 0.07);
+            --border-color: rgba(255, 255, 255, 0.11);
+            --border-soft: rgba(255, 255, 255, 0.07);
+            --text-primary: #eceff3;
+            --text-secondary: #a4a8b1;
+            --text-muted: #747984;
+            --accent-primary: #e2a532;
+            --accent-secondary: #f2c96b;
             --success: #4caf50;
             --error: #f44336;
             --warning: #ff9800;
@@ -133,14 +139,15 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
+            background: linear-gradient(180deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
             color: var(--text-primary);
             min-height: 100vh;
             padding: 20px;
+            line-height: 1.45;
         }
 
         .container {
-            max-width: 1400px;
+            max-width: 1480px;
             margin: 0 auto;
         }
 
@@ -171,37 +178,55 @@
 
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
+            grid-template-columns: repeat(7, minmax(118px, 1fr));
+            gap: 10px;
+            margin-bottom: 18px;
+            overflow-x: auto;
+            padding-bottom: 4px;
+            scrollbar-gutter: stable;
+            -webkit-overflow-scrolling: touch;
         }
 
         .stat-card {
             background: var(--bg-card);
             backdrop-filter: blur(10px);
-            border-radius: 12px;
-            padding: 20px;
+            border-radius: 8px;
+            padding: 12px 14px;
             border: 1px solid rgba(255, 255, 255, 0.1);
-            transition: transform 0.2s, box-shadow 0.2s;
+            min-height: 76px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            transition: border-color 0.2s, background 0.2s, transform 0.2s;
         }
 
         .stat-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 30px rgba(229, 160, 13, 0.2);
+            transform: translateY(-1px);
+            background: rgba(255, 255, 255, 0.075);
+            border-color: rgba(229, 160, 13, 0.35);
         }
 
         .stat-label {
-            font-size: 12px;
+            font-size: 10px;
             color: #999;
             text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 8px;
+            letter-spacing: 0.7px;
+            margin-bottom: 5px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .stat-value {
-            font-size: 36px;
+            font-size: 28px;
+            line-height: 1;
             font-weight: bold;
             color: #e5a00d;
+        }
+
+        .stat-value.compact {
+            font-size: 28px;
+            line-height: 1.1;
         }
 
         .actions {
@@ -326,10 +351,13 @@
             overflow: auto;
             max-height: 70vh;
             border: 1px solid rgba(255, 255, 255, 0.1);
+            scrollbar-gutter: stable both-edges;
+            -webkit-overflow-scrolling: touch;
         }
 
         table {
             width: 100%;
+            min-width: 880px;
             border-collapse: collapse;
         }
 
@@ -369,6 +397,7 @@
         td {
             padding: 15px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            vertical-align: top;
         }
 
         tr:hover {
@@ -470,6 +499,130 @@
             background: rgba(244, 67, 54, 0.18);
             color: #f44336;
             border: 1px solid rgba(244, 67, 54, 0.35);
+        }
+        .status-pill.ok,
+        .status-pill.success {
+            background: rgba(76, 175, 80, 0.18);
+            color: #4caf50;
+            border: 1px solid rgba(76, 175, 80, 0.35);
+        }
+        .status-pill.down,
+        .status-pill.error {
+            background: rgba(244, 67, 54, 0.18);
+            color: #f44336;
+            border: 1px solid rgba(244, 67, 54, 0.35);
+        }
+        .status-pill.degraded,
+        .status-pill.warning {
+            background: rgba(255, 152, 0, 0.18);
+            color: #ff9800;
+            border: 1px solid rgba(255, 152, 0, 0.35);
+        }
+        .status-pill.not_configured,
+        .status-pill.unknown,
+        .status-pill.running {
+            background: rgba(158, 158, 158, 0.18);
+            color: #bdbdbd;
+            border: 1px solid rgba(158, 158, 158, 0.35);
+        }
+
+        .health-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 14px;
+            margin-bottom: 18px;
+        }
+        .health-summary-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+            padding: 14px;
+        }
+        .stat-value.compact {
+            font-size: 24px;
+        }
+        .table-error-cell {
+            max-width: 340px;
+            color: #ffb3b3;
+            font-size: 12px;
+            line-height: 1.4;
+            white-space: normal;
+            word-break: break-word;
+        }
+        .settings-card {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+        .settings-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 15px;
+        }
+        .settings-field label {
+            display: block;
+            margin-bottom: 8px;
+            color: #e5a00d;
+            font-size: 13px;
+            font-weight: bold;
+        }
+        .settings-field input,
+        .settings-field select {
+            width: 100%;
+            padding: 10px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            color: #e4e4e4;
+            font-size: 15px;
+        }
+        .settings-field small {
+            color: #777;
+            font-size: 11px;
+            line-height: 1.5;
+            display: block;
+            margin-top: 6px;
+        }
+        .inline-switch {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-height: 40px;
+            color: #e4e4e4;
+            font-size: 14px;
+        }
+        .inline-switch input {
+            width: auto;
+        }
+        .config-validation-list {
+            display: grid;
+            gap: 8px;
+            margin-top: 14px;
+        }
+        .config-validation-item {
+            display: grid;
+            grid-template-columns: 92px 1fr;
+            gap: 10px;
+            align-items: start;
+            background: rgba(0,0,0,0.2);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 8px;
+            padding: 10px 12px;
+            color: #dfe3e8;
+            font-size: 13px;
+            line-height: 1.45;
+        }
+        .config-validation-item strong {
+            color: #f0f2f5;
+        }
+        .activity-detail-cell {
+            max-width: 420px;
+            color: #b9c0ca;
+            font-size: 12px;
+            line-height: 1.45;
+            white-space: normal;
+            word-break: break-word;
         }
 
         .pagination-bar {
@@ -1002,7 +1155,9 @@
 
         @media (max-width: 768px) {
             .stats-grid {
-                grid-template-columns: repeat(2, 1fr);
+                grid-template-columns: repeat(7, minmax(112px, 1fr));
+                gap: 8px;
+                margin-bottom: 16px;
             }
 
             .data-table {
@@ -1111,16 +1266,17 @@
                 font-size: 11px !important;
             }
 
-            /* Stats - 2 columns, compact */
+            /* Stats - compact swipe rail */
             .stats-grid {
-                grid-template-columns: repeat(2, 1fr) !important;
+                grid-template-columns: repeat(7, minmax(106px, 1fr)) !important;
                 gap: 8px !important;
                 margin-bottom: 15px !important;
             }
 
             .stat-card {
-                padding: 12px !important;
-                border-radius: 10px !important;
+                padding: 10px 12px !important;
+                border-radius: 8px !important;
+                min-height: 68px !important;
             }
 
             .stat-card:hover {
@@ -1135,7 +1291,7 @@
             }
 
             .stat-value {
-                font-size: 24px !important;
+                font-size: 23px !important;
             }
 
             /* Action groups - 2 column grid */
@@ -1410,7 +1566,7 @@
             }
 
             .stats-grid {
-                grid-template-columns: repeat(3, 1fr) !important;
+                grid-template-columns: repeat(7, minmax(106px, 1fr)) !important;
             }
         }
 
@@ -1502,6 +1658,372 @@
         input:checked + .slider:before {
             transform: translateX(22px);
         }
+
+        /* Cohesive admin interface refresh */
+        ::selection {
+            background: rgba(226, 165, 50, 0.32);
+            color: #fff;
+        }
+
+        :focus-visible {
+            outline: 2px solid rgba(226, 165, 50, 0.75);
+            outline-offset: 2px;
+        }
+
+        header {
+            background: rgba(20, 22, 27, 0.82);
+            border-color: var(--border-soft);
+            border-radius: 8px;
+            padding: 18px 20px !important;
+            margin-bottom: 16px;
+            align-items: center !important;
+            box-shadow: 0 14px 34px rgba(0, 0, 0, 0.22);
+        }
+
+        header h1 {
+            font-size: 27px;
+            line-height: 1.05;
+            margin-bottom: 5px;
+            letter-spacing: 0;
+        }
+
+        .subtitle,
+        .last-sync {
+            color: var(--text-muted);
+        }
+
+        .last-sync {
+            margin-top: 2px;
+            font-size: 11px;
+        }
+
+        button,
+        .action-btn {
+            border-radius: 6px;
+            border: 1px solid transparent;
+            box-shadow: none;
+            transition: background 0.16s, border-color 0.16s, color 0.16s, transform 0.16s;
+        }
+
+        button:hover,
+        .action-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: none;
+        }
+
+        button.secondary,
+        .action-btn {
+            background: var(--control-bg);
+            border-color: var(--border-color);
+            color: var(--text-primary);
+        }
+
+        button.secondary:hover,
+        .action-btn:hover {
+            background: var(--surface-strong);
+            border-color: rgba(226, 165, 50, 0.35);
+            color: #fff;
+        }
+
+        button.danger {
+            background: rgba(244, 67, 54, 0.16);
+            border-color: rgba(244, 67, 54, 0.36);
+            color: #ffb8b8;
+        }
+
+        button.danger:hover {
+            background: rgba(244, 67, 54, 0.24);
+            border-color: rgba(244, 67, 54, 0.55);
+            color: #fff;
+        }
+
+        .action-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            margin: 2px 3px;
+            text-decoration: none;
+            white-space: nowrap;
+        }
+
+        .stats-grid {
+            margin-bottom: 14px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.04);
+            border-color: var(--border-soft);
+            box-shadow: none;
+        }
+
+        .stat-card:hover {
+            background: rgba(255, 255, 255, 0.07);
+        }
+
+        .stat-value {
+            font-variant-numeric: tabular-nums;
+        }
+
+        .actions-toolbar {
+            background: rgba(20, 22, 27, 0.72);
+            border-color: var(--border-soft);
+            border-radius: 8px;
+            margin-bottom: 14px;
+            padding: 8px 10px;
+        }
+
+        .actions-toolbar .toolbar-summary {
+            border: 1px solid rgba(226, 165, 50, 0.18);
+            background: rgba(226, 165, 50, 0.08);
+            border-radius: 6px;
+        }
+
+        .actions-toolbar .toolbar-body {
+            gap: 12px;
+            padding-top: 8px;
+        }
+
+        .actions-toolbar .toolbar-group {
+            padding: 6px 8px;
+            background: rgba(255, 255, 255, 0.025);
+            border: 1px solid var(--border-soft);
+            border-radius: 8px;
+        }
+
+        .tabs {
+            gap: 4px;
+            padding: 5px;
+            margin-bottom: 16px;
+            background: rgba(20, 22, 27, 0.72);
+            border: 1px solid var(--border-soft);
+            border-radius: 8px;
+            overflow-x: auto;
+            scrollbar-width: thin;
+        }
+
+        .tab {
+            border-radius: 6px;
+            border-bottom: 0;
+            padding: 10px 13px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }
+
+        .tab:hover {
+            background: rgba(255, 255, 255, 0.045);
+            color: #fff;
+        }
+
+        .tab.active {
+            background: rgba(226, 165, 50, 0.14);
+            color: var(--accent-secondary);
+            border-bottom-color: transparent;
+        }
+
+        .tab-count {
+            background: rgba(0, 0, 0, 0.22);
+            color: var(--text-secondary);
+        }
+
+        .tab.active .tab-count {
+            background: rgba(226, 165, 50, 0.22);
+            color: #ffe2a2;
+        }
+
+        .tab-content > div[style*="display: flex"][style*="gap: 10px"][style*="margin-bottom"] {
+            background: var(--surface-muted);
+            border: 1px solid var(--border-soft);
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 12px !important;
+        }
+
+        input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+        select,
+        textarea,
+        .custom-select-display,
+        .config-input {
+            background: var(--control-bg) !important;
+            border: 1px solid var(--border-color) !important;
+            border-radius: 6px !important;
+            color: var(--text-primary) !important;
+            min-height: 38px;
+        }
+
+        input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):focus,
+        select:focus,
+        textarea:focus,
+        .config-input:focus,
+        .search-box:focus {
+            border-color: rgba(226, 165, 50, 0.7) !important;
+            box-shadow: 0 0 0 3px rgba(226, 165, 50, 0.12);
+        }
+
+        .search-box {
+            margin-bottom: 0;
+            min-width: 220px;
+        }
+
+        .data-table {
+            background: rgba(20, 22, 27, 0.76);
+            border-color: var(--border-soft);
+            border-radius: 8px;
+            box-shadow: 0 14px 32px rgba(0, 0, 0, 0.18);
+        }
+
+        th {
+            background: #1a1c22;
+            color: #e8b958;
+            border-bottom-color: rgba(226, 165, 50, 0.22);
+            padding: 11px 12px;
+            font-size: 12px;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+        }
+
+        th:hover {
+            background: #20232a;
+        }
+
+        td {
+            padding: 11px 12px;
+            color: #dfe3e8;
+        }
+
+        tbody tr:nth-child(even) {
+            background: rgba(255, 255, 255, 0.012);
+        }
+
+        tr:hover {
+            background: rgba(226, 165, 50, 0.045);
+        }
+
+        .badge,
+        .status-pill {
+            border-radius: 999px;
+        }
+
+        .pagination-bar,
+        .health-summary-card,
+        .update-metric,
+        .config-section {
+            background: var(--surface-muted);
+            border: 1px solid var(--border-soft);
+            border-radius: 8px;
+        }
+
+        #backupTab > div[style*="background: rgba(255, 255, 255, 0.05)"],
+        #maintenanceTab > div[style*="background: rgba(255, 255, 255, 0.05)"],
+        #settingsTab > div[style*="background: rgba(255, 255, 255, 0.05)"],
+        #upcomingGroupedContent > div[style*="background: rgba(255, 255, 255, 0.05)"] {
+            background: var(--surface) !important;
+            border: 1px solid var(--border-soft) !important;
+            border-radius: 8px !important;
+            box-shadow: 0 14px 30px rgba(0, 0, 0, 0.16);
+        }
+
+        #settingsTab div[style*="background: rgba(0,0,0,0.2)"],
+        #settingsTab div[style*="background: rgba(0,0,0, 0.2)"],
+        #upcomingGroupedContent div[style*="background: rgba(0,0,0"] {
+            background: rgba(0, 0, 0, 0.18) !important;
+            border: 1px solid rgba(255, 255, 255, 0.055);
+            border-radius: 8px !important;
+        }
+
+        #upcomingGroupedContent div[style*="linear-gradient"] {
+            background: rgba(226, 165, 50, 0.09) !important;
+            border-bottom: 1px solid rgba(226, 165, 50, 0.16);
+        }
+
+        #settingsTab div[style*="border-left: 4px"],
+        #maintenanceTab div[style*="border-left: 4px"] {
+            border-left-width: 3px !important;
+        }
+
+        .tab-content h3 {
+            color: var(--accent-primary) !important;
+            font-size: 17px;
+            line-height: 1.25;
+        }
+
+        .tab-content h4 {
+            color: #f0f2f5 !important;
+        }
+
+        .empty-state,
+        .empty-hint,
+        .loading {
+            color: var(--text-muted);
+        }
+
+        .spinner {
+            width: 28px;
+            height: 28px;
+            border-width: 2px;
+            border-top-color: var(--accent-primary);
+        }
+
+        .toast,
+        #releaseNotesModal .release-notes-box,
+        #confirmModal .confirm-box,
+        #shortcutHelpModal > div {
+            background: #181a20 !important;
+            border-color: var(--border-color) !important;
+            border-radius: 8px !important;
+        }
+
+        .update-banner {
+            background: rgba(226, 165, 50, 0.1);
+            border-color: rgba(226, 165, 50, 0.24);
+            border-radius: 8px;
+        }
+
+        code,
+        .update-command,
+        #releaseNotesBody,
+        #logContent,
+        #logsContainer {
+            background: rgba(0, 0, 0, 0.28) !important;
+            border-color: var(--border-soft) !important;
+            border-radius: 6px !important;
+        }
+
+        a {
+            color: var(--accent-secondary);
+        }
+
+        @media (max-width: 768px) {
+            .tabs {
+                scrollbar-width: none;
+            }
+
+            .search-box {
+                min-width: 0;
+            }
+        }
+
+        @media (max-width: 480px) {
+            header {
+                padding: 12px 14px !important;
+                margin-bottom: 12px;
+                border-radius: 0 0 8px 8px;
+            }
+
+            header h1 {
+                font-size: 20px !important;
+                margin-bottom: 3px;
+            }
+
+            .actions-toolbar {
+                padding: 8px;
+                margin-bottom: 12px;
+            }
+
+            .tab-content > div[style*="display: flex"][style*="gap: 10px"][style*="margin-bottom"] {
+                padding: 8px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -1559,8 +2081,10 @@
                     <tr><td><kbd>g</kbd> <kbd>r</kbd></td><td>Requests</td></tr>
                     <tr><td><kbd>g</kbd> <kbd>n</kbd></td><td>Notifications</td></tr>
                     <tr><td><kbd>g</kbd> <kbd>e</kbd></td><td>Upcoming Episodes</td></tr>
+                    <tr><td><kbd>g</kbd> <kbd>h</kbd></td><td>Health</td></tr>
                     <tr><td><kbd>g</kbd> <kbd>i</kbd></td><td>Issues</td></tr>
                     <tr><td><kbd>g</kbd> <kbd>b</kbd></td><td>Backup</td></tr>
+                    <tr><td><kbd>g</kbd> <kbd>a</kbd></td><td>Activity</td></tr>
                     <tr><td><kbd>g</kbd> <kbd>s</kbd></td><td>Settings</td></tr>
                     <tr><td><kbd>/</kbd></td><td>Focus search on the visible tab</td></tr>
                     <tr><td><kbd>?</kbd></td><td>Show this help</td></tr>
@@ -1582,29 +2106,33 @@
 
         <div class="stats-grid">
             <div class="stat-card" style="cursor: pointer;" onclick="switchTab('users', event)">
-                <div class="stat-label">Active Users</div>
+                <div class="stat-label" title="Active Users">Users</div>
                 <div class="stat-value" id="totalUsers">-</div>
                 <div id="inactiveUsersNote" style="font-size: 0.75em; color: var(--text-secondary); margin-top: 2px; display: none;"></div>
             </div>
             <div class="stat-card" style="cursor: pointer;" onclick="switchTab('requests', event)">
-                <div class="stat-label">Total Requests</div>
+                <div class="stat-label" title="Total Requests">Requests</div>
                 <div class="stat-value" id="totalRequests">-</div>
             </div>
             <div class="stat-card" style="cursor: pointer;" onclick="showTrackingRequests()">
-                <div class="stat-label">⏳ Tracking (Waiting)</div>
+                <div class="stat-label" title="Tracking / Waiting">Waiting</div>
                 <div class="stat-value" id="trackingRequests">-</div>
             </div>
             <div class="stat-card" style="cursor: pointer;" onclick="switchTab('upcoming', event)">
-                <div class="stat-label">Episodes Tracked</div>
+                <div class="stat-label" title="Episodes Tracked">Episodes</div>
                 <div class="stat-value" id="episodesTracked">-</div>
             </div>
             <div class="stat-card" style="cursor: pointer;" onclick="showSentNotifications()">
-                <div class="stat-label">Notifications Sent</div>
+                <div class="stat-label" title="Notifications Sent">Sent</div>
                 <div class="stat-value" id="notificationsSent">-</div>
             </div>
             <div class="stat-card" style="cursor: pointer;" onclick="showPendingNotifications()">
-                <div class="stat-label">Pending Notifications</div>
+                <div class="stat-label" title="Pending Notifications">Pending</div>
                 <div class="stat-value" id="notificationsPending">-</div>
+            </div>
+            <div class="stat-card" style="cursor: pointer;" onclick="switchTab('health', event)">
+                <div class="stat-label" title="Service Issues">Issues</div>
+                <div class="stat-value" id="unhealthyServices">-</div>
             </div>
         </div>
 
@@ -1628,6 +2156,7 @@
                 </div>
                 <div class="toolbar-group">
                     <span class="toolbar-group-label">Monitoring</span>
+                    <button onclick="switchTab('health', event)" class="secondary">🩺 Health</button>
                     <button onclick="runReconciliation()" id="reconcileBtn" class="secondary">🔍 Check Missed</button>
                     <button onclick="checkStuckDownloads()" id="stuckBtn" class="secondary">⚠️ Stuck</button>
                     <button onclick="checkQualityRelease()" id="qualityCheckBtn" class="secondary">📅 Quality</button>
@@ -1647,9 +2176,11 @@
             <div class="tab" onclick="switchTab('notifications', event)">📧 Notifications<span class="tab-count" id="tabCount-notifications" style="display:none;">0</span></div>
             <div class="tab" onclick="switchTab('issues', event)">🚨 Issues<span class="tab-count" id="tabCount-issues" style="display:none;">0</span></div>
             <div class="tab" onclick="switchTab('upcoming', event)">📅 Upcoming Episodes<span class="tab-count" id="tabCount-upcoming" style="display:none;">0</span></div>
+            <div class="tab" onclick="switchTab('health', event)">🩺 Health<span class="tab-count" id="tabCount-health" style="display:none;">0</span></div>
             <div class="tab" onclick="switchTab('backup', event)">💾 Backup</div>
             <div class="tab" onclick="switchTab('maintenance', event)">🔧 Maintenance</div>
             <div class="tab" onclick="switchTab('settings', event)">⚙️ Settings</div>
+            <div class="tab" onclick="switchTab('activity', event)">🧾 Activity</div>
             <div class="tab" onclick="switchTab('logs', event)">📋 Logs</div>
         </div>
 
@@ -1719,6 +2250,8 @@
                 <button onclick="filterNotificationsByType('all')" id="notificationFilterAll" class="secondary" style="background: #e5a00d;">All</button>
                 <button onclick="filterNotificationsByType('episode')" id="notificationFilterTV" class="secondary">📺 TV Shows</button>
                 <button onclick="filterNotificationsByType('movie')" id="notificationFilterMovie" class="secondary">🎬 Movies</button>
+                <input type="number" id="notificationPurgeDays" min="1" max="3650" value="90" title="Days of sent notifications to keep" style="width: 90px; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4;">
+                <button onclick="purgeSentNotifications()" id="purgeSentBtn" class="danger" title="Delete sent notifications older than the retention days">🧹 Purge Sent</button>
                 <button onclick="loadNotifications(true)" class="secondary" title="Refresh notifications">🔄 Refresh</button>
             </div>
             <div class="data-table">
@@ -1736,7 +2269,7 @@
                         </tr>
                     </thead>
                     <tbody id="notificationsTableBody">
-                        <tr><td colspan="7" class="loading"><div class="spinner"></div>Loading notifications...</td></tr>
+                        <tr><td colspan="8" class="loading"><div class="spinner"></div>Loading notifications...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -1765,13 +2298,13 @@
                 <table>
                     <thead>
                         <tr>
-                            <th>Title</th>
-                            <th>Type</th>
-                            <th>Issue</th>
+                            <th class="sortable" onclick="sortTable('issues', 'title')">Title</th>
+                            <th class="sortable" onclick="sortTable('issues', 'media_type')">Type</th>
+                            <th class="sortable" onclick="sortTable('issues', 'issue_type')">Issue</th>
                             <th>Message</th>
-                            <th>Reported By</th>
-                            <th>Status</th>
-                            <th>Date</th>
+                            <th class="sortable" onclick="sortTable('issues', 'reported_by')">Reported By</th>
+                            <th class="sortable" onclick="sortTable('issues', 'status')">Status</th>
+                            <th class="sortable" onclick="sortTable('issues', 'created_at')">Date</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -1832,6 +2365,96 @@
             </div>
         </div>
 
+        <div id="healthTab" class="tab-content">
+            <div style="display: flex; gap: 10px; margin-bottom: 15px; align-items: center; flex-wrap: wrap;">
+                <input type="text" class="search-box" placeholder="Search health..." id="healthSearch" oninput="filterHealth()" style="flex: 1; min-width: 220px;">
+                <button onclick="loadSystemHealth(true)" id="healthCheckBtn" class="secondary">🔄 Check Now</button>
+            </div>
+
+            <div class="health-summary-grid">
+                <div class="health-summary-card">
+                    <div class="stat-label">Configured Services</div>
+                    <div class="stat-value compact" id="healthConfiguredServices">-</div>
+                </div>
+                <div class="health-summary-card">
+                    <div class="stat-label">Healthy Services</div>
+                    <div class="stat-value compact" id="healthOkServices">-</div>
+                </div>
+                <div class="health-summary-card">
+                    <div class="stat-label">Worker Errors</div>
+                    <div class="stat-value compact" id="healthWorkerErrors">-</div>
+                </div>
+                <div class="health-summary-card">
+                    <div class="stat-label">24h Uptime</div>
+                    <div class="stat-value compact" id="healthUptime24h">-</div>
+                </div>
+                <div class="health-summary-card">
+                    <div class="stat-label">Check Interval</div>
+                    <div class="stat-value compact" id="healthInterval">-</div>
+                </div>
+            </div>
+
+            <h3 style="margin: 18px 0 12px; color: #e5a00d;">Connected Services</h3>
+            <div class="data-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="sortable" onclick="sortTable('serviceHealth', 'service_name')">Service</th>
+                            <th class="sortable" onclick="sortTable('serviceHealth', 'status')">Status</th>
+                            <th class="sortable" onclick="sortTable('serviceHealth', 'latency_ms')">Latency</th>
+                            <th class="sortable" onclick="sortTable('serviceHealth', 'consecutive_failures')">Failures</th>
+                            <th class="sortable" onclick="sortTable('serviceHealth', 'uptime_24h')">24h Uptime</th>
+                            <th class="sortable" onclick="sortTable('serviceHealth', 'checks_24h')">24h Checks</th>
+                            <th class="sortable" onclick="sortTable('serviceHealth', 'last_checked_at')">Last Checked</th>
+                            <th>Error</th>
+                        </tr>
+                    </thead>
+                    <tbody id="serviceHealthTableBody">
+                        <tr><td colspan="8" class="loading"><div class="spinner"></div>Loading service health...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h3 style="margin: 24px 0 12px; color: #e5a00d;">Background Workers</h3>
+            <div class="data-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="sortable" onclick="sortTable('workerHealth', 'worker_name')">Worker</th>
+                            <th class="sortable" onclick="sortTable('workerHealth', 'status')">Status</th>
+                            <th class="sortable" onclick="sortTable('workerHealth', 'last_success_at')">Last Success</th>
+                            <th class="sortable" onclick="sortTable('workerHealth', 'next_run_at')">Next Run</th>
+                            <th class="sortable" onclick="sortTable('workerHealth', 'last_duration_ms')">Duration</th>
+                            <th class="sortable" onclick="sortTable('workerHealth', 'failure_count')">Failures</th>
+                            <th>Error</th>
+                        </tr>
+                    </thead>
+                    <tbody id="workerHealthTableBody">
+                        <tr><td colspan="7" class="loading"><div class="spinner"></div>Loading worker health...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h3 style="margin: 24px 0 12px; color: #e5a00d;">Recent Health Events</h3>
+            <div class="data-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="sortable" onclick="sortTable('healthEvents', 'checked_at')">Checked</th>
+                            <th class="sortable" onclick="sortTable('healthEvents', 'service_name')">Service</th>
+                            <th class="sortable" onclick="sortTable('healthEvents', 'status')">Status</th>
+                            <th class="sortable" onclick="sortTable('healthEvents', 'latency_ms')">Latency</th>
+                            <th class="sortable" onclick="sortTable('healthEvents', 'consecutive_failures')">Failures</th>
+                            <th>Error</th>
+                        </tr>
+                    </thead>
+                    <tbody id="healthEventsTableBody">
+                        <tr><td colspan="6" class="loading"><div class="spinner"></div>Loading health events...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         <div id="backupTab" class="tab-content">
             <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 12px; margin-bottom: 20px;">
                 <h3 style="margin-bottom: 15px; color: #e5a00d;">💾 Create Backup</h3>
@@ -1851,9 +2474,9 @@
                 <table>
                     <thead>
                         <tr>
-                            <th>Filename</th>
-                            <th>Created</th>
-                            <th>Size</th>
+                            <th class="sortable" onclick="sortTable('backups', 'filename')">Filename</th>
+                            <th class="sortable" onclick="sortTable('backups', 'created')">Created</th>
+                            <th class="sortable" onclick="sortTable('backups', 'size')">Size</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -1918,10 +2541,10 @@
                 <table>
                     <thead>
                         <tr>
-                            <th>Title</th>
-                            <th>Start</th>
-                            <th>End</th>
-                            <th>Status</th>
+                            <th class="sortable" onclick="sortTable('maintenance', 'title')">Title</th>
+                            <th class="sortable" onclick="sortTable('maintenance', 'start_time')">Start</th>
+                            <th class="sortable" onclick="sortTable('maintenance', 'end_time')">End</th>
+                            <th class="sortable" onclick="sortTable('maintenance', 'status')">Status</th>
                             <th>Emails</th>
                             <th>Actions</th>
                         </tr>
@@ -1986,6 +2609,119 @@
                         -
                     </div>
                 </div>
+            </div>
+
+            <!-- Operations Automation Section -->
+            <div class="settings-card">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; flex-wrap: wrap;">
+                    <div>
+                        <h3 style="margin-bottom: 8px; color: #e5a00d;">🩺 Operations Automation</h3>
+                        <p style="color: #999; font-size: 13px; line-height: 1.6; margin: 0;">Periodic service checks, alert routing, notification cleanup, scheduled backups, and config validation.</p>
+                    </div>
+                    <button onclick="runConfigValidation()" id="configValidateBtn" class="secondary" style="padding: 8px 12px; font-size: 12px;">✅ Validate Config</button>
+                </div>
+
+                <h4 style="margin: 0 0 12px; color: #fff; font-size: 14px;">Service Health</h4>
+                <div class="settings-grid" style="margin-bottom: 18px;">
+                    <div class="settings-field">
+                        <label>Health Checks</label>
+                        <div class="inline-switch">
+                            <input type="checkbox" id="config-service-health-enabled">
+                            <span>Run periodic service probes</span>
+                        </div>
+                    </div>
+                    <div class="settings-field">
+                        <label>Email Alerts</label>
+                        <div class="inline-switch">
+                            <input type="checkbox" id="config-service-health-email-alerts">
+                            <span>Email admin when services fail</span>
+                        </div>
+                    </div>
+                    <div class="settings-field">
+                        <label>Interval</label>
+                        <input type="number" id="config-service-health-interval" min="1" max="1440">
+                        <small>Minutes between service checks.</small>
+                    </div>
+                    <div class="settings-field">
+                        <label>Failure Threshold</label>
+                        <input type="number" id="config-service-health-threshold" min="1" max="20">
+                        <small>Consecutive failures before alerting.</small>
+                    </div>
+                    <div class="settings-field">
+                        <label>Alert Cooldown</label>
+                        <input type="number" id="config-service-health-cooldown" min="1" max="1440">
+                        <small>Minutes before repeating an alert.</small>
+                    </div>
+                    <div class="settings-field">
+                        <label>Health History</label>
+                        <input type="number" id="config-service-health-history-days" min="1" max="365">
+                        <small>Days of service check history to keep.</small>
+                    </div>
+                </div>
+
+                <h4 style="margin: 0 0 12px; color: #fff; font-size: 14px;">Alert Webhook</h4>
+                <div class="settings-grid" style="margin-bottom: 18px;">
+                    <div class="settings-field">
+                        <label>Webhook Alerts</label>
+                        <div class="inline-switch">
+                            <input type="checkbox" id="config-alert-webhook-enabled">
+                            <span>Send alerts to a webhook</span>
+                        </div>
+                    </div>
+                    <div class="settings-field">
+                        <label>Webhook Type</label>
+                        <select id="config-alert-webhook-type">
+                            <option value="generic">Generic JSON</option>
+                            <option value="discord">Discord</option>
+                            <option value="slack">Slack</option>
+                        </select>
+                    </div>
+                    <div class="settings-field" style="grid-column: 1 / -1;">
+                        <label>Webhook URL</label>
+                        <input type="password" id="config-alert-webhook-url" placeholder="Leave blank to keep current">
+                        <small>Stored as a secret. Leave blank when saving unless replacing it.</small>
+                    </div>
+                </div>
+
+                <h4 style="margin: 0 0 12px; color: #fff; font-size: 14px;">Retention & Backups</h4>
+                <div class="settings-grid">
+                    <div class="settings-field">
+                        <label>Notification Retention</label>
+                        <div class="inline-switch">
+                            <input type="checkbox" id="config-notification-retention-enabled">
+                            <span>Purge old sent notifications</span>
+                        </div>
+                    </div>
+                    <div class="settings-field">
+                        <label>Retention Age</label>
+                        <input type="number" id="config-notification-retention-days" min="1" max="3650">
+                        <small>Delete sent notifications older than this many days.</small>
+                    </div>
+                    <div class="settings-field">
+                        <label>Purge Interval</label>
+                        <input type="number" id="config-notification-retention-interval" min="1" max="720">
+                        <small>Hours between automatic purge runs.</small>
+                    </div>
+                    <div class="settings-field">
+                        <label>Scheduled Backups</label>
+                        <div class="inline-switch">
+                            <input type="checkbox" id="config-backup-schedule-enabled">
+                            <span>Create backups automatically</span>
+                        </div>
+                    </div>
+                    <div class="settings-field">
+                        <label>Backup Interval</label>
+                        <input type="number" id="config-backup-schedule-interval" min="1" max="2160">
+                        <small>Hours between scheduled backups.</small>
+                    </div>
+                    <div class="settings-field">
+                        <label>Backups To Keep</label>
+                        <input type="number" id="config-backup-schedule-retention" min="1" max="100">
+                        <small>Old scheduled backups are pruned after this count.</small>
+                    </div>
+                </div>
+
+                <div id="configValidationResults" class="config-validation-list"></div>
             </div>
 
             <!-- Batch Timing Section -->
@@ -2607,6 +3343,30 @@
             </div>
         </div>
 
+        <div id="activityTab" class="tab-content">
+            <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                <input type="text" class="search-box" placeholder="Search activity..." id="activitySearch" oninput="filterActivity()" style="flex: 1; min-width: 220px;">
+                <button onclick="loadActivity(true)" id="refreshActivityBtn" class="secondary">🔄 Refresh</button>
+            </div>
+
+            <div class="data-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="sortable" onclick="sortTable('activity', 'created_at')">When</th>
+                            <th class="sortable" onclick="sortTable('activity', 'action')">Action</th>
+                            <th class="sortable" onclick="sortTable('activity', 'status')">Status</th>
+                            <th class="sortable" onclick="sortTable('activity', 'message')">Message</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody id="activityTableBody">
+                        <tr><td colspan="5" class="loading"><div class="spinner"></div>Loading activity...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         <div id="logsTab" class="tab-content">
             <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
                 <button onclick="loadLogs()" id="refreshLogsBtn" class="secondary">🔄 Refresh</button>
@@ -2706,6 +3466,11 @@
         let allNotifications = [];
         let allUpcoming = [];
         let allIssues = [];
+        let allBackups = [];
+        let allServiceHealth = [];
+        let allWorkerHealth = [];
+        let allHealthEvents = [];
+        let allActivity = [];
         let upcomingViewMode = 'grouped'; // 'grouped' or 'list'
         
         // Sorting state
@@ -2713,7 +3478,14 @@
             users: { column: 'created_at', direction: 'desc' },
             requests: { column: 'created_at', direction: 'desc' },
             notifications: { column: 'created_at', direction: 'desc' },
-            upcoming: { column: 'air_date', direction: 'asc' }  // Upcoming should be chronological (soonest first)
+            upcoming: { column: 'air_date', direction: 'asc' },
+            issues: { column: 'created_at', direction: 'desc' },
+            backups: { column: 'created', direction: 'desc' },
+            maintenance: { column: 'start_time', direction: 'desc' },
+            serviceHealth: { column: 'status', direction: 'asc' },
+            workerHealth: { column: 'status', direction: 'asc' },
+            healthEvents: { column: 'checked_at', direction: 'desc' },
+            activity: { column: 'created_at', direction: 'desc' }
         };
 
         // Pagination state (Notifications + Requests)
@@ -2738,16 +3510,27 @@
         function persistSort(tab) { ssSave('sort.' + tab, sortState[tab]); }
         function persistFilter(tab, payload) { ssSave('filter.' + tab, payload); }
         function loadPersistedSort() {
-            ['users','requests','notifications','upcoming'].forEach(tab => {
+            ['users','requests','notifications','upcoming','issues','backups','maintenance','serviceHealth','workerHealth','healthEvents','activity'].forEach(tab => {
                 const saved = ssLoad('sort.' + tab, null);
                 if (saved && saved.column) sortState[tab] = saved;
             });
         }
 
         function applyHeaderSortIndicators(tab) {
-            const tabEl = document.getElementById(tab + 'Tab');
+            const tabContainerMap = {
+                backups: 'backupTab',
+                serviceHealth: 'healthTab',
+                workerHealth: 'healthTab',
+                healthEvents: 'healthTab'
+            };
+            const tabEl = document.getElementById(tabContainerMap[tab] || (tab + 'Tab'));
             if (!tabEl) return;
-            tabEl.querySelectorAll('th').forEach(th => th.classList.remove('sort-asc', 'sort-desc'));
+            const tabNeedle = `sortTable('${tab}'`;
+            tabEl.querySelectorAll('th[onclick]').forEach(th => {
+                if ((th.getAttribute('onclick') || '').includes(tabNeedle)) {
+                    th.classList.remove('sort-asc', 'sort-desc');
+                }
+            });
             const st = sortState[tab];
             if (!st || !st.column) return;
             // Match exact "sortTable('<tab>', '<col>')" to disambiguate columns
@@ -2767,9 +3550,10 @@
             return data.slice().sort((a, b) => {
                 let aVal = a[column];
                 let bVal = b[column];
-                if (column.includes('_at') || column === 'air_date') {
-                    aVal = new Date(aVal || 0);
-                    bVal = new Date(bVal || 0);
+                if (column.includes('_at') || ['air_date', 'created', 'start_time', 'end_time', 'next_run_at', 'last_success_at', 'last_checked_at'].includes(column)) {
+                    const aTime = aVal ? new Date(aVal).getTime() : 0;
+                    const bTime = bVal ? new Date(bVal).getTime() : 0;
+                    return direction === 'asc' ? aTime - bTime : bTime - aTime;
                 }
                 if (typeof aVal === 'number' && typeof bVal === 'number') {
                     return direction === 'asc' ? aVal - bVal : bVal - aVal;
@@ -3098,9 +3882,11 @@
             notifications: false,
             upcoming: false,
             issues: false,
+            health: false,
             backup: false,
             maintenance: false,
             settings: false,
+            activity: false,
             logs: false
         };
         function invalidateTabCache(tab) {
@@ -3635,6 +4421,7 @@
                 const response = await fetch(`${API_BASE}/admin/issues`);
                 allIssues = await response.json();
                 updateTabCount('issues', Array.isArray(allIssues) ? allIssues.length : 0);
+                applyHeaderSortIndicators('issues');
                 filterIssues();
                 tabCache.issues = true;
             } catch (error) {
@@ -3646,8 +4433,9 @@
         
         function renderIssues(issues) {
             const tbody = document.getElementById('issuesTableBody');
+            issues = sortDataset(issues || [], 'issues');
 
-            if (!issues || issues.length === 0) {
+            if (issues.length === 0) {
                 tbody.innerHTML = emptyHintRow(8, '🎉', 'No reported issues — your library is in good shape.');
                 return;
             }
@@ -3732,6 +4520,231 @@
             });
             
             renderIssues(filtered);
+        }
+
+        function statusPill(status) {
+            const value = status || 'unknown';
+            const label = value.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            return `<span class="status-pill ${value}">${label}</span>`;
+        }
+
+        function formatDurationMs(ms) {
+            if (ms === null || ms === undefined || ms === '') return '-';
+            const num = Number(ms);
+            if (!Number.isFinite(num)) return '-';
+            if (num < 1000) return `${num} ms`;
+            return `${(num / 1000).toFixed(1)} s`;
+        }
+
+        async function loadSystemHealth(force) {
+            const btn = document.getElementById('healthCheckBtn');
+            if (btn && force) {
+                btn.disabled = true;
+                btn.textContent = '⏳ Checking...';
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/admin/system-health${force ? '/check' : ''}`, {
+                    method: force ? 'POST' : 'GET',
+                    cache: 'no-store'
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail || 'Failed to load system health');
+
+                allServiceHealth = data.services || [];
+                allWorkerHealth = data.workers || [];
+                allHealthEvents = data.history || [];
+                const unhealthy = data.unhealthy_services || 0;
+                updateTabCount('health', unhealthy);
+                document.getElementById('unhealthyServices').textContent = unhealthy;
+
+                const configured = allServiceHealth.filter(s => s.configured).length;
+                const ok = allServiceHealth.filter(s => s.configured && s.status === 'ok').length;
+                const workerErrors = allWorkerHealth.filter(w => w.status === 'error').length;
+                const servicesWithUptime = allServiceHealth.filter(s => s.configured && Number.isFinite(Number(s.uptime_24h)));
+                const averageUptime = servicesWithUptime.length
+                    ? servicesWithUptime.reduce((sum, s) => sum + Number(s.uptime_24h), 0) / servicesWithUptime.length
+                    : null;
+                document.getElementById('healthConfiguredServices').textContent = configured;
+                document.getElementById('healthOkServices').textContent = ok;
+                document.getElementById('healthWorkerErrors').textContent = workerErrors;
+                document.getElementById('healthUptime24h').textContent = averageUptime == null ? '-' : `${averageUptime.toFixed(1)}%`;
+                document.getElementById('healthInterval').textContent = `${data.settings?.interval_minutes || '-'} min`;
+
+                applyHeaderSortIndicators('serviceHealth');
+                applyHeaderSortIndicators('workerHealth');
+                applyHeaderSortIndicators('healthEvents');
+                filterHealth();
+                tabCache.health = true;
+                if (force) showSuccess('System health check complete.');
+            } catch (error) {
+                showError('Failed to load system health: ' + error.message);
+                document.getElementById('serviceHealthTableBody').innerHTML = '<tr><td colspan="8" class="empty-state">Failed to load service health</td></tr>';
+                document.getElementById('workerHealthTableBody').innerHTML = '<tr><td colspan="7" class="empty-state">Failed to load worker health</td></tr>';
+                document.getElementById('healthEventsTableBody').innerHTML = '<tr><td colspan="6" class="empty-state">Failed to load health events</td></tr>';
+            } finally {
+                if (btn && force) {
+                    btn.disabled = false;
+                    btn.textContent = '🔄 Check Now';
+                }
+            }
+        }
+
+        function filterHealth() {
+            const input = document.getElementById('healthSearch');
+            const search = (input?.value || '').toLowerCase();
+            persistFilter('health', { search });
+
+            const services = allServiceHealth.filter(s =>
+                (s.service_name || '').toLowerCase().includes(search) ||
+                (s.status || '').toLowerCase().includes(search) ||
+                (s.last_error || '').toLowerCase().includes(search)
+            );
+            const workers = allWorkerHealth.filter(w =>
+                (w.worker_name || '').toLowerCase().includes(search) ||
+                (w.status || '').toLowerCase().includes(search) ||
+                (w.last_error || '').toLowerCase().includes(search)
+            );
+            const events = allHealthEvents.filter(e =>
+                (e.service_name || '').toLowerCase().includes(search) ||
+                (e.service_type || '').toLowerCase().includes(search) ||
+                (e.status || '').toLowerCase().includes(search) ||
+                (e.error || '').toLowerCase().includes(search)
+            );
+            renderServiceHealth(services);
+            renderWorkerHealth(workers);
+            renderHealthEvents(events);
+        }
+
+        function renderServiceHealth(services) {
+            const tbody = document.getElementById('serviceHealthTableBody');
+            const sorted = sortDataset(services, 'serviceHealth');
+            if (!sorted.length) {
+                tbody.innerHTML = emptyHintRow(8, '🩺', 'No service health rows yet. Click Check Now to run probes.');
+                return;
+            }
+            tbody.innerHTML = sorted.map(s => `
+                <tr>
+                    <td>
+                        <strong>${escapeHtml(s.service_name)}</strong>
+                        <br><small style="color:#999;">${escapeHtml(s.service_type)}${s.configured ? '' : ' · not configured'}</small>
+                    </td>
+                    <td>${statusPill(s.status)}</td>
+                    <td>${s.latency_ms == null ? '-' : `${s.latency_ms} ms`}</td>
+                    <td>${s.consecutive_failures || 0}</td>
+                    <td>${s.uptime_24h == null ? '-' : `${Number(s.uptime_24h).toFixed(1)}%`}</td>
+                    <td>${s.checks_24h || 0}</td>
+                    <td>${formatDateTime(s.last_checked_at)}</td>
+                    <td class="table-error-cell">${s.last_error ? escapeHtml(s.last_error) : '-'}</td>
+                </tr>
+            `).join('');
+        }
+
+        function renderWorkerHealth(workers) {
+            const tbody = document.getElementById('workerHealthTableBody');
+            const sorted = sortDataset(workers, 'workerHealth');
+            if (!sorted.length) {
+                tbody.innerHTML = emptyHintRow(7, '⚙️', 'No worker health rows yet. Workers report after their next cycle.');
+                return;
+            }
+            tbody.innerHTML = sorted.map(w => `
+                <tr>
+                    <td><strong>${escapeHtml(w.worker_name)}</strong></td>
+                    <td>${statusPill(w.status)}</td>
+                    <td>${formatDateTime(w.last_success_at)}</td>
+                    <td>${formatDateTime(w.next_run_at)}</td>
+                    <td>${formatDurationMs(w.last_duration_ms)}</td>
+                    <td>${w.failure_count || 0}</td>
+                    <td class="table-error-cell">${w.last_error ? escapeHtml(w.last_error) : '-'}</td>
+                </tr>
+            `).join('');
+        }
+
+        function renderHealthEvents(events) {
+            const tbody = document.getElementById('healthEventsTableBody');
+            const sorted = sortDataset(events, 'healthEvents');
+            if (!sorted.length) {
+                tbody.innerHTML = emptyHintRow(6, '🧾', 'No health events recorded yet. The next health check will add rows here.');
+                return;
+            }
+            tbody.innerHTML = sorted.map(e => `
+                <tr>
+                    <td>${formatDateTime(e.checked_at)}</td>
+                    <td>
+                        <strong>${escapeHtml(e.service_name)}</strong>
+                        <br><small style="color:#999;">${escapeHtml(e.service_type)}${e.configured ? '' : ' · not configured'}</small>
+                    </td>
+                    <td>${statusPill(e.status)}</td>
+                    <td>${e.latency_ms == null ? '-' : `${e.latency_ms} ms`}</td>
+                    <td>${e.consecutive_failures || 0}</td>
+                    <td class="table-error-cell">${e.error ? escapeHtml(e.error) : '-'}</td>
+                </tr>
+            `).join('');
+        }
+
+        async function loadActivity(force) {
+            if (!force && tabCache.activity) {
+                filterActivity();
+                return;
+            }
+            const btn = document.getElementById('refreshActivityBtn');
+            if (btn && force) {
+                btn.disabled = true;
+                btn.textContent = '⏳ Refreshing...';
+            }
+            try {
+                const response = await fetch(`${API_BASE}/admin/activity?limit=150`, { cache: 'no-store' });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail || 'Failed to load activity');
+                allActivity = data.activities || [];
+                applyHeaderSortIndicators('activity');
+                filterActivity();
+                tabCache.activity = true;
+            } catch (error) {
+                showError('Failed to load activity: ' + error.message);
+                document.getElementById('activityTableBody').innerHTML = '<tr><td colspan="5" class="empty-state">Failed to load activity</td></tr>';
+            } finally {
+                if (btn && force) {
+                    btn.disabled = false;
+                    btn.textContent = '🔄 Refresh';
+                }
+            }
+        }
+
+        function filterActivity() {
+            const input = document.getElementById('activitySearch');
+            const search = (input?.value || '').toLowerCase();
+            persistFilter('activity', { search });
+            const filtered = allActivity.filter(item =>
+                (item.action || '').toLowerCase().includes(search) ||
+                (item.status || '').toLowerCase().includes(search) ||
+                (item.message || '').toLowerCase().includes(search) ||
+                JSON.stringify(item.details || {}).toLowerCase().includes(search)
+            );
+            renderActivity(filtered);
+        }
+
+        function renderActivity(rows) {
+            const tbody = document.getElementById('activityTableBody');
+            const sorted = sortDataset(rows || [], 'activity');
+            if (!sorted.length) {
+                tbody.innerHTML = emptyHintRow(5, '🧾', 'No admin activity recorded yet.');
+                return;
+            }
+            tbody.innerHTML = sorted.map(item => {
+                const details = item.details && Object.keys(item.details).length
+                    ? Object.entries(item.details).map(([key, value]) => `${escapeHtml(key)}: ${escapeHtml(typeof value === 'object' ? JSON.stringify(value) : value)}`).join('<br>')
+                    : '-';
+                return `
+                    <tr>
+                        <td>${formatDateTime(item.created_at)}</td>
+                        <td><strong>${escapeHtml(item.action || '-')}</strong></td>
+                        <td>${statusPill(item.status)}</td>
+                        <td>${escapeHtml(item.message || '-')}</td>
+                        <td class="activity-detail-cell">${details}</td>
+                    </tr>
+                `;
+            }).join('');
         }
         
         async function fixIssue(issueId) {
@@ -3818,6 +4831,7 @@
             }
             else if (tabName === 'upcoming') loadUpcoming();
             else if (tabName === 'issues') loadIssues();
+            else if (tabName === 'health') loadSystemHealth();
             else if (tabName === 'backup') {
                 // Backups change frequently; load once per session, force via Refresh
                 if (!tabCache.backup) { loadBackups(); tabCache.backup = true; }
@@ -3828,6 +4842,7 @@
             else if (tabName === 'settings') {
                 if (!tabCache.settings) { loadConfig(); tabCache.settings = true; }
             }
+            else if (tabName === 'activity') loadActivity();
             else if (tabName === 'logs' && !allLogs) loadLogs();
         }
 
@@ -3953,6 +4968,40 @@
             }
         }
 
+        async function purgeSentNotifications() {
+            const input = document.getElementById('notificationPurgeDays');
+            const days = Math.max(1, Math.min(3650, parseInt(input.value, 10) || 90));
+            input.value = days;
+
+            if (!(await showConfirm(`Delete sent notifications older than ${days} day${days === 1 ? '' : 's'}?\n\nPending notifications will be left alone. This cannot be undone.`, { title: 'Purge sent notifications?', okText: 'Purge', danger: true }))) {
+                return;
+            }
+
+            const btn = document.getElementById('purgeSentBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Purging...';
+
+            try {
+                const response = await fetch(`${API_BASE}/admin/notifications/purge-sent?days_old=${days}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    showSuccess(`Purged ${data.count} sent notification(s).`);
+                    await loadNotifications(true);
+                    await loadStats();
+                } else {
+                    showError(data.detail || 'Failed to purge sent notifications');
+                }
+            } catch (error) {
+                showError('Failed to purge sent notifications: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🧹 Purge Sent';
+            }
+        }
+
         async function clearAllPending() {
             if (!(await showConfirm('Mark ALL pending notifications as sent WITHOUT emailing?\n\nThis will clear EVERYTHING in the queue.\n\nThis cannot be undone.', { title: '⚠️ Clear ALL pending?', okText: 'Clear ALL', danger: true }))) {
                 return;
@@ -4070,9 +5119,11 @@
                 notifications: () => loadNotifications(true),
                 upcoming: () => loadUpcoming(true),
                 issues: () => loadIssues(true),
+                health: () => loadSystemHealth(),
                 backup: () => loadBackups(),
                 maintenance: () => loadMaintenanceWindows(),
                 settings: () => loadConfig(),
+                activity: () => loadActivity(true),
                 logs: () => loadLogs()
             };
             const fn = map[activeId];
@@ -4117,10 +5168,12 @@
             r: 'requests',
             n: 'notifications',
             e: 'upcoming',
+            h: 'health',
             i: 'issues',
             s: 'settings',
             b: 'backup',
             m: 'maintenance',
+            a: 'activity',
             l: 'logs'
         };
         let _gPending = false;
@@ -4453,6 +5506,7 @@
         window.addEventListener('load', () => setTimeout(showCoffeeToast, 1500));
 
         function sortTable(tableName, column) {
+            if (!sortState[tableName]) sortState[tableName] = { column, direction: 'asc' };
             const state = sortState[tableName];
 
             // Toggle direction if same column, otherwise default to asc
@@ -4475,6 +5529,13 @@
             else if (tableName === 'requests') applyRequestFilters();
             else if (tableName === 'notifications') applyNotificationFilters();
             else if (tableName === 'upcoming') filterUpcoming();
+            else if (tableName === 'issues') filterIssues();
+            else if (tableName === 'backups') renderBackups(allBackups);
+            else if (tableName === 'maintenance') renderMaintenanceWindows(allMaintenanceWindows);
+            else if (tableName === 'serviceHealth') filterHealth();
+            else if (tableName === 'workerHealth') filterHealth();
+            else if (tableName === 'healthEvents') filterHealth();
+            else if (tableName === 'activity') filterActivity();
         }
 
         async function showSentNotifications() {
@@ -4594,7 +5655,9 @@
             try {
                 const response = await fetch(`${API_BASE}/admin/backup/list`);
                 const data = await response.json();
-                renderBackups(data.backups || []);
+                allBackups = data.backups || [];
+                applyHeaderSortIndicators('backups');
+                renderBackups(allBackups);
             } catch (error) {
                 console.error('Failed to load backups:', error);
                 document.getElementById('backupsTableBody').innerHTML = '<tr><td colspan="4" class="empty-state">Failed to load backups</td></tr>';
@@ -4603,6 +5666,7 @@
 
         function renderBackups(backups) {
             const tbody = document.getElementById('backupsTableBody');
+            backups = sortDataset(backups || [], 'backups');
             if (backups.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="4" class="empty-state"><div>No backups found</div></td></tr>';
                 return;
@@ -4836,6 +5900,25 @@
                 document.getElementById('config-plex-host').value = plex.host;
                 document.getElementById('config-plex-port').value = plex.port || '32400';
                 document.getElementById('config-plex-token').value = config.plex.token || '';
+
+                // Populate Operations fields
+                if (config.operations) {
+                    document.getElementById('config-service-health-enabled').checked = config.operations.service_health_enabled !== false;
+                    document.getElementById('config-service-health-email-alerts').checked = config.operations.service_health_email_alerts_enabled !== false;
+                    document.getElementById('config-service-health-interval').value = config.operations.service_health_interval_minutes || '5';
+                    document.getElementById('config-service-health-threshold').value = config.operations.service_health_failure_threshold || '3';
+                    document.getElementById('config-service-health-cooldown').value = config.operations.service_health_alert_cooldown_minutes || '60';
+                    document.getElementById('config-service-health-history-days').value = config.operations.service_health_history_days || '14';
+                    document.getElementById('config-alert-webhook-enabled').checked = config.operations.alert_webhook_enabled === true;
+                    document.getElementById('config-alert-webhook-type').value = config.operations.alert_webhook_type || 'generic';
+                    document.getElementById('config-alert-webhook-url').value = config.operations.alert_webhook_url || '';
+                    document.getElementById('config-notification-retention-enabled').checked = config.operations.notification_retention_enabled === true;
+                    document.getElementById('config-notification-retention-days').value = config.operations.notification_retention_days || '90';
+                    document.getElementById('config-notification-retention-interval').value = config.operations.notification_retention_interval_hours || '24';
+                    document.getElementById('config-backup-schedule-enabled').checked = config.operations.backup_schedule_enabled === true;
+                    document.getElementById('config-backup-schedule-interval').value = config.operations.backup_schedule_interval_hours || '168';
+                    document.getElementById('config-backup-schedule-retention').value = config.operations.backup_schedule_retention_count || '8';
+                }
                 
                 // Populate Quality Monitoring fields
                 document.getElementById('config-quality-monitor-enabled').checked = config.quality_monitor?.enabled !== false;
@@ -5021,6 +6104,23 @@
                             // Only send if user generated a new key (not the masked placeholder)
                             return input.readOnly ? '' : input.value;
                         })()
+                    },
+                    operations: {
+                        service_health_enabled: document.getElementById('config-service-health-enabled').checked,
+                        service_health_email_alerts_enabled: document.getElementById('config-service-health-email-alerts').checked,
+                        service_health_interval_minutes: parseInt(document.getElementById('config-service-health-interval').value),
+                        service_health_failure_threshold: parseInt(document.getElementById('config-service-health-threshold').value),
+                        service_health_alert_cooldown_minutes: parseInt(document.getElementById('config-service-health-cooldown').value),
+                        service_health_history_days: parseInt(document.getElementById('config-service-health-history-days').value),
+                        alert_webhook_enabled: document.getElementById('config-alert-webhook-enabled').checked,
+                        alert_webhook_type: document.getElementById('config-alert-webhook-type').value,
+                        alert_webhook_url: document.getElementById('config-alert-webhook-url').value,
+                        notification_retention_enabled: document.getElementById('config-notification-retention-enabled').checked,
+                        notification_retention_days: parseInt(document.getElementById('config-notification-retention-days').value),
+                        notification_retention_interval_hours: parseInt(document.getElementById('config-notification-retention-interval').value),
+                        backup_schedule_enabled: document.getElementById('config-backup-schedule-enabled').checked,
+                        backup_schedule_interval_hours: parseInt(document.getElementById('config-backup-schedule-interval').value),
+                        backup_schedule_retention_count: parseInt(document.getElementById('config-backup-schedule-retention').value)
                     }
                 };
                 
@@ -5044,6 +6144,56 @@
                 btn.textContent = '💾 Save Configuration';
                 // Restore scroll position so the page doesn't jump after save
                 window.scrollTo({ top: scrollY, behavior: 'instant' in window ? 'instant' : 'auto' });
+            }
+        }
+
+        async function runConfigValidation() {
+            const btn = document.getElementById('configValidateBtn');
+            const container = document.getElementById('configValidationResults');
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = '⏳ Validating...';
+            }
+            if (container) {
+                container.innerHTML = '<div class="config-validation-item"><span>Running</span><div>Checking app settings and connected services...</div></div>';
+            }
+            try {
+                const response = await fetch(`${API_BASE}/admin/config/validate`, { method: 'POST', cache: 'no-store' });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail || 'Validation failed');
+                const summary = data.summary || {};
+                const checks = data.checks || [];
+                const header = `
+                    <div class="config-validation-item">
+                        <span>${statusPill(summary.error ? 'error' : summary.warn ? 'warning' : 'ok')}</span>
+                        <div>
+                            <strong>${summary.error || 0} errors, ${summary.warn || 0} warnings, ${summary.ok || 0} ok</strong>
+                            <br><small style="color:#999;">Checked ${formatDateTime(data.checked_at)}</small>
+                        </div>
+                    </div>
+                `;
+                const rows = checks.map(check => `
+                    <div class="config-validation-item">
+                        <span>${statusPill(check.status)}</span>
+                        <div>
+                            <strong>${escapeHtml(check.category)} · ${escapeHtml(check.name)}</strong>
+                            <br>${escapeHtml(check.message)}
+                        </div>
+                    </div>
+                `).join('');
+                container.innerHTML = header + rows;
+                showSuccess('Configuration validation complete.');
+                invalidateTabCache('activity');
+            } catch (error) {
+                if (container) {
+                    container.innerHTML = `<div class="config-validation-item"><span>${statusPill('error')}</span><div>${escapeHtml(error.message)}</div></div>`;
+                }
+                showError('Failed to validate configuration: ' + error.message);
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = '✅ Validate Config';
+                }
             }
         }
 
@@ -5240,9 +6390,11 @@
                 notifications: loadNotifications,
                 upcoming: loadUpcoming,
                 issues: loadIssues,
+                health: loadSystemHealth,
                 backup: loadBackups,
                 maintenance: loadMaintenanceWindows,
                 settings: loadConfig,
+                activity: loadActivity,
                 logs: loadLogs
             };
             const fn = map[activeId];
@@ -5252,6 +6404,7 @@
             // waiting for the user to click the tab. Skip if it's already the
             // active tab (the line above already kicked it off).
             if (activeId !== 'upcoming') loadUpcoming();
+            if (activeId !== 'health') loadSystemHealth();
             document.getElementById('lastSync').textContent = 'Last sync: ' + new Date().toLocaleString();
         });
 
@@ -5311,6 +6464,16 @@
                 if (document.getElementById('issueStatusFilter') && issF.statusFilter) {
                     document.getElementById('issueStatusFilter').value = issF.statusFilter;
                 }
+            }
+
+            const healthF = ssLoad('filter.health', null);
+            if (healthF && document.getElementById('healthSearch')) {
+                document.getElementById('healthSearch').value = healthF.search || '';
+            }
+
+            const activityF = ssLoad('filter.activity', null);
+            if (activityF && document.getElementById('activitySearch')) {
+                document.getElementById('activitySearch').value = activityF.search || '';
             }
         }
 
@@ -5445,6 +6608,7 @@
             try {
                 const response = await fetch('/admin/maintenance');
                 allMaintenanceWindows = await response.json();
+                applyHeaderSortIndicators('maintenance');
                 renderMaintenanceWindows(allMaintenanceWindows);
             } catch (error) {
                 console.error('Failed to load maintenance windows:', error);
@@ -5455,8 +6619,9 @@
 
         function renderMaintenanceWindows(windows) {
             const tbody = document.getElementById('maintenanceTableBody');
+            windows = sortDataset(windows || [], 'maintenance');
             
-            if (!windows || windows.length === 0) {
+            if (windows.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="6" style="color: #999;">No maintenance windows scheduled</td></tr>';
                 return;
             }

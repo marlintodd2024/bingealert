@@ -418,6 +418,17 @@ async def check_and_alert_stuck_downloads():
     logger.info("=" * 60)
     logger.info("Checking for stuck downloads...")
     logger.info("=" * 60)
+    from app.background.system_health import (
+        record_worker_failure,
+        record_worker_started,
+        record_worker_success,
+    )
+
+    started_at = record_worker_started(
+        "stuck_download_monitor",
+        "Stuck download monitor",
+        next_run_at=datetime.utcnow() + timedelta(minutes=30),
+    )
     
     try:
         # Check all Sonarr instances (primary + anime if configured)
@@ -463,9 +474,22 @@ async def check_and_alert_stuck_downloads():
         
         if not all_stuck and not all_fixed:
             logger.info("✅ No stuck downloads found")
+        record_worker_success(
+            "stuck_download_monitor",
+            "Stuck download monitor",
+            started_at=started_at,
+            next_run_at=datetime.utcnow() + timedelta(minutes=30),
+        )
         
     except Exception as e:
         logger.error(f"Failed to check stuck downloads: {e}")
+        record_worker_failure(
+            "stuck_download_monitor",
+            "Stuck download monitor",
+            e,
+            started_at=started_at,
+            next_run_at=datetime.utcnow() + timedelta(minutes=30),
+        )
 
 
 def generate_auto_fix_email(fixed_items):

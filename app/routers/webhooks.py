@@ -6,7 +6,7 @@ import logging
 from datetime import datetime
 from typing import List, Optional
 
-from app.database import get_db, MediaRequest, EpisodeTracking, Notification, User
+from app.database import get_db, MediaRequest, EpisodeTracking, Notification, User, SessionLocal
 from app.schemas import SonarrWebhook, RadarrWebhook, WebhookResponse
 from app.services.email_service import EmailService
 from app.services.sonarr_service import SonarrService
@@ -152,6 +152,15 @@ def _check_webhook_auth(request: Request):
     raise HTTPException(status_code=403, detail="Forbidden")
 
 email_service = EmailService()
+
+
+async def _process_pending_notifications_background():
+    """Background-task wrapper with its own DB session."""
+    db = SessionLocal()
+    try:
+        await email_service.process_pending_notifications(db)
+    finally:
+        db.close()
 
 
 @router.post("/sonarr", response_model=WebhookResponse)
@@ -408,7 +417,7 @@ async def sonarr_webhook(
         background_tasks.add_task(_check_issue_resolution, webhook.series.tmdbId, "tv")
         
         # Send pending notifications in background
-        background_tasks.add_task(email_service.process_pending_notifications, db)
+        background_tasks.add_task(_process_pending_notifications_background)
         
         return WebhookResponse(
             success=True,
@@ -578,7 +587,7 @@ async def radarr_webhook(
         background_tasks.add_task(_check_issue_resolution, webhook.movie.tmdbId, "movie")
         
         # Send pending notifications in background
-        background_tasks.add_task(email_service.process_pending_notifications, db)
+        background_tasks.add_task(_process_pending_notifications_background)
         
         return WebhookResponse(
             success=True,

@@ -547,6 +547,19 @@ async def run_reconciliation():
     logger.info("=" * 60)
     logger.info("Starting reconciliation check...")
     logger.info("=" * 60)
+    from app.background.system_health import (
+        record_worker_failure,
+        record_worker_started,
+        record_worker_success,
+    )
+
+    recon_settings = get_reconciliation_settings()
+    next_run_at = datetime.utcnow() + timedelta(hours=recon_settings["interval_hours"])
+    started_at = record_worker_started(
+        "reconciliation",
+        "Reconciliation worker",
+        next_run_at=next_run_at,
+    )
     
     db = SessionLocal()
     try:
@@ -561,9 +574,22 @@ async def run_reconciliation():
             logger.info(f"✅ Reconciliation resolved {issue_count} stale issues!")
         if total == 0 and issue_count == 0:
             logger.info("✅ Reconciliation complete - nothing missed")
+        record_worker_success(
+            "reconciliation",
+            "Reconciliation worker",
+            started_at=started_at,
+            next_run_at=next_run_at,
+        )
         
     except Exception as e:
         logger.error(f"Reconciliation error: {e}")
+        record_worker_failure(
+            "reconciliation",
+            "Reconciliation worker",
+            e,
+            started_at=started_at,
+            next_run_at=next_run_at,
+        )
     finally:
         db.close()
 

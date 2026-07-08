@@ -105,6 +105,25 @@ class Settings(BaseSettings):
     quality_monitor_interval_hours: int = 24
     quality_waiting_delay_seconds: int = 300
 
+    service_health_enabled: bool = True
+    service_health_interval_minutes: int = 15
+    service_health_failure_threshold: int = 2
+    service_health_alert_cooldown_minutes: int = 240
+    service_health_email_alerts_enabled: bool = True
+    service_health_history_days: int = 14
+
+    alert_webhook_enabled: bool = False
+    alert_webhook_url: Optional[str] = None
+    alert_webhook_type: str = "generic"  # generic | discord | slack
+
+    notification_retention_enabled: bool = False
+    notification_retention_days: int = 90
+    notification_retention_interval_hours: int = 24
+
+    backup_schedule_enabled: bool = False
+    backup_schedule_interval_hours: int = 168
+    backup_schedule_retention_count: int = 8
+
     # 'manual' | 'auto' | 'auto_notify'
     issue_autofix_mode: str = "manual"
 

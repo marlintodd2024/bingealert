@@ -3,9 +3,20 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 import logging
 import os
+import json
 from datetime import datetime
 
-from app.database import get_db, User, MediaRequest, EpisodeTracking, Notification, SharedRequest, SystemConfig, MaintenanceWindow
+from app.database import (
+    AdminActivityLog,
+    get_db,
+    User,
+    MediaRequest,
+    EpisodeTracking,
+    Notification,
+    SharedRequest,
+    SystemConfig,
+    MaintenanceWindow,
+)
 from app.services.jellyseerr_sync import JellyseerrSyncService
 from app.services.email_service import EmailService
 from app.security import (
@@ -14,6 +25,7 @@ from app.security import (
     sanitize_for_log,
     validate_ip_or_cidr_csv,
 )
+from app.services.admin_activity import record_admin_activity
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -49,9 +61,12 @@ async def process_notifications(db: Session = Depends(get_db)):
     try:
         email_service = EmailService()
         await email_service.process_pending_notifications(db)
+        record_admin_activity("process_notifications", "Processed pending notifications", db=db)
+        db.commit()
         return {"success": True, "message": "Notifications processed"}
     except Exception as e:
         logger.error(f"Notification processing failed: {e}")
+        db.rollback()
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -87,6 +102,147 @@ async def get_stats(db: Session = Depends(get_db)):
         return stats
     except Exception as e:
         logger.error(f"Failed to get stats: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/system-health")
+async def get_system_health():
+    """Return latest service and worker health snapshot."""
+    try:
+        from app.background.system_health import get_system_health_snapshot
+
+        return get_system_health_snapshot()
+    except Exception as e:
+        logger.error(f"Failed to get system health: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/system-health/check")
+async def check_system_health_now():
+    """Run service health checks immediately."""
+    try:
+        from app.background.system_health import run_service_health_checks
+
+        result = await run_service_health_checks(send_alerts=True)
+        record_admin_activity("system_health_check", "Manual system health check started")
+        return result
+    except Exception as e:
+        logger.error(f"Failed to run system health checks: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/system-health/history")
+async def get_system_health_history(hours: int = 24, limit: int = 200):
+    """Return recent service health check events."""
+    try:
+        from app.background.system_health import get_service_health_history
+
+        return get_service_health_history(hours=hours, limit=limit)
+    except Exception as e:
+        logger.error(f"Failed to get system health history: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/activity")
+async def get_admin_activity(limit: int = 100, db: Session = Depends(get_db)):
+    """Return recent admin activity/audit rows."""
+    try:
+        safe_limit = max(1, min(int(limit or 100), 500))
+        rows = (
+            db.query(AdminActivityLog)
+            .order_by(AdminActivityLog.created_at.desc())
+            .limit(safe_limit)
+            .all()
+        )
+        def parse_details(value):
+            if not value:
+                return {}
+            try:
+                parsed = json.loads(value)
+                return parsed if isinstance(parsed, dict) else {"value": parsed}
+            except (TypeError, ValueError):
+                return {"raw": str(value)}
+
+        activity = [
+            {
+                "id": row.id,
+                "action": row.action,
+                "status": row.status,
+                "message": row.message,
+                "details": parse_details(row.details),
+                "actor": row.actor,
+                "ip_address": row.ip_address,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+            for row in rows
+        ]
+        return {
+            "activity": activity,
+            "activities": activity,
+            "count": len(rows),
+        }
+    except Exception as e:
+        logger.error(f"Failed to get admin activity: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/config/validate")
+async def validate_config():
+    """Run a setup/configuration validation check."""
+    from app.config import settings as _s
+
+    checks = []
+
+    def add(category: str, name: str, status: str, message: str):
+        checks.append({"category": category, "name": name, "status": status, "message": message})
+
+    try:
+        add("core", "Config file", "ok" if os.path.isfile(_s.config_file_path) else "warn", _s.config_file_path)
+        add("core", "App secret", "ok" if _s.app_secret_key and len(_s.app_secret_key) >= 32 else "error", "Strong key configured" if _s.app_secret_key else "Missing app secret")
+        add("auth", "Admin auth", "ok" if (not _s.auth_required or _s.admin_password_hash) else "error", "Enabled" if _s.auth_required else "Disabled")
+        add("email", "SMTP host", "ok" if _s.smtp_host and _s.smtp_from else "error", _s.smtp_host or "SMTP host missing")
+        add("email", "Admin email", "ok" if clean_email_address(_s.admin_email or _s.smtp_from) else "warn", clean_email_address(_s.admin_email or _s.smtp_from) or "No valid admin alert email")
+        add("security", "Webhook secret", "ok" if _s.webhook_secret else "warn", "Configured" if _s.webhook_secret else "Not configured")
+        add("security", "Webhook IP allowlist", "ok" if _s.webhook_allowed_ips else "warn", _s.webhook_allowed_ips or "All IPs allowed")
+        add("system", "SQLite database", "ok" if os.path.isfile(os.path.join(_s.data_dir, _s.sqlite_filename)) else "warn", os.path.join(_s.data_dir, _s.sqlite_filename))
+        add("system", "Docker socket", "ok" if os.path.exists("/var/run/docker.sock") else "warn", "/var/run/docker.sock available" if os.path.exists("/var/run/docker.sock") else "Docker restart unavailable")
+
+        if _s.public_base_url:
+            try:
+                normalize_http_url(_s.public_base_url)
+                add("email", "Public base URL", "ok", _s.public_base_url)
+            except ValueError as e:
+                add("email", "Public base URL", "error", str(e))
+        else:
+            add("email", "Public base URL", "warn", "Not set; email calendar links are omitted")
+
+        from app.background.system_health import run_service_health_checks
+
+        health = await run_service_health_checks(send_alerts=False)
+        for service in health.get("services", []):
+            if not service.get("configured"):
+                status = "warn"
+            elif service.get("status") == "ok":
+                status = "ok"
+            else:
+                status = "error"
+            add(
+                "integrations",
+                service.get("service_name") or service.get("service_key"),
+                status,
+                service.get("last_error") or service.get("status") or "unknown",
+            )
+
+        summary = {
+            "ok": sum(1 for c in checks if c["status"] == "ok"),
+            "warn": sum(1 for c in checks if c["status"] == "warn"),
+            "error": sum(1 for c in checks if c["status"] == "error"),
+        }
+        record_admin_activity("config_validate", "Configuration validation run", details=summary)
+        return {"checks": checks, "summary": summary, "checked_at": datetime.utcnow().isoformat()}
+    except Exception as e:
+        logger.error(f"Config validation failed: {e}", exc_info=True)
+        record_admin_activity("config_validate", "Configuration validation failed", status="error", details={"error": str(e)})
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -733,7 +889,7 @@ async def resend_notification(notification_id: int, regenerate: bool = True, db:
 
 
 @router.post("/backup/create")
-async def create_backup(include_config: bool = False):
+async def create_backup(include_config: bool = True):
     """Create a backup of database and configuration"""
     try:
         from app.services.backup_service import BackupService
@@ -742,6 +898,11 @@ async def create_backup(include_config: bool = False):
         backup_file = backup_service.create_backup(include_config=include_config)
         
         if backup_file:
+            record_admin_activity(
+                "backup_create",
+                "Backup created manually",
+                details={"filename": os.path.basename(backup_file), "include_config": include_config},
+            )
             return {
                 "success": True,
                 "message": "Backup created successfully",
@@ -844,15 +1005,15 @@ async def restore_backup(file: UploadFile):
                 if 'metadata.json' not in names:
                     os.remove(temp_path)
                     raise HTTPException(status_code=400, detail="Invalid backup: missing metadata.json")
-                if 'database.sql' not in names:
+                if 'bingealert.db' not in names:
                     os.remove(temp_path)
-                    raise HTTPException(status_code=400, detail="Invalid backup: missing database.sql")
+                    raise HTTPException(status_code=400, detail="Invalid backup: missing bingealert.db")
                 for name in names:
                     if name.startswith('/') or '..' in name:
                         os.remove(temp_path)
                         logger.warning(f"Zip-slip attempt detected: {name}")
                         raise HTTPException(status_code=400, detail="Invalid backup: suspicious file paths")
-                allowed_extensions = {'.json', '.sql', '.txt'}
+                allowed_extensions = {'.json', '.db', '.txt'}
                 for name in names:
                     ext = os.path.splitext(name)[1].lower()
                     if ext and ext not in allowed_extensions:
@@ -869,6 +1030,11 @@ async def restore_backup(file: UploadFile):
         os.remove(temp_path)
         
         if success:
+            record_admin_activity(
+                "backup_restore",
+                "Backup restored",
+                details={"filename": file.filename},
+            )
             return {
                 "success": True,
                 "message": "Backup restored successfully. Please restart the application."
@@ -892,6 +1058,11 @@ async def delete_backup(filename: str):
         success = backup_service.delete_backup(filename)
         
         if success:
+            record_admin_activity(
+                "backup_delete",
+                f"Deleted backup {filename}",
+                details={"filename": filename},
+            )
             return {
                 "success": True,
                 "message": f"Backup {filename} deleted successfully"
@@ -1124,6 +1295,23 @@ async def get_config():
                 "interval_hours": _s.quality_monitor_interval_hours,
                 "waiting_delay_seconds": _s.quality_waiting_delay_seconds,
             },
+            "operations": {
+                "service_health_enabled": _s.service_health_enabled,
+                "service_health_interval_minutes": _s.service_health_interval_minutes,
+                "service_health_failure_threshold": _s.service_health_failure_threshold,
+                "service_health_alert_cooldown_minutes": _s.service_health_alert_cooldown_minutes,
+                "service_health_email_alerts_enabled": _s.service_health_email_alerts_enabled,
+                "service_health_history_days": _s.service_health_history_days,
+                "alert_webhook_enabled": _s.alert_webhook_enabled,
+                "alert_webhook_url": _mask_secret(_s.alert_webhook_url),
+                "alert_webhook_type": _s.alert_webhook_type,
+                "notification_retention_enabled": _s.notification_retention_enabled,
+                "notification_retention_days": _s.notification_retention_days,
+                "notification_retention_interval_hours": _s.notification_retention_interval_hours,
+                "backup_schedule_enabled": _s.backup_schedule_enabled,
+                "backup_schedule_interval_hours": _s.backup_schedule_interval_hours,
+                "backup_schedule_retention_count": _s.backup_schedule_retention_count,
+            },
             "issue_autofix": {
                 "mode": _s.issue_autofix_mode,
             },
@@ -1265,6 +1453,28 @@ async def update_config(config: dict, db: Session = Depends(get_db)):
     take(["quality_monitor", "enabled"], "quality_monitor_enabled", transform=bool)
     take(["quality_monitor", "interval_hours"], "quality_monitor_interval_hours", transform=int)
     take(["quality_monitor", "waiting_delay_seconds"], "quality_waiting_delay_seconds", transform=int)
+    take(["operations", "service_health_enabled"], "service_health_enabled", transform=bool)
+    take(["operations", "service_health_interval_minutes"], "service_health_interval_minutes", transform=int)
+    take(["operations", "service_health_failure_threshold"], "service_health_failure_threshold", transform=int)
+    take(["operations", "service_health_alert_cooldown_minutes"], "service_health_alert_cooldown_minutes", transform=int)
+    take(["operations", "service_health_email_alerts_enabled"], "service_health_email_alerts_enabled", transform=bool)
+    take(["operations", "service_health_history_days"], "service_health_history_days", transform=int)
+    take(["operations", "alert_webhook_enabled"], "alert_webhook_enabled", transform=bool)
+    take(["operations", "alert_webhook_url"], "alert_webhook_url",
+         transform=lambda v: normalize_http_url(v, allow_empty=True), secret=True, allow_empty=True)
+    webhook_type = str(config.get("operations", {}).get("alert_webhook_type", "")).strip().lower()
+    if webhook_type:
+        if webhook_type not in {"generic", "discord", "slack"}:
+            validation_errors.append("ALERT_WEBHOOK_TYPE")
+        else:
+            updates["alert_webhook_type"] = webhook_type
+            label_updates.append("ALERT_WEBHOOK_TYPE")
+    take(["operations", "notification_retention_enabled"], "notification_retention_enabled", transform=bool)
+    take(["operations", "notification_retention_days"], "notification_retention_days", transform=int)
+    take(["operations", "notification_retention_interval_hours"], "notification_retention_interval_hours", transform=int)
+    take(["operations", "backup_schedule_enabled"], "backup_schedule_enabled", transform=bool)
+    take(["operations", "backup_schedule_interval_hours"], "backup_schedule_interval_hours", transform=int)
+    take(["operations", "backup_schedule_retention_count"], "backup_schedule_retention_count", transform=int)
     if config.get("issue_autofix", {}).get("mode") in ("manual", "auto", "auto_notify"):
         updates["issue_autofix_mode"] = config["issue_autofix"]["mode"]
         label_updates.append("ISSUE_AUTOFIX_MODE")
@@ -1358,6 +1568,13 @@ async def update_config(config: dict, db: Session = Depends(get_db)):
         reload_from_disk()
 
     logger.info(f"config updated: {', '.join(label_updates)}")
+    record_admin_activity(
+        "config_update",
+        f"Updated {len(label_updates)} setting(s)",
+        details={"fields": label_updates},
+        db=db,
+    )
+    db.commit()
     return {
         "success": True,
         "message": (
@@ -1393,6 +1610,7 @@ async def restart_container():
         
         if result.returncode == 0:
             logger.info(f"Container {container_id} restart initiated")
+            record_admin_activity("container_restart", "Container restart initiated")
             return {"success": True, "message": "Container restart initiated"}
         else:
             raise HTTPException(status_code=500, detail=f"Restart failed: {result.stderr}")
@@ -1400,13 +1618,12 @@ async def restart_container():
     except subprocess.TimeoutExpired:
         # Timeout is actually good - means restart started
         logger.info("Container restart command sent (timeout expected)")
+        record_admin_activity("container_restart", "Container restart initiated")
         return {"success": True, "message": "Container restart initiated"}
     except FileNotFoundError:
         raise HTTPException(status_code=500, detail="Docker CLI not available in container")
     except Exception as e:
         logger.error(f"Failed to restart container: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
-        logger.error(f"Failed to update config: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -1419,6 +1636,7 @@ async def trigger_reconciliation():
         
         # Run reconciliation in background
         asyncio.create_task(run_reconciliation())
+        record_admin_activity("reconciliation_manual", "Manual reconciliation started")
         
         return {
             "success": True,
@@ -1547,7 +1765,12 @@ async def mark_old_notifications_as_sent(hours_old: int = 24, db: Session = Depe
         for notif in old_notifications:
             notif.sent = True
             notif.sent_at = datetime.utcnow()
-        
+        record_admin_activity(
+            "notification_mark_old_sent",
+            f"Marked {count} old notification(s) as sent",
+            details={"hours_old": hours_old, "count": count},
+            db=db,
+        )
         db.commit()
         
         logger.info(f"Marked {count} old notifications as sent (older than {hours_old} hours)")
@@ -1582,7 +1805,12 @@ async def clear_all_pending_notifications(db: Session = Depends(get_db)):
         for notif in pending_notifications:
             notif.sent = True
             notif.sent_at = datetime.utcnow()
-        
+        record_admin_activity(
+            "notification_clear_pending",
+            f"Marked {count} pending notification(s) as sent",
+            details={"count": count},
+            db=db,
+        )
         db.commit()
         
         logger.info(f"Marked {count} pending notifications as sent (admin override)")
@@ -1599,6 +1827,41 @@ async def clear_all_pending_notifications(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+@router.delete("/notifications/purge-sent")
+async def purge_sent_notifications(days_old: int = 90, db: Session = Depends(get_db)):
+    """Delete sent notifications older than the requested retention window."""
+    try:
+        from app.background.ops_maintenance import purge_sent_notifications as purge_sent
+
+        if days_old < 1:
+            raise HTTPException(status_code=400, detail="days_old must be at least 1")
+        if days_old > 3650:
+            raise HTTPException(status_code=400, detail="days_old must be 3650 or less")
+
+        deleted = purge_sent(db, days_old)
+        record_admin_activity(
+            "notification_purge",
+            f"Purged {deleted} sent notification(s)",
+            details={"days_old": days_old, "count": deleted},
+            db=db,
+        )
+        db.commit()
+
+        logger.info("Purged %s sent notification(s) older than %s days", deleted, days_old)
+        return {
+            "success": True,
+            "message": f"Purged {deleted} sent notification(s)",
+            "count": deleted,
+            "days_old": days_old,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to purge sent notifications: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
 @router.post("/send-weekly-summary")
 async def send_weekly_summary_now():
     """Manually trigger weekly summary email"""
@@ -1608,6 +1871,7 @@ async def send_weekly_summary_now():
         
         # Run summary in background
         asyncio.create_task(send_weekly_summary())
+        record_admin_activity("weekly_summary_manual", "Manual weekly summary started")
         
         return {
             "success": True,
@@ -1627,6 +1891,7 @@ async def check_stuck_downloads_now():
         
         # Run check in background
         asyncio.create_task(check_and_alert_stuck_downloads())
+        record_admin_activity("stuck_download_check_manual", "Manual stuck download check started")
         
         return {
             "success": True,
@@ -1647,6 +1912,7 @@ async def manual_quality_release_check():
         
         # Run the check
         await run_quality_release_monitor()
+        record_admin_activity("quality_release_check_manual", "Manual quality/release check completed")
         
         return {
             "success": True,
@@ -1816,57 +2082,6 @@ async def delete_issue(issue_id: int, db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"Failed to delete issue {issue_id}: {e}")
         db.rollback()
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
-@router.post("/restart")
-async def restart_container():
-    """Restart the Docker container"""
-    try:
-        import subprocess
-        import os
-        
-        # Get container ID/name from hostname or environment
-        container_id = os.environ.get("HOSTNAME", "self")
-        
-        logger.info(f"Attempting to restart container: {container_id}")
-        
-        # Check if docker socket is available
-        if not os.path.exists("/var/run/docker.sock"):
-            logger.error("Docker socket not mounted")
-            raise HTTPException(
-                status_code=500, 
-                detail="Docker socket not available. Mount /var/run/docker.sock to enable restart. See DOCKER_RESTART_SETUP.md"
-            )
-        
-        # Use docker restart command
-        result = subprocess.run(
-            ["docker", "restart", container_id],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        
-        if result.returncode == 0:
-            logger.info("Container restart command sent successfully")
-            return {"success": True, "message": "Container restarting..."}
-        else:
-            error = result.stderr or "Unknown error"
-            logger.error(f"Failed to restart container: {error}")
-            raise HTTPException(status_code=500, detail=f"Restart failed: {error}")
-            
-    except subprocess.TimeoutExpired:
-        # Timeout is expected as container restarts
-        logger.info("Restart command timed out (expected - container is restarting)")
-        return {"success": True, "message": "Container restarting..."}
-    except FileNotFoundError:
-        logger.error("Docker CLI not available in container")
-        raise HTTPException(
-            status_code=500, 
-            detail="Docker CLI not found. Restart container manually: docker restart <container-name>"
-        )
-    except Exception as e:
-        logger.error(f"Failed to restart container: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -2122,7 +2337,7 @@ async def get_seerr_sonarr_servers():
         raise HTTPException(status_code=500, detail=f"Failed to fetch servers: {str(e)}")
 
 
-@router.post("/test-email")
+@router.post("/test-smtp")
 async def test_email_connection(data: dict):
     """Test SMTP email connection"""
     try:

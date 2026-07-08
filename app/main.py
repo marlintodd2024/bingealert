@@ -258,24 +258,49 @@ async def _notification_processor() -> None:
     from app.background.utils import is_maintenance_active
     from app.database import SessionLocal
     from app.services.email_service import EmailService
+    from app.background.system_health import (
+        record_worker_failure,
+        record_worker_started,
+        record_worker_success,
+    )
+    from datetime import timedelta
 
     email_service = EmailService()
 
     while True:
+        started_at = None
         try:
             await asyncio.sleep(60)
             if is_maintenance_active():
                 logger.debug("maintenance active -- skipping notification drain")
                 continue
+            started_at = record_worker_started(
+                "notification_processor",
+                "Notification processor",
+                next_run_at=datetime.utcnow() + timedelta(seconds=60),
+            )
             db = SessionLocal()
             try:
                 await email_service.process_pending_notifications(db)
             finally:
                 db.close()
+            record_worker_success(
+                "notification_processor",
+                "Notification processor",
+                started_at=started_at,
+                next_run_at=datetime.utcnow() + timedelta(seconds=60),
+            )
         except asyncio.CancelledError:
             raise
         except Exception as e:
             logger.error(f"notification processor error: {e}")
+            record_worker_failure(
+                "notification_processor",
+                "Notification processor",
+                e,
+                started_at=started_at,
+                next_run_at=datetime.utcnow() + timedelta(seconds=60),
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -293,9 +318,11 @@ async def lifespan(app: FastAPI):
     tasks: list[asyncio.Task] = []
     if settings.is_minimally_configured():
         from app.background.maintenance_worker import maintenance_window_worker
+        from app.background.ops_maintenance import ops_maintenance_worker
         from app.background.quality_monitor import quality_release_monitor_worker
         from app.background.reconciliation import reconciliation_worker
         from app.background.stuck_monitor import stuck_download_monitor
+        from app.background.system_health import system_health_worker
         from app.background.weekly_summary import weekly_summary_worker
 
         starts = [
@@ -305,6 +332,8 @@ async def lifespan(app: FastAPI):
             ("stuck download monitor (every 30m)", stuck_download_monitor()),
             ("quality/release monitor (daily)", quality_release_monitor_worker()),
             ("maintenance window worker (every 60s)", maintenance_window_worker()),
+            ("system health worker", system_health_worker()),
+            ("operational maintenance worker", ops_maintenance_worker()),
         ]
         for label, coro in starts:
             try:

@@ -186,6 +186,24 @@ async def send_weekly_summary():
     logger.info("=" * 60)
     logger.info("Starting weekly summary email...")
     logger.info("=" * 60)
+    from app.background.system_health import (
+        record_worker_failure,
+        record_worker_started,
+        record_worker_success,
+    )
+
+    now = datetime.utcnow()
+    days_until_sunday = (6 - now.weekday()) % 7
+    if days_until_sunday == 0 and now.hour >= 9:
+        days_until_sunday = 7
+    next_run_at = (now + timedelta(days=days_until_sunday)).replace(
+        hour=9, minute=0, second=0, microsecond=0
+    )
+    started_at = record_worker_started(
+        "weekly_summary",
+        "Weekly summary",
+        next_run_at=next_run_at,
+    )
     
     db = SessionLocal()
     try:
@@ -194,6 +212,12 @@ async def send_weekly_summary():
         
         if not html:
             logger.info("No notifications to summarize")
+            record_worker_success(
+                "weekly_summary",
+                "Weekly summary",
+                started_at=started_at,
+                next_run_at=next_run_at,
+            )
             return
         
         # Send email
@@ -203,6 +227,12 @@ async def send_weekly_summary():
         admin_email = clean_email_address(settings.admin_email or settings.smtp_from)
         if not admin_email:
             logger.warning("No valid admin email configured, skipping weekly summary")
+            record_worker_success(
+                "weekly_summary",
+                "Weekly summary",
+                started_at=started_at,
+                next_run_at=next_run_at,
+            )
             return
         
         await email_service.send_email(
@@ -212,9 +242,22 @@ async def send_weekly_summary():
         )
         
         logger.info("Weekly summary sent to %s", sanitize_for_log(admin_email))
+        record_worker_success(
+            "weekly_summary",
+            "Weekly summary",
+            started_at=started_at,
+            next_run_at=next_run_at,
+        )
         
     except Exception as e:
         logger.error(f"Weekly summary failed: {e}")
+        record_worker_failure(
+            "weekly_summary",
+            "Weekly summary",
+            e,
+            started_at=started_at,
+            next_run_at=next_run_at,
+        )
     finally:
         db.close()
 

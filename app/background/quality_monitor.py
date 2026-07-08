@@ -35,6 +35,20 @@ class QualityReleaseMonitor:
     async def run(self):
         """Run the quality/release monitoring check"""
         logger.info("Starting quality/release monitoring check...")
+        from app.background.system_health import (
+            record_worker_failure,
+            record_worker_started,
+            record_worker_success,
+        )
+
+        next_run_at = datetime.utcnow() + timedelta(
+            hours=max(1, int(settings.quality_monitor_interval_hours or 24))
+        )
+        started_at = record_worker_started(
+            "quality_release_monitor",
+            "Quality/release monitor",
+            next_run_at=next_run_at,
+        )
         
         db = next(get_db())
         try:
@@ -57,10 +71,23 @@ class QualityReleaseMonitor:
             
             db.commit()
             logger.info("Quality/release monitoring check completed")
+            record_worker_success(
+                "quality_release_monitor",
+                "Quality/release monitor",
+                started_at=started_at,
+                next_run_at=next_run_at,
+            )
             
         except Exception as e:
             logger.error(f"Quality monitoring failed: {e}")
             db.rollback()
+            record_worker_failure(
+                "quality_release_monitor",
+                "Quality/release monitor",
+                e,
+                started_at=started_at,
+                next_run_at=next_run_at,
+            )
         finally:
             db.close()
     

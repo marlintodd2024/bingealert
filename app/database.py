@@ -230,6 +230,79 @@ class MaintenanceWindow(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class ServiceHealthStatus(Base):
+    """Latest reachability status for connected services."""
+
+    __tablename__ = "service_health_status"
+
+    id = Column(Integer, primary_key=True, index=True)
+    service_key = Column(String, unique=True, nullable=False, index=True)
+    service_name = Column(String, nullable=False)
+    service_type = Column(String, nullable=False)
+    configured = Column(Boolean, default=False, nullable=False)
+    status = Column(String, nullable=False, default="unknown")
+    latency_ms = Column(Integer, nullable=True)
+    consecutive_failures = Column(Integer, default=0, nullable=False)
+    last_checked_at = Column(DateTime, nullable=True)
+    last_ok_at = Column(DateTime, nullable=True)
+    last_error = Column(Text, nullable=True)
+    alert_sent = Column(Boolean, default=False, nullable=False)
+    last_alert_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class WorkerHealthStatus(Base):
+    """Latest run/heartbeat status for background workers."""
+
+    __tablename__ = "worker_health_status"
+
+    id = Column(Integer, primary_key=True, index=True)
+    worker_key = Column(String, unique=True, nullable=False, index=True)
+    worker_name = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="unknown")
+    last_started_at = Column(DateTime, nullable=True)
+    last_finished_at = Column(DateTime, nullable=True)
+    last_success_at = Column(DateTime, nullable=True)
+    next_run_at = Column(DateTime, nullable=True)
+    last_duration_ms = Column(Integer, nullable=True)
+    run_count = Column(Integer, default=0, nullable=False)
+    failure_count = Column(Integer, default=0, nullable=False)
+    last_error = Column(Text, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ServiceHealthEvent(Base):
+    """Historical health check result for uptime and incident review."""
+
+    __tablename__ = "service_health_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    service_key = Column(String, nullable=False, index=True)
+    service_name = Column(String, nullable=False)
+    service_type = Column(String, nullable=False)
+    configured = Column(Boolean, default=False, nullable=False)
+    status = Column(String, nullable=False)
+    latency_ms = Column(Integer, nullable=True)
+    consecutive_failures = Column(Integer, default=0, nullable=False)
+    error = Column(Text, nullable=True)
+    checked_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
+class AdminActivityLog(Base):
+    """Audit trail for admin-triggered and scheduled maintenance actions."""
+
+    __tablename__ = "admin_activity_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    action = Column(String, nullable=False, index=True)
+    status = Column(String, nullable=False, default="success", index=True)
+    message = Column(Text, nullable=True)
+    details = Column(Text, nullable=True)
+    actor = Column(String, nullable=True)
+    ip_address = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
 class Notification(Base):
     __tablename__ = "notifications"
 

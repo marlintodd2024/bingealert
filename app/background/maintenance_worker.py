@@ -37,9 +37,20 @@ async def check_maintenance_windows():
     """Check all active/scheduled maintenance windows and take appropriate actions"""
     from app.database import get_db, MaintenanceWindow
     from app.services.email_service import EmailService
-    
+    from app.background.system_health import (
+        record_worker_failure,
+        record_worker_started,
+        record_worker_success,
+    )
+
+    started_at = record_worker_started(
+        "maintenance_window",
+        "Maintenance window worker",
+        next_run_at=datetime.utcnow() + timedelta(seconds=60),
+    )
     db = next(get_db())
     email_service = EmailService()
+    failed = False
     
     try:
         now = datetime.utcnow()
@@ -88,6 +99,21 @@ async def check_maintenance_windows():
                 db.rollback()
                 
     except Exception as e:
+        failed = True
         logger.error(f"Error checking maintenance windows: {e}")
+        record_worker_failure(
+            "maintenance_window",
+            "Maintenance window worker",
+            e,
+            started_at=started_at,
+            next_run_at=datetime.utcnow() + timedelta(seconds=60),
+        )
     finally:
         db.close()
+    if not failed:
+        record_worker_success(
+            "maintenance_window",
+            "Maintenance window worker",
+            started_at=started_at,
+            next_run_at=datetime.utcnow() + timedelta(seconds=60),
+        )
