@@ -89,6 +89,11 @@ reduces the risk of capturing a busy database in an inconsistent state.
 
 ## Fixed
 
+### Dependency audit
+
+Upgraded `aiosmtplib` from `3.0.1` to `5.1.1` to clear
+`CVE-2026-53533`.
+
 ### Background database sessions
 
 Background session handling was tightened around webhook follow-up work so
