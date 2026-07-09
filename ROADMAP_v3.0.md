@@ -297,6 +297,23 @@ Deliverables:
   - quick-start demo path
   - comparison positioning against Seerr notifications, Tautulli, and Notifiarr
 
+Implementation notes:
+
+- Initial v3 slice adds shared report generation in `app/services/reporting.py`,
+  `/admin/reports/ops`, manual daily digest and weekly ops-report send
+  endpoints, and a Reports tab with daily trend, top requesters, recurring
+  failures, and oldest waiting requests.
+- The scheduled Sunday worker now sends the weekly operations report instead
+  of the older notification-only summary.
+- The README now frames BingeAlert as a Plex request ops dashboard, adds a
+  quick demo path, and positions the project alongside Seerr, Sonarr/Radarr,
+  Tautulli, Notifiarr, and broad alert hubs.
+- Optional user digest remains follow-up work. Phase 5 added the per-user
+  portal/preferences foundation, but digest batching/delivery should ship as a
+  smaller focused slice after v3.0 core reporting is validated.
+- Final screenshots should be captured from a populated v3.0 instance before
+  tagging the public release.
+
 Exit criteria:
 
 - v3.0 has a clear launch story:

@@ -380,6 +380,54 @@ async def get_daily_brief(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+@router.get("/reports/ops")
+async def get_ops_report(days: int = 7, db: Session = Depends(get_db)):
+    """Return the v3 operations report used by the Reports tab."""
+    try:
+        from app.services.reporting import build_ops_report
+
+        return await build_ops_report(db, days=days, include_live_ops=True)
+    except Exception as e:
+        logger.error(f"Failed to build ops report: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/reports/daily-digest/send")
+async def send_daily_digest_now():
+    """Send the current 24h admin digest to the configured admin email."""
+    try:
+        from app.services.reporting import send_admin_report
+        import asyncio
+
+        asyncio.create_task(send_admin_report("daily", days=1))
+        record_admin_activity("daily_digest_manual", "Manual daily admin digest started")
+        return {
+            "success": True,
+            "message": "Daily admin digest queued for email delivery.",
+        }
+    except Exception as e:
+        logger.error(f"Failed to send daily admin digest: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/reports/weekly-ops/send")
+async def send_weekly_ops_report_now():
+    """Send the current weekly operations report to the configured admin email."""
+    try:
+        from app.services.reporting import send_admin_report
+        import asyncio
+
+        asyncio.create_task(send_admin_report("weekly", days=7))
+        record_admin_activity("weekly_ops_report_manual", "Manual weekly operations report started")
+        return {
+            "success": True,
+            "message": "Weekly operations report queued for email delivery.",
+        }
+    except Exception as e:
+        logger.error(f"Failed to send weekly operations report: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
 @router.get("/system-health")
 async def get_system_health():
     """Return latest service and worker health snapshot."""
@@ -2743,18 +2791,17 @@ async def purge_sent_notifications(days_old: int = 90, db: Session = Depends(get
 
 @router.post("/send-weekly-summary")
 async def send_weekly_summary_now():
-    """Manually trigger weekly summary email"""
+    """Manually trigger the weekly operations report email."""
     try:
-        from app.background.weekly_summary import send_weekly_summary
+        from app.services.reporting import send_admin_report
         import asyncio
         
-        # Run summary in background
-        asyncio.create_task(send_weekly_summary())
-        record_admin_activity("weekly_summary_manual", "Manual weekly summary started")
+        asyncio.create_task(send_admin_report("weekly", days=7))
+        record_admin_activity("weekly_summary_manual", "Manual weekly operations report started")
         
         return {
             "success": True,
-            "message": "Weekly summary email will be sent shortly - check your inbox!"
+            "message": "Weekly operations report queued for email delivery."
         }
     except Exception as e:
         logger.error(f"Failed to send weekly summary: {e}")

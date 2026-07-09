@@ -18,24 +18,31 @@ Your friends request movies and shows through Seerr. Sonarr and Radarr download 
 
 BingeAlert sits between your media stack and your users. It listens to every webhook, waits for Plex to actually index the file, then sends a polished email with a deep link. It also handles the messy edge cases — stuck downloads, failed imports, unreleased content, wrong-quality grabs, and reported issues — so you're not babysitting the stack.
 
+With the v3.0 ops cockpit work, BingeAlert is also the place an admin can answer: what happened after the request, what is still waiting, which notifications failed, and which connected services need attention.
+
 ---
 
 ## Features
 
 - **Smart email notifications** — HTML emails with TMDB posters and Plex deep links. Episodes from the same show are batched into one email.
 - **Plex availability check** — Notifications wait until Plex has actually indexed the file, with retry/backoff.
+- **Daily Admin Home** — One screen for fulfilled requests, new requests, notification risk, open issues, unhealthy services, and worker problems.
+- **Request timeline** — Per-request history across Seerr, Sonarr/Radarr, Plex checks, notification queueing, sends, issue reports, and replayed webhooks.
+- **Webhook inbox and replay** — Searchable Sonarr/Radarr/Seerr webhook history with sanitized payload viewing and guarded replay for missed or failed events.
+- **Reports tab** — Daily trend, weekly operations report, top requesters, recurring failures, oldest waiting requests, and one-click daily/weekly admin report emails.
 - **Quality & release monitoring** — "Coming Soon" emails for unreleased content; "Quality Waiting" emails when a grab doesn't match the quality profile. Cancelled automatically when a real download starts.
 - **Import failure auto-fix** — When Sonarr/Radarr import fails, the bad release is blocklisted and re-searched. Admin email when it happens.
 - **Issue auto-fix** — Issues reported in Seerr (bad audio, wrong subs, corrupted file) trigger a blacklist + re-search. Configurable as manual review, full auto, or auto-with-notification.
 - **Stuck download detection** — Background worker every 30 min; TBA episode titles are auto-fixed by refreshing metadata, true stalls trigger an admin alert.
-- **System health alerts** — Periodic checks for Plex, Seerr, Sonarr, Radarr, SMTP, and related services, with email/webhook/Pushover alert routing.
+- **System and ops health** — Periodic checks for Plex, Seerr, Sonarr, Radarr, SMTP, workers, acquisition queues, root-folder storage, and import-to-Plex lag.
 - **Pushover push alerts** — Optional admin push notifications for service-health events, availability events, and Seerr issue activity.
+- **User status portal** — Optional magic-link page where users can see their waiting/available requests, upcoming episodes, recent notifications, and notification preferences.
 - **Shared requests** — Multiple users on a single request all get notified.
 - **Anime routing** — Auto-detects anime via TMDB metadata and routes to a dedicated Sonarr instance.
 - **Maintenance windows** — Schedule downtime with announcement, reminder, and completion emails. Pauses background workers automatically.
 - **Reconciliation** — Catches missed webhooks every 2h.
 - **Operations automation** — Configurable notification batching, sent-notification retention cleanup, scheduled backups, and per-section settings saves.
-- **Weekly summary** — Sundays 9am UTC.
+- **Daily and weekly admin reports** — Manual sends from the Reports tab; the scheduled Sunday report summarizes request volume, fulfillment time, notification delivery, top requesters, and recurring failures.
 - **First-run wizard** — Web-based setup; no `.env` editing required.
 - **Required auth by default** — bcrypt password + HMAC session cookie + local-network CIDR bypass + optional Cloudflare Turnstile.
 - **PWA** — Installable web app with mobile-friendly admin dashboard.
@@ -83,6 +90,20 @@ Open `http://your-host:8000`. The setup wizard runs on first boot; fill in six s
 ```
 
 The `./data` directory is your full backup target — copy it somewhere safe.
+
+---
+
+## Quick demo path
+
+For a first walkthrough after setup:
+
+1. Open **Admin → Health** and run **Check Now** to verify Plex, Seerr, Sonarr, Radarr, SMTP, workers, queue health, storage, and import-to-Plex lag.
+2. Open **Admin → Reports** to review the 7-day operations report: request volume, fulfillment time, notification delivery, top requesters, recurring failures, and oldest waiting requests.
+3. Open any request in **Admin → Requests** and click **Timeline** to see the end-to-end path from Seerr request to webhook, Plex availability check, notification queue, and delivery.
+4. Open **Admin → Webhooks** to inspect recent Sonarr/Radarr/Seerr events and replay safe failed events.
+5. Send a **Daily Digest** or **Weekly Report** from the Reports tab to see the admin-facing email summary.
+
+This is the v3.0 pitch: your Plex request ops dashboard, built to show what happened after the request and debug notification gaps in one place.
 
 ---
 
@@ -168,6 +189,19 @@ For config-file or environment-based installs, the relevant keys are:
 Equivalent `.env` names are `ALERT_WEBHOOK_ENABLED`, `ALERT_WEBHOOK_TYPE`, `PUSHOVER_APP_TOKEN`, `PUSHOVER_USER_KEY`, and `PUSHOVER_SOUND`.
 
 Pushover treats application tokens and user/group keys as private secrets. Leave saved secret fields blank in the BingeAlert UI unless you are replacing them.
+
+---
+
+## How it fits with your Plex stack
+
+| Tool | What it is great at | Where BingeAlert fits |
+|---|---|---|
+| Seerr / Overseerr / Jellyseerr | Request intake, approvals, and user-facing request discovery | Tracks what happens after approval, verifies Plex availability, sends richer ready emails, mirrors reported issues, and gives admins timelines/reporting. |
+| Sonarr / Radarr | Grabs, imports, quality profiles, and library management | Consumes grab/import/failure webhooks, detects queue/storage/import problems, and links those events back to the requesting user. |
+| Tautulli | Plex watch history, stream monitoring, and user playback analytics | BingeAlert focuses before playback: requests, downloads, imports, availability, notifications, and issue remediation. |
+| Notifiarr / general alert hubs | Broad homelab alert routing across many apps | BingeAlert is narrower and request-aware: alerts are tied to media requests, users, notifications, webhooks, and Plex availability. |
+
+BingeAlert is not trying to replace those tools. It fills the gap between "someone requested something" and "the right person knows it is actually ready in Plex."
 
 ---
 

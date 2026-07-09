@@ -205,43 +205,14 @@ async def send_weekly_summary():
         next_run_at=next_run_at,
     )
     
-    db = SessionLocal()
     try:
-        # Generate summary
-        html = await generate_weekly_summary(db)
-        
-        if not html:
-            logger.info("No notifications to summarize")
-            record_worker_success(
-                "weekly_summary",
-                "Weekly summary",
-                started_at=started_at,
-                next_run_at=next_run_at,
-            )
-            return
-        
-        # Send email
-        email_service = EmailService()
-        
-        # Send to admin email (from settings, or fallback to smtp_from)
-        admin_email = clean_email_address(settings.admin_email or settings.smtp_from)
-        if not admin_email:
-            logger.warning("No valid admin email configured, skipping weekly summary")
-            record_worker_success(
-                "weekly_summary",
-                "Weekly summary",
-                started_at=started_at,
-                next_run_at=next_run_at,
-            )
-            return
-        
-        await email_service.send_email(
-            to_email=admin_email,
-            subject="📊 Weekly Notification Summary - Plex Portal",
-            html_body=html
-        )
-        
-        logger.info("Weekly summary sent to %s", sanitize_for_log(admin_email))
+        from app.services.reporting import send_admin_report
+
+        result = await send_admin_report("weekly", days=7)
+        if not result.get("sent"):
+            raise RuntimeError(result.get("message") or "weekly report email failed")
+
+        logger.info("Weekly operations report sent")
         record_worker_success(
             "weekly_summary",
             "Weekly summary",
@@ -258,8 +229,6 @@ async def send_weekly_summary():
             started_at=started_at,
             next_run_at=next_run_at,
         )
-    finally:
-        db.close()
 
 
 async def weekly_summary_worker():

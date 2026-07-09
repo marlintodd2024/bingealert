@@ -896,6 +896,42 @@
             border-radius: 8px;
             padding: 14px;
         }
+        .reports-toolbar {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+        .reports-toolbar select {
+            min-width: 150px;
+            padding: 10px;
+        }
+        .report-panel-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 16px;
+        }
+        .report-panel {
+            min-width: 0;
+        }
+        .report-panel h3 {
+            margin: 0 0 10px;
+            color: #e5a00d;
+            font-size: 16px;
+        }
+        #reportsTab .data-table {
+            max-height: 340px;
+            margin-bottom: 18px;
+        }
+        #reportsTab table {
+            min-width: 760px;
+        }
+        .report-meta {
+            color: #999;
+            font-size: 12px;
+            margin-bottom: 14px;
+        }
         .stat-value.compact {
             font-size: 24px;
         }
@@ -1713,6 +1749,10 @@
 
             .daily-action-list {
                 max-height: none;
+            }
+
+            .report-panel-grid {
+                grid-template-columns: 1fr;
             }
 
             .timeline-modal-head {
@@ -2828,7 +2868,7 @@
                     <span class="toolbar-group-label">Notifications</span>
                     <button onclick="processNotifications()" id="processNotifBtn">📧 Process Queue</button>
                     <button onclick="showTestEmailModal()" class="secondary">✉️ Test Email</button>
-                    <button onclick="sendWeeklySummary()" id="summaryBtn" class="secondary">📊 Summary</button>
+                    <button onclick="sendWeeklySummary()" id="summaryBtn" class="secondary">📊 Weekly Report</button>
                 </div>
                 <div class="toolbar-group">
                     <span class="toolbar-group-label">Monitoring</span>
@@ -2853,6 +2893,7 @@
             <div class="tab" onclick="switchTab('issues', event)">🚨 Issues<span class="tab-count" id="tabCount-issues" style="display:none;">0</span></div>
             <div class="tab" onclick="switchTab('upcoming', event)">📅 Upcoming Episodes<span class="tab-count" id="tabCount-upcoming" style="display:none;">0</span></div>
             <div class="tab" onclick="switchTab('health', event)">🩺 Health<span class="tab-count" id="tabCount-health" style="display:none;">0</span></div>
+            <div class="tab" onclick="switchTab('reports', event)">📊 Reports</div>
             <div class="tab" onclick="switchTab('webhooks', event)">🪝 Webhooks<span class="tab-count" id="tabCount-webhooks" style="display:none;">0</span></div>
             <div class="tab" onclick="switchTab('backup', event)">💾 Backup</div>
             <div class="tab" onclick="switchTab('maintenance', event)">🔧 Maintenance</div>
@@ -3201,6 +3242,139 @@
                         <tr><td colspan="6" class="loading"><div class="spinner"></div>Loading health events...</td></tr>
                     </tbody>
                 </table>
+            </div>
+        </div>
+
+        <div id="reportsTab" class="tab-content">
+            <div class="reports-toolbar">
+                <select id="reportWindowDays" onchange="invalidateTabCache('reports'); loadOpsReport(true)">
+                    <option value="1">Last 24 hours</option>
+                    <option value="7" selected>Last 7 days</option>
+                    <option value="14">Last 14 days</option>
+                    <option value="30">Last 30 days</option>
+                </select>
+                <button onclick="loadOpsReport(true)" id="reportRefreshBtn" class="secondary">🔄 Refresh</button>
+                <button onclick="sendAdminReport('daily')" id="dailyDigestBtn" class="secondary">📬 Send Daily Digest</button>
+                <button onclick="sendAdminReport('weekly')" id="weeklyReportBtn" class="secondary">📊 Send Weekly Report</button>
+            </div>
+
+            <div class="report-meta" id="reportGenerated">Loading operations report...</div>
+
+            <div class="health-summary-grid">
+                <div class="health-summary-card">
+                    <div class="stat-label">Requests</div>
+                    <div class="stat-value compact" id="reportRequestsCreated">-</div>
+                </div>
+                <div class="health-summary-card">
+                    <div class="stat-label">Fulfilled</div>
+                    <div class="stat-value compact" id="reportRequestsFulfilled">-</div>
+                </div>
+                <div class="health-summary-card">
+                    <div class="stat-label">Median Fulfillment</div>
+                    <div class="stat-value compact" id="reportMedianFulfillment">-</div>
+                </div>
+                <div class="health-summary-card">
+                    <div class="stat-label">Notifications Sent</div>
+                    <div class="stat-value compact" id="reportNotificationsSent">-</div>
+                </div>
+                <div class="health-summary-card">
+                    <div class="stat-label">Delivery Rate</div>
+                    <div class="stat-value compact" id="reportDeliveryRate">-</div>
+                </div>
+                <div class="health-summary-card">
+                    <div class="stat-label">Open Issues</div>
+                    <div class="stat-value compact" id="reportOpenIssues">-</div>
+                </div>
+                <div class="health-summary-card">
+                    <div class="stat-label">Old Waiting</div>
+                    <div class="stat-value compact" id="reportOldWaiting">-</div>
+                </div>
+                <div class="health-summary-card">
+                    <div class="stat-label">Ops Problems</div>
+                    <div class="stat-value compact" id="reportOpsProblems">-</div>
+                </div>
+            </div>
+
+            <div class="report-panel-grid">
+                <div class="report-panel">
+                    <h3>Daily Trend</h3>
+                    <div class="data-table">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Requests</th>
+                                    <th>Fulfilled</th>
+                                    <th>Sent</th>
+                                    <th>Failures</th>
+                                    <th>Issues</th>
+                                    <th>Webhooks</th>
+                                </tr>
+                            </thead>
+                            <tbody id="reportTrendTableBody">
+                                <tr><td colspan="7" class="loading"><div class="spinner"></div>Loading report...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="report-panel">
+                    <h3>Top Requesters</h3>
+                    <div class="data-table">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>User</th>
+                                    <th>Requests</th>
+                                    <th>Fulfilled</th>
+                                    <th>Notifications</th>
+                                </tr>
+                            </thead>
+                            <tbody id="reportRequestersTableBody">
+                                <tr><td colspan="4" class="loading"><div class="spinner"></div>Loading report...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="report-panel">
+                    <h3>Recurring Failures</h3>
+                    <div class="data-table">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Type</th>
+                                    <th>Name</th>
+                                    <th>Count</th>
+                                    <th>Detail</th>
+                                </tr>
+                            </thead>
+                            <tbody id="reportFailuresTableBody">
+                                <tr><td colspan="4" class="loading"><div class="spinner"></div>Loading report...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="report-panel">
+                    <h3>Oldest Waiting Requests</h3>
+                    <div class="data-table">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Title</th>
+                                    <th>Type</th>
+                                    <th>Status</th>
+                                    <th>Requester</th>
+                                    <th>Age</th>
+                                </tr>
+                            </thead>
+                            <tbody id="reportWaitingTableBody">
+                                <tr><td colspan="5" class="loading"><div class="spinner"></div>Loading report...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -4459,6 +4633,7 @@
         let allOpsLag = [];
         let allWebhookEvents = [];
         let allActivity = [];
+        let latestOpsReport = null;
         let systemHealthProblemCount = 0;
         let opsHealthProblemCount = 0;
         let upcomingViewMode = 'grouped'; // 'grouped' or 'list'
@@ -5196,6 +5371,7 @@
             upcoming: false,
             issues: false,
             health: false,
+            reports: false,
             webhooks: false,
             backup: false,
             maintenance: false,
@@ -6406,6 +6582,174 @@
             `).join('');
         }
 
+        function formatReportHours(value) {
+            if (value === null || value === undefined || value === '') return '-';
+            const num = Number(value);
+            if (!Number.isFinite(num)) return '-';
+            if (num < 1) return `${Math.max(1, Math.round(num * 60))} min`;
+            return `${num.toFixed(1)} h`;
+        }
+
+        function formatReportPercent(value) {
+            if (value === null || value === undefined || value === '') return '-';
+            const num = Number(value);
+            return Number.isFinite(num) ? `${num.toFixed(1)}%` : '-';
+        }
+
+        function reportDateLabel(value) {
+            if (!value) return '-';
+            const date = new Date(`${value}T00:00:00`);
+            return Number.isNaN(date.getTime()) ? escapeHtml(value) : date.toLocaleDateString();
+        }
+
+        async function loadOpsReport(force) {
+            if (!force && tabCache.reports && latestOpsReport) {
+                renderOpsReport(latestOpsReport);
+                return;
+            }
+            const btn = document.getElementById('reportRefreshBtn');
+            if (btn && force) {
+                btn.disabled = true;
+                btn.textContent = '⏳ Refreshing...';
+            }
+            try {
+                const days = document.getElementById('reportWindowDays')?.value || '7';
+                const response = await fetch(`${API_BASE}/admin/reports/ops?days=${encodeURIComponent(days)}`, {
+                    cache: 'no-store',
+                    headers: { 'Accept': 'application/json' }
+                });
+                const data = await readJsonResponse(response, 'Operations report request failed');
+                latestOpsReport = data;
+                renderOpsReport(data);
+                tabCache.reports = true;
+                if (force) showSuccess('Operations report refreshed.');
+            } catch (error) {
+                showError('Failed to load operations report: ' + error.message);
+                setText('reportGenerated', 'Operations report unavailable');
+                document.getElementById('reportTrendTableBody').innerHTML = '<tr><td colspan="7" class="empty-state">Failed to load report</td></tr>';
+                document.getElementById('reportRequestersTableBody').innerHTML = '<tr><td colspan="4" class="empty-state">Failed to load report</td></tr>';
+                document.getElementById('reportFailuresTableBody').innerHTML = '<tr><td colspan="4" class="empty-state">Failed to load report</td></tr>';
+                document.getElementById('reportWaitingTableBody').innerHTML = '<tr><td colspan="5" class="empty-state">Failed to load report</td></tr>';
+            } finally {
+                if (btn && force) {
+                    btn.disabled = false;
+                    btn.textContent = '🔄 Refresh';
+                }
+            }
+        }
+
+        function renderOpsReport(report) {
+            const summary = report?.summary || {};
+            const windowInfo = report?.window || {};
+            const generated = report?.generated_at ? formatDateTime(report.generated_at) : '-';
+            setText('reportGenerated', `${windowInfo.days || '-'} day report · Generated ${generated}`);
+            setText('reportRequestsCreated', formatCount(summary.requests_created));
+            setText('reportRequestsFulfilled', formatCount(summary.requests_fulfilled));
+            setText('reportMedianFulfillment', formatReportHours(summary.fulfillment_median_hours));
+            setText('reportNotificationsSent', formatCount(summary.notifications_sent));
+            setText('reportDeliveryRate', formatReportPercent(summary.notification_success_rate));
+            setText('reportOpenIssues', formatCount(summary.open_issues));
+            setText('reportOldWaiting', formatCount(summary.old_waiting_requests));
+            setText('reportOpsProblems', formatCount(summary.ops_problem_total));
+            renderReportTrend(report?.trend || []);
+            renderReportRequesters(report?.top_requesters || []);
+            renderReportFailures(report?.recurring_failures || []);
+            renderReportWaiting(report?.waiting_requests || []);
+        }
+
+        function renderReportTrend(rows) {
+            const tbody = document.getElementById('reportTrendTableBody');
+            if (!rows.length) {
+                tbody.innerHTML = emptyHintRow(7, '📊', 'No trend data for this window.');
+                return;
+            }
+            tbody.innerHTML = rows.slice().reverse().map(row => `
+                <tr>
+                    <td>${reportDateLabel(row.date)}</td>
+                    <td>${formatCount(row.requests_created)}</td>
+                    <td>${formatCount(row.requests_fulfilled)}</td>
+                    <td>${formatCount(row.notifications_sent)}</td>
+                    <td>${formatCount(row.notification_failures)}</td>
+                    <td>${formatCount(row.issues_reported)}</td>
+                    <td>${formatCount(row.webhook_failures)}</td>
+                </tr>
+            `).join('');
+        }
+
+        function renderReportRequesters(rows) {
+            const tbody = document.getElementById('reportRequestersTableBody');
+            if (!rows.length) {
+                tbody.innerHTML = emptyHintRow(4, '👥', 'No requester activity in this window.');
+                return;
+            }
+            tbody.innerHTML = rows.map(row => {
+                const name = row.username || row.email || `User ${row.user_id || ''}`.trim();
+                return `
+                    <tr>
+                        <td><strong>${escapeHtml(name)}</strong><br><small style="color:#999;">${escapeHtml(row.email || '')}</small></td>
+                        <td>${formatCount(row.requests)}</td>
+                        <td>${formatCount(row.fulfilled)}</td>
+                        <td>${formatCount(row.notifications_sent)}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function renderReportFailures(rows) {
+            const tbody = document.getElementById('reportFailuresTableBody');
+            if (!rows.length) {
+                tbody.innerHTML = emptyHintRow(4, '✅', 'No recurring failures in this window.');
+                return;
+            }
+            tbody.innerHTML = rows.map(row => `
+                <tr>
+                    <td><span class="status-pill info">${escapeHtml(row.category || '-')}</span></td>
+                    <td><strong>${escapeHtml(row.name || '-')}</strong><br><small style="color:#999;">${formatDateTime(row.last_seen_at)}</small></td>
+                    <td>${formatCount(row.count)}</td>
+                    <td class="table-error-cell">${escapeHtml(row.detail || '-')}</td>
+                </tr>
+            `).join('');
+        }
+
+        function renderReportWaiting(rows) {
+            const tbody = document.getElementById('reportWaitingTableBody');
+            if (!rows.length) {
+                tbody.innerHTML = emptyHintRow(5, '✅', 'No waiting requests need attention.');
+                return;
+            }
+            tbody.innerHTML = rows.map(row => `
+                <tr>
+                    <td><strong>${escapeHtml(row.title || '-')}</strong><br><small style="color:#999;">Requested ${formatDateTime(row.created_at)}</small></td>
+                    <td>${escapeHtml(row.media_type || '-')}</td>
+                    <td>${statusPill(row.status || 'unknown')}</td>
+                    <td>${escapeHtml(row.requester || row.requester_email || '-')}</td>
+                    <td>${escapeHtml(row.age_days == null ? '-' : `${row.age_days} d`)}</td>
+                </tr>
+            `).join('');
+        }
+
+        async function sendAdminReport(kind) {
+            const daily = kind === 'daily';
+            const btn = document.getElementById(daily ? 'dailyDigestBtn' : 'weeklyReportBtn');
+            const endpoint = daily ? '/admin/reports/daily-digest/send' : '/admin/reports/weekly-ops/send';
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = daily ? '⏳ Sending Digest...' : '⏳ Sending Report...';
+            }
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`, { method: 'POST' });
+                const data = await readJsonResponse(response, 'Report send request failed');
+                showSuccess(data.message || 'Report queued for email delivery.');
+            } catch (error) {
+                showError('Failed to send report: ' + error.message);
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = daily ? '📬 Send Daily Digest' : '📊 Send Weekly Report';
+                }
+            }
+        }
+
         function showActivityView(view) {
             activityViewMode = view === 'logs' ? 'logs' : 'feed';
             const feedView = document.getElementById('activityFeedView');
@@ -6570,6 +6914,7 @@
             else if (tabName === 'upcoming') loadUpcoming();
             else if (tabName === 'issues') loadIssues();
             else if (tabName === 'health') loadSystemHealth();
+            else if (tabName === 'reports') loadOpsReport();
             else if (tabName === 'webhooks') loadWebhooks();
             else if (tabName === 'backup') {
                 // Backups change frequently; load once per session, force via Refresh
@@ -6781,7 +7126,7 @@
                 const data = await response.json();
                 
                 if (response.ok) {
-                    showSuccess(data.message || 'Weekly summary sent! Check your email.');
+                    showSuccess(data.message || 'Weekly operations report queued.');
                 } else {
                     showError(data.detail || 'Failed to send summary');
                 }
@@ -6789,7 +7134,7 @@
                 showError('Failed to send summary: ' + error.message);
             } finally {
                 btn.disabled = false;
-                btn.textContent = '📊 Send Summary';
+                btn.textContent = '📊 Weekly Report';
             }
         }
 
@@ -6858,6 +7203,7 @@
                 upcoming: () => loadUpcoming(true),
                 issues: () => loadIssues(true),
                 health: () => loadSystemHealth(),
+                reports: () => loadOpsReport(true),
                 webhooks: () => loadWebhooks(true),
                 backup: () => loadBackups(),
                 maintenance: () => loadMaintenanceWindows(),
