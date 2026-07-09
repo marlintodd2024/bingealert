@@ -2694,6 +2694,7 @@
                     <tr><td><kbd>g</kbd> <kbd>n</kbd></td><td>Notifications</td></tr>
                     <tr><td><kbd>g</kbd> <kbd>e</kbd></td><td>Upcoming Episodes</td></tr>
                     <tr><td><kbd>g</kbd> <kbd>h</kbd></td><td>Health</td></tr>
+                    <tr><td><kbd>g</kbd> <kbd>w</kbd></td><td>Webhooks</td></tr>
                     <tr><td><kbd>g</kbd> <kbd>i</kbd></td><td>Issues</td></tr>
                     <tr><td><kbd>g</kbd> <kbd>b</kbd></td><td>Backup</td></tr>
                     <tr><td><kbd>g</kbd> <kbd>a</kbd></td><td>Activity</td></tr>
@@ -2852,6 +2853,7 @@
             <div class="tab" onclick="switchTab('issues', event)">🚨 Issues<span class="tab-count" id="tabCount-issues" style="display:none;">0</span></div>
             <div class="tab" onclick="switchTab('upcoming', event)">📅 Upcoming Episodes<span class="tab-count" id="tabCount-upcoming" style="display:none;">0</span></div>
             <div class="tab" onclick="switchTab('health', event)">🩺 Health<span class="tab-count" id="tabCount-health" style="display:none;">0</span></div>
+            <div class="tab" onclick="switchTab('webhooks', event)">🪝 Webhooks<span class="tab-count" id="tabCount-webhooks" style="display:none;">0</span></div>
             <div class="tab" onclick="switchTab('backup', event)">💾 Backup</div>
             <div class="tab" onclick="switchTab('maintenance', event)">🔧 Maintenance</div>
             <div class="tab" onclick="switchTab('settings', event)">⚙️ Settings</div>
@@ -3124,6 +3126,63 @@
                     </thead>
                     <tbody id="healthEventsTableBody">
                         <tr><td colspan="6" class="loading"><div class="spinner"></div>Loading health events...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="webhooksTab" class="tab-content">
+            <div style="display: flex; gap: 10px; margin-bottom: 15px; align-items: center; flex-wrap: wrap;">
+                <input type="text" class="search-box" placeholder="Search webhooks..." id="webhookSearch" oninput="filterWebhooks()" style="flex: 1; min-width: 220px;">
+                <select id="webhookSourceFilter" onchange="filterWebhooks()" style="padding: 10px; min-width: 140px;">
+                    <option value="all">All Sources</option>
+                    <option value="sonarr">Sonarr</option>
+                    <option value="radarr">Radarr</option>
+                    <option value="jellyseerr">Seerr</option>
+                </select>
+                <select id="webhookStatusFilter" onchange="filterWebhooks()" style="padding: 10px; min-width: 140px;">
+                    <option value="all">All Statuses</option>
+                    <option value="problem">Problems</option>
+                    <option value="success">Success</option>
+                    <option value="ignored">Ignored</option>
+                    <option value="failed">Failed</option>
+                    <option value="error">Error</option>
+                    <option value="replay_blocked">Replay Blocked</option>
+                </select>
+                <button onclick="loadWebhooks(true)" id="refreshWebhooksBtn" class="secondary">🔄 Refresh</button>
+            </div>
+
+            <div class="health-summary-grid">
+                <div class="health-summary-card">
+                    <div class="stat-label">Inbox Rows</div>
+                    <div class="stat-value compact" id="webhookInboxCount">-</div>
+                </div>
+                <div class="health-summary-card">
+                    <div class="stat-label">Failures 24h</div>
+                    <div class="stat-value compact" id="webhookFailures24h">-</div>
+                </div>
+                <div class="health-summary-card">
+                    <div class="stat-label">Visible Rows</div>
+                    <div class="stat-value compact" id="webhookVisibleCount">-</div>
+                </div>
+            </div>
+
+            <div class="data-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="sortable" onclick="sortTable('webhooks', 'created_at')">Received</th>
+                            <th class="sortable" onclick="sortTable('webhooks', 'source_service')">Source</th>
+                            <th class="sortable" onclick="sortTable('webhooks', 'event_type')">Event</th>
+                            <th class="sortable" onclick="sortTable('webhooks', 'status')">Status</th>
+                            <th class="sortable" onclick="sortTable('webhooks', 'processed_items')">Items</th>
+                            <th>Matches</th>
+                            <th>Result</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="webhooksTableBody">
+                        <tr><td colspan="8" class="loading"><div class="spinner"></div>Loading webhook inbox...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -4281,6 +4340,22 @@
         </div>
     </div>
 
+    <!-- Webhook Payload Modal -->
+    <div id="webhookPayloadModal" role="dialog" aria-modal="true" aria-labelledby="webhookPayloadTitle" onclick="if (event.target === this) closeWebhookPayloadModal()" style="display:none;position:fixed;inset:0;z-index:1001;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,0.78);">
+        <div class="timeline-modal-box">
+            <div class="timeline-modal-head">
+                <div>
+                    <h2 class="timeline-modal-title" id="webhookPayloadTitle">Webhook Payload</h2>
+                    <div class="timeline-modal-meta" id="webhookPayloadMeta">Sanitized payload</div>
+                </div>
+                <button onclick="closeWebhookPayloadModal()" class="secondary" style="padding: 8px 12px; font-size: 12px;">Close</button>
+            </div>
+            <div class="timeline-modal-body">
+                <pre id="webhookPayloadBody" style="white-space: pre-wrap; word-break: break-word; margin: 0; padding: 14px; background: rgba(0,0,0,0.28); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; color: #dfe3e8; font-size: 12px; line-height: 1.45;"></pre>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Security: HTML/attribute escaping to prevent XSS from API data
         function escapeHtml(str) {
@@ -4306,6 +4381,7 @@
         let allServiceHealth = [];
         let allWorkerHealth = [];
         let allHealthEvents = [];
+        let allWebhookEvents = [];
         let allActivity = [];
         let upcomingViewMode = 'grouped'; // 'grouped' or 'list'
         let activityViewMode = 'feed'; // 'feed' or 'logs'
@@ -4322,6 +4398,7 @@
             serviceHealth: { column: 'status', direction: 'asc' },
             workerHealth: { column: 'status', direction: 'asc' },
             healthEvents: { column: 'checked_at', direction: 'desc' },
+            webhooks: { column: 'created_at', direction: 'desc' },
             activity: { column: 'created_at', direction: 'desc' }
         };
 
@@ -4347,7 +4424,7 @@
         function persistSort(tab) { ssSave('sort.' + tab, sortState[tab]); }
         function persistFilter(tab, payload) { ssSave('filter.' + tab, payload); }
         function loadPersistedSort() {
-            ['users','requests','notifications','upcoming','issues','backups','maintenance','serviceHealth','workerHealth','healthEvents','activity'].forEach(tab => {
+            ['users','requests','notifications','upcoming','issues','backups','maintenance','serviceHealth','workerHealth','healthEvents','webhooks','activity'].forEach(tab => {
                 const saved = ssLoad('sort.' + tab, null);
                 if (saved && saved.column) sortState[tab] = saved;
             });
@@ -4911,6 +4988,14 @@
                 renderIssues(allIssues.filter(issue => ['reported', 'fixing', 'failed'].includes(issue.status)));
                 return;
             }
+            if (intent === 'webhook_failures') {
+                switchTab('webhooks');
+                await loadWebhooks(true);
+                const statusFilter = document.getElementById('webhookStatusFilter');
+                if (statusFilter) statusFilter.value = 'problem';
+                filterWebhooks();
+                return;
+            }
             if (intent === 'tracking_requests') {
                 await showTrackingRequests();
                 return;
@@ -4999,6 +5084,7 @@
                 updateTabCount('requests', data.requests.total || 0);
                 updateTabCount('notifications', data.notifications.total || 0);
                 updateTabCount('issues', data.issues || 0);
+                updateTabCount('webhooks', data.webhooks || 0);
 
                 console.log('Pending notifications:', data.notifications.pending);
             } catch (error) {
@@ -5016,6 +5102,7 @@
             upcoming: false,
             issues: false,
             health: false,
+            webhooks: false,
             backup: false,
             maintenance: false,
             settings: false,
@@ -5797,6 +5884,161 @@
             `).join('');
         }
 
+        function webhookStatusPill(status) {
+            const value = status || 'unknown';
+            if (value === 'failed' || value === 'error') return statusPill('error');
+            if (value === 'replay_blocked') return statusPill('warning').replace('Warning', 'Replay Blocked');
+            if (value === 'ignored') return statusPill('unknown').replace('Unknown', 'Ignored');
+            return statusPill(value);
+        }
+
+        async function loadWebhooks(force) {
+            if (!force && tabCache.webhooks) {
+                filterWebhooks();
+                return;
+            }
+            const btn = document.getElementById('refreshWebhooksBtn');
+            if (btn && force) {
+                btn.disabled = true;
+                btn.textContent = '⏳ Refreshing...';
+            }
+            try {
+                const response = await fetch(`${API_BASE}/admin/webhooks?limit=500`, {
+                    cache: 'no-store',
+                    headers: { 'Accept': 'application/json' }
+                });
+                const data = await readJsonResponse(response, 'Webhook inbox request failed');
+                allWebhookEvents = data.webhooks || [];
+                updateTabCount('webhooks', allWebhookEvents.length);
+                setText('webhookInboxCount', formatCount(allWebhookEvents.length));
+                setText('webhookFailures24h', formatCount(data.summary?.failed_24h || 0));
+                applyHeaderSortIndicators('webhooks');
+                filterWebhooks();
+                tabCache.webhooks = true;
+            } catch (error) {
+                showError('Failed to load webhooks: ' + error.message);
+                document.getElementById('webhooksTableBody').innerHTML = '<tr><td colspan="8" class="empty-state">Failed to load webhook inbox</td></tr>';
+            } finally {
+                if (btn && force) {
+                    btn.disabled = false;
+                    btn.textContent = '🔄 Refresh';
+                }
+            }
+        }
+
+        function filterWebhooks() {
+            const search = (document.getElementById('webhookSearch')?.value || '').toLowerCase();
+            const source = document.getElementById('webhookSourceFilter')?.value || 'all';
+            const status = document.getElementById('webhookStatusFilter')?.value || 'all';
+            persistFilter('webhooks', { search, source, status });
+            const problemStatuses = new Set(['failed', 'error', 'replay_blocked']);
+            const filtered = allWebhookEvents.filter(item => {
+                const haystack = [
+                    item.source_service,
+                    item.event_type,
+                    item.status,
+                    item.result_message,
+                    item.error_message,
+                    item.client_ip,
+                    (item.matched_request_ids || []).join(' ')
+                ].join(' ').toLowerCase();
+                const matchesSearch = !search || haystack.includes(search);
+                const matchesSource = source === 'all' || item.source_service === source;
+                const matchesStatus = status === 'all'
+                    || (status === 'problem' ? problemStatuses.has(item.status) : item.status === status);
+                return matchesSearch && matchesSource && matchesStatus;
+            });
+            setText('webhookVisibleCount', formatCount(filtered.length));
+            renderWebhooks(filtered);
+        }
+
+        function renderWebhooks(rows) {
+            const tbody = document.getElementById('webhooksTableBody');
+            const sorted = sortDataset(rows || [], 'webhooks');
+            if (!sorted.length) {
+                tbody.innerHTML = emptyHintRow(8, '🪝', 'No webhook events match the current filters.');
+                return;
+            }
+            tbody.innerHTML = sorted.map(item => {
+                const requestIds = item.matched_request_ids || [];
+                const userIds = item.matched_user_ids || [];
+                const firstRequest = requestIds.length ? requestIds[0] : null;
+                const message = item.error_message || item.result_message || '-';
+                const replayDisabled = item.can_replay ? '' : 'disabled title="Replay is blocked for this event type"';
+                return `
+                    <tr>
+                        <td>${formatDateTime(item.created_at)}</td>
+                        <td><strong>${escapeHtml(item.source_service || '-')}</strong><br><small style="color:#888;">${escapeHtml(item.client_ip || '')}</small></td>
+                        <td>${escapeHtml(item.event_type || '-')}</td>
+                        <td>${webhookStatusPill(item.status)}</td>
+                        <td>${item.processed_items == null ? '-' : formatCount(item.processed_items)}</td>
+                        <td>
+                            ${requestIds.length ? `${formatCount(requestIds.length)} request${requestIds.length === 1 ? '' : 's'}` : '-'}
+                            ${userIds.length ? `<br><small style="color:#888;">${formatCount(userIds.length)} user${userIds.length === 1 ? '' : 's'}</small>` : ''}
+                        </td>
+                        <td class="table-error-cell">${escapeHtml(message)}</td>
+                        <td style="white-space: nowrap;">
+                            <button class="action-btn" onclick="viewWebhookPayload(${item.id})">Payload</button>
+                            ${firstRequest ? `<button class="action-btn" onclick="openRequestTimeline(${firstRequest})">Timeline</button>` : ''}
+                            <button class="action-btn" onclick="replayWebhook(${item.id})" ${replayDisabled}>Replay</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function closeWebhookPayloadModal() {
+            const modal = document.getElementById('webhookPayloadModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        async function viewWebhookPayload(eventId) {
+            const modal = document.getElementById('webhookPayloadModal');
+            const body = document.getElementById('webhookPayloadBody');
+            if (modal) modal.style.display = 'flex';
+            setText('webhookPayloadTitle', `Webhook #${eventId}`);
+            setText('webhookPayloadMeta', 'Loading sanitized payload...');
+            if (body) body.textContent = '';
+            try {
+                const response = await fetch(`${API_BASE}/admin/webhooks/${eventId}`, {
+                    cache: 'no-store',
+                    headers: { 'Accept': 'application/json' }
+                });
+                const data = await readJsonResponse(response, 'Webhook payload request failed');
+                setText('webhookPayloadTitle', `${data.source_service || 'Webhook'} ${data.event_type || ''}`);
+                setText('webhookPayloadMeta', `Received ${formatDateTime(data.created_at)} · ${data.status || 'unknown'}`);
+                if (body) body.textContent = JSON.stringify(data.payload || {}, null, 2);
+            } catch (error) {
+                setText('webhookPayloadMeta', 'Failed to load payload');
+                if (body) body.textContent = error.message;
+                showError('Failed to load webhook payload: ' + error.message);
+            }
+        }
+
+        async function replayWebhook(eventId) {
+            const ok = await showConfirm(
+                'Replay this sanitized webhook through BingeAlert processing? Duplicate sends are guarded by existing request/notification dedupe, but this may still update state.',
+                { title: 'Replay webhook?', okText: 'Replay' }
+            );
+            if (!ok) return;
+            try {
+                const response = await fetch(`${API_BASE}/admin/webhooks/${eventId}/replay`, {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json' }
+                });
+                const data = await readJsonResponse(response, 'Webhook replay failed');
+                if (data.success) {
+                    showSuccess(data.message || 'Webhook replayed.');
+                } else {
+                    showWarn(data.message || 'Webhook replay did not run.');
+                }
+                await loadWebhooks(true);
+                await loadStats();
+            } catch (error) {
+                showError('Failed to replay webhook: ' + error.message);
+            }
+        }
+
         function renderHealthEvents(events) {
             const tbody = document.getElementById('healthEventsTableBody');
             const sorted = sortDataset(events, 'healthEvents');
@@ -5983,6 +6225,7 @@
             else if (tabName === 'upcoming') loadUpcoming();
             else if (tabName === 'issues') loadIssues();
             else if (tabName === 'health') loadSystemHealth();
+            else if (tabName === 'webhooks') loadWebhooks();
             else if (tabName === 'backup') {
                 // Backups change frequently; load once per session, force via Refresh
                 if (!tabCache.backup) { loadBackups(); tabCache.backup = true; }
@@ -6270,6 +6513,7 @@
                 upcoming: () => loadUpcoming(true),
                 issues: () => loadIssues(true),
                 health: () => loadSystemHealth(),
+                webhooks: () => loadWebhooks(true),
                 backup: () => loadBackups(),
                 maintenance: () => loadMaintenanceWindows(),
                 settings: () => loadConfig(),
@@ -6318,6 +6562,7 @@
             n: 'notifications',
             e: 'upcoming',
             h: 'health',
+            w: 'webhooks',
             i: 'issues',
             s: 'settings',
             b: 'backup',
@@ -6367,9 +6612,15 @@
                 const helpOpen = document.getElementById('shortcutHelpModal');
                 const notesOpen = document.getElementById('releaseNotesModal');
                 const timelineOpen = document.getElementById('requestTimelineModal');
+                const payloadOpen = document.getElementById('webhookPayloadModal');
                 if (notesOpen && notesOpen.classList.contains('open')) {
                     e.preventDefault();
                     closeReleaseNotesModal();
+                    return;
+                }
+                if (payloadOpen && payloadOpen.style.display === 'flex') {
+                    e.preventDefault();
+                    closeWebhookPayloadModal();
                     return;
                 }
                 if (timelineOpen && timelineOpen.classList.contains('open')) {
@@ -6703,6 +6954,7 @@
             else if (tableName === 'serviceHealth') filterHealth();
             else if (tableName === 'workerHealth') filterHealth();
             else if (tableName === 'healthEvents') filterHealth();
+            else if (tableName === 'webhooks') filterWebhooks();
             else if (tableName === 'activity') filterActivity();
         }
 
@@ -7657,6 +7909,7 @@
                 upcoming: loadUpcoming,
                 issues: loadIssues,
                 health: loadSystemHealth,
+                webhooks: loadWebhooks,
                 backup: loadBackups,
                 maintenance: loadMaintenanceWindows,
                 settings: loadConfig,
@@ -7734,6 +7987,19 @@
             const healthF = ssLoad('filter.health', null);
             if (healthF && document.getElementById('healthSearch')) {
                 document.getElementById('healthSearch').value = healthF.search || '';
+            }
+
+            const webhookF = ssLoad('filter.webhooks', null);
+            if (webhookF) {
+                if (document.getElementById('webhookSearch')) {
+                    document.getElementById('webhookSearch').value = webhookF.search || '';
+                }
+                if (document.getElementById('webhookSourceFilter') && webhookF.source) {
+                    document.getElementById('webhookSourceFilter').value = webhookF.source;
+                }
+                if (document.getElementById('webhookStatusFilter') && webhookF.status) {
+                    document.getElementById('webhookStatusFilter').value = webhookF.status;
+                }
             }
 
             const activityF = ssLoad('filter.activity', null);

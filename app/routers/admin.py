@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, func, or_
 import logging
@@ -20,6 +20,7 @@ from app.database import (
     SystemConfig,
     MaintenanceWindow,
     WorkerHealthStatus,
+    WebhookEventLog,
 )
 from app.services.jellyseerr_sync import JellyseerrSyncService
 from app.services.email_service import EmailService
@@ -114,11 +115,31 @@ async def get_stats(db: Session = Depends(get_db)):
             # Lets the dashboard populate every tab-count badge on initial load
             # instead of waiting for each tab's first click to fetch its data.
             "issues": db.query(func.count(ReportedIssue.id)).scalar(),
+            "webhooks": db.query(func.count(WebhookEventLog.id)).scalar(),
         }
         return stats
     except Exception as e:
         logger.error(f"Failed to get stats: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+def _parse_json_array(value):
+    if not value:
+        return []
+    try:
+        parsed = json.loads(value)
+        return parsed if isinstance(parsed, list) else []
+    except Exception:
+        return []
+
+
+def _parse_payload(value):
+    if not value:
+        return {}
+    try:
+        return json.loads(value)
+    except Exception:
+        return {"_raw": value}
 
 
 @router.get("/daily-brief")
@@ -189,6 +210,12 @@ async def get_daily_brief(db: Session = Depends(get_db)):
                 ReportedIssue.resolved_at >= since,
             )
         )
+        webhook_failures_24h = count(
+            db.query(func.count(WebhookEventLog.id)).filter(
+                WebhookEventLog.created_at >= since,
+                WebhookEventLog.status.in_(["error", "failed", "replay_blocked"]),
+            )
+        )
 
         services = db.query(ServiceHealthStatus).order_by(ServiceHealthStatus.service_name.asc()).all()
         workers = db.query(WorkerHealthStatus).order_by(WorkerHealthStatus.worker_name.asc()).all()
@@ -245,6 +272,15 @@ async def get_daily_brief(db: Session = Depends(get_db)):
                 "notifications",
                 failed_notifications,
                 "failed_notifications",
+            )
+        if webhook_failures_24h:
+            add_action(
+                "critical",
+                "Webhook failures",
+                "Recent Sonarr, Radarr, or Seerr webhooks failed processing.",
+                "webhooks",
+                webhook_failures_24h,
+                "webhook_failures",
             )
         if overdue_notifications:
             add_action(
@@ -322,6 +358,7 @@ async def get_daily_brief(db: Session = Depends(get_db)):
                 "open_issues": open_issues,
                 "issues_reported_24h": issues_reported_24h,
                 "issues_resolved_24h": issues_resolved_24h,
+                "webhook_failures_24h": webhook_failures_24h,
                 "unhealthy_services": len(unhealthy_services),
                 "worker_errors": len(worker_errors),
                 "configured_services": sum(1 for service in services if service.configured),
@@ -368,6 +405,126 @@ async def get_system_health_history(hours: int = 24, limit: int = 200):
         return get_service_health_history(hours=hours, limit=limit)
     except Exception as e:
         logger.error(f"Failed to get system health history: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+def _webhook_event_to_summary(row: WebhookEventLog) -> dict:
+    matched_request_ids = _parse_json_array(row.matched_request_ids)
+    matched_user_ids = _parse_json_array(row.matched_user_ids)
+    return {
+        "id": row.id,
+        "source_service": row.source_service,
+        "event_type": row.event_type,
+        "status": row.status,
+        "result_message": row.result_message,
+        "error_message": row.error_message,
+        "matched_request_ids": matched_request_ids,
+        "matched_user_ids": matched_user_ids,
+        "processed_items": row.processed_items,
+        "replay_of_id": row.replay_of_id,
+        "replayed_at": row.replayed_at.isoformat() if row.replayed_at else None,
+        "client_ip": row.client_ip,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "processed_at": row.processed_at.isoformat() if row.processed_at else None,
+        "can_replay": not row.replay_of_id
+        and (row.source_service, row.event_type) not in {
+            ("jellyseerr", "ISSUE_CREATED"),
+            ("jellyseerr", "ISSUE_COMMENT"),
+        },
+    }
+
+
+@router.get("/webhooks")
+async def list_webhook_events(
+    limit: int = 200,
+    source: str = "",
+    status: str = "",
+    db: Session = Depends(get_db),
+):
+    """Return recent sanitized webhook inbox rows."""
+    try:
+        safe_limit = max(1, min(int(limit or 200), 1000))
+        query = db.query(WebhookEventLog)
+        if source:
+            query = query.filter(WebhookEventLog.source_service == source.strip().lower())
+        if status:
+            query = query.filter(WebhookEventLog.status == status.strip().lower())
+
+        rows = (
+            query.order_by(WebhookEventLog.created_at.desc())
+            .limit(safe_limit)
+            .all()
+        )
+        failed_24h = db.query(func.count(WebhookEventLog.id)).filter(
+            WebhookEventLog.created_at >= datetime.utcnow() - timedelta(hours=24),
+            WebhookEventLog.status.in_(["error", "failed", "replay_blocked"]),
+        ).scalar()
+        return {
+            "webhooks": [_webhook_event_to_summary(row) for row in rows],
+            "summary": {
+                "count": len(rows),
+                "failed_24h": int(failed_24h or 0),
+            },
+        }
+    except Exception as e:
+        logger.error(f"Failed to list webhook events: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/webhooks/{event_id}")
+async def get_webhook_event(event_id: int, db: Session = Depends(get_db)):
+    """Return one webhook event with sanitized payload."""
+    try:
+        row = db.query(WebhookEventLog).filter(WebhookEventLog.id == event_id).first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Webhook event not found")
+        data = _webhook_event_to_summary(row)
+        data["payload"] = _parse_payload(row.payload)
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get webhook event {event_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/webhooks/{event_id}/replay")
+async def replay_admin_webhook_event(
+    event_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Replay a stored sanitized webhook through the normal processing path."""
+    try:
+        row = db.query(WebhookEventLog).filter(WebhookEventLog.id == event_id).first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Webhook event not found")
+
+        from app.routers.webhooks import replay_webhook_event
+
+        result = await replay_webhook_event(row, background_tasks, db)
+        record_admin_activity(
+            "webhook_replay",
+            f"Replay requested for {row.source_service} {row.event_type}",
+            db=db,
+            details={
+                "event_id": event_id,
+                "success": result.success,
+                "message": result.message,
+                "processed_items": result.processed_items,
+            },
+        )
+        db.commit()
+        return {
+            "success": result.success,
+            "message": result.message,
+            "processed_items": result.processed_items,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to replay webhook event {event_id}: {e}", exc_info=True)
+        db.rollback()
         raise HTTPException(status_code=500, detail="Internal server error")
 
 

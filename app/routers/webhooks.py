@@ -1,12 +1,22 @@
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Request
 import hmac
 import ipaddress
+import json
 from sqlalchemy.orm import Session
 import logging
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import Any, Callable, List, Optional
 
-from app.database import get_db, MediaRequest, EpisodeTracking, Notification, User, SessionLocal
+from app.database import (
+    get_db,
+    EpisodeTracking,
+    MediaRequest,
+    Notification,
+    SessionLocal,
+    SharedRequest,
+    User,
+    WebhookEventLog,
+)
 from app.schemas import SonarrWebhook, RadarrWebhook, WebhookResponse
 from app.services.email_service import EmailService
 from app.services.notification_history import (
@@ -159,6 +169,262 @@ def _check_webhook_auth(request: Request):
 
 email_service = EmailService()
 
+_SENSITIVE_PAYLOAD_KEYS = {
+    "api_key",
+    "apikey",
+    "authorization",
+    "cookie",
+    "password",
+    "secret",
+    "token",
+    "x-api-key",
+    "x-plex-token",
+}
+_REPLAY_BLOCKED = {
+    ("jellyseerr", "ISSUE_CREATED"),
+    ("jellyseerr", "ISSUE_COMMENT"),
+}
+
+
+def _model_to_dict(payload: Any) -> dict:
+    if isinstance(payload, dict):
+        return payload
+    if hasattr(payload, "model_dump"):
+        return payload.model_dump()
+    if hasattr(payload, "dict"):
+        return payload.dict()
+    return {}
+
+
+def _sanitize_payload(value: Any):
+    if isinstance(value, dict):
+        sanitized = {}
+        for key, item in value.items():
+            key_text = str(key)
+            key_lower = key_text.lower().replace("-", "_")
+            if any(token in key_lower for token in _SENSITIVE_PAYLOAD_KEYS):
+                sanitized[key_text] = "[redacted]"
+            else:
+                sanitized[key_text] = _sanitize_payload(item)
+        return sanitized
+    if isinstance(value, list):
+        return [_sanitize_payload(item) for item in value[:200]]
+    if isinstance(value, str):
+        return value[:2000]
+    return value
+
+
+def _payload_json(payload: Any, limit: int = 40000) -> str:
+    try:
+        text = json.dumps(_sanitize_payload(_model_to_dict(payload)), default=str, sort_keys=True)
+    except Exception:
+        text = json.dumps({"error": "payload could not be serialized"})
+    if len(text) > limit:
+        return text[:limit] + "...[truncated]"
+    return text
+
+
+def _parse_json_list(value: Optional[str]) -> list[int]:
+    if not value:
+        return []
+    try:
+        parsed = json.loads(value)
+        return [int(item) for item in parsed if item is not None]
+    except Exception:
+        return []
+
+
+def _event_type_for(source_service: str, payload: dict) -> str:
+    if source_service in {"sonarr", "radarr"}:
+        return str(payload.get("eventType") or "unknown")
+    return str(payload.get("notification_type") or payload.get("event") or "unknown")
+
+
+def _infer_media_match(source_service: str, payload: dict) -> tuple[Optional[str], Optional[int]]:
+    if source_service == "sonarr":
+        tmdb_id = (payload.get("series") or {}).get("tmdbId")
+        return "tv", tmdb_id
+    if source_service == "radarr":
+        tmdb_id = (payload.get("movie") or {}).get("tmdbId")
+        return "movie", tmdb_id
+    media = payload.get("media") or {}
+    media_type = media.get("media_type")
+    tmdb_id = media.get("tmdbId")
+    return media_type, tmdb_id
+
+
+def _infer_webhook_matches(source_service: str, payload: dict, db: Session) -> tuple[list[int], list[int]]:
+    media_type, tmdb_id = _infer_media_match(source_service, payload)
+    if not media_type or not tmdb_id:
+        return [], []
+
+    requests = (
+        db.query(MediaRequest)
+        .filter(MediaRequest.media_type == media_type, MediaRequest.tmdb_id == tmdb_id)
+        .all()
+    )
+    request_ids = [request.id for request in requests]
+    user_ids = {request.user_id for request in requests}
+    if request_ids:
+        shared_rows = db.query(SharedRequest).filter(SharedRequest.request_id.in_(request_ids)).all()
+        user_ids.update(row.user_id for row in shared_rows)
+    return request_ids, sorted(user_ids)
+
+
+def _create_webhook_event(
+    source_service: str,
+    event_type: str,
+    payload: Any,
+    client_ip: Optional[str] = None,
+    replay_of_id: Optional[int] = None,
+) -> Optional[int]:
+    db = SessionLocal()
+    try:
+        now = datetime.utcnow()
+        row = WebhookEventLog(
+            source_service=source_service,
+            event_type=event_type,
+            status="received",
+            payload=_payload_json(payload),
+            replay_of_id=replay_of_id,
+            replayed_at=now if replay_of_id else None,
+            client_ip=client_ip,
+            created_at=now,
+        )
+        db.add(row)
+        db.commit()
+        return row.id
+    except Exception as e:
+        logger.warning("webhook event logging failed: %s", e)
+        db.rollback()
+        return None
+    finally:
+        db.close()
+
+
+def _finish_webhook_event(
+    event_id: Optional[int],
+    status: str,
+    result_message: Optional[str] = None,
+    error_message: Optional[str] = None,
+    processed_items: Optional[int] = None,
+    matched_request_ids: Optional[list[int]] = None,
+    matched_user_ids: Optional[list[int]] = None,
+) -> None:
+    if not event_id:
+        return
+    db = SessionLocal()
+    try:
+        row = db.query(WebhookEventLog).filter(WebhookEventLog.id == event_id).first()
+        if not row:
+            return
+        row.status = status
+        row.result_message = result_message
+        row.error_message = str(error_message)[:2000] if error_message else None
+        row.processed_items = processed_items
+        row.matched_request_ids = json.dumps(matched_request_ids or [])
+        row.matched_user_ids = json.dumps(matched_user_ids or [])
+        row.processed_at = datetime.utcnow()
+        db.commit()
+    except Exception as e:
+        logger.warning("webhook event update failed: %s", e)
+        db.rollback()
+    finally:
+        db.close()
+
+
+async def _logged_webhook_dispatch(
+    source_service: str,
+    request: Optional[Request],
+    payload_obj: Any,
+    background_tasks: BackgroundTasks,
+    db: Session,
+    processor: Callable[[Any, BackgroundTasks, Session], Any],
+    replay_of_id: Optional[int] = None,
+) -> WebhookResponse:
+    payload = _model_to_dict(payload_obj)
+    event_type = _event_type_for(source_service, payload)
+    client_ip = None
+    if request is not None:
+        try:
+            from app.auth import get_client_ip
+
+            client_ip = get_client_ip(request)
+        except Exception:
+            client_ip = None
+
+    event_id = _create_webhook_event(
+        source_service,
+        event_type,
+        payload,
+        client_ip=client_ip,
+        replay_of_id=replay_of_id,
+    )
+
+    if replay_of_id and (source_service, event_type) in _REPLAY_BLOCKED:
+        message = "Replay blocked for issue-created/comment webhooks to avoid duplicate reported issues."
+        _finish_webhook_event(event_id, "replay_blocked", result_message=message)
+        return WebhookResponse(success=False, message=message, processed_items=0)
+
+    try:
+        response = await processor(payload_obj, background_tasks, db)
+        try:
+            matched_request_ids, matched_user_ids = _infer_webhook_matches(source_service, payload, db)
+        except Exception:
+            matched_request_ids, matched_user_ids = [], []
+        status = "success" if response.success else "failed"
+        if response.success and str(response.message or "").lower().startswith("ignored"):
+            status = "ignored"
+        _finish_webhook_event(
+            event_id,
+            status,
+            result_message=response.message,
+            processed_items=response.processed_items,
+            matched_request_ids=matched_request_ids,
+            matched_user_ids=matched_user_ids,
+        )
+        return response
+    except HTTPException as e:
+        _finish_webhook_event(event_id, "error", error_message=e.detail)
+        raise
+    except Exception as e:
+        _finish_webhook_event(event_id, "error", error_message=str(e))
+        raise
+
+
+async def replay_webhook_event(
+    event: WebhookEventLog,
+    background_tasks: BackgroundTasks,
+    db: Session,
+) -> WebhookResponse:
+    try:
+        payload = json.loads(event.payload or "{}")
+    except Exception:
+        return WebhookResponse(success=False, message="Stored payload is not valid JSON", processed_items=0)
+
+    source = (event.source_service or "").strip().lower()
+    if source == "sonarr":
+        payload_obj = SonarrWebhook(**payload)
+        processor = _process_sonarr_webhook
+    elif source == "radarr":
+        payload_obj = RadarrWebhook(**payload)
+        processor = _process_radarr_webhook
+    elif source == "jellyseerr":
+        payload_obj = payload
+        processor = _process_jellyseerr_webhook
+    else:
+        return WebhookResponse(success=False, message=f"Replay is not supported for {source}", processed_items=0)
+
+    return await _logged_webhook_dispatch(
+        source,
+        None,
+        payload_obj,
+        background_tasks,
+        db,
+        processor,
+        replay_of_id=event.id,
+    )
+
 
 def _notification_initial_delay() -> timedelta:
     minutes = max(1, min(30, int(settings.notification_initial_delay_minutes or 7)))
@@ -182,6 +448,21 @@ async def sonarr_webhook(
     db: Session = Depends(get_db)
 ):
     _check_webhook_auth(request)
+    return await _logged_webhook_dispatch(
+        "sonarr",
+        request,
+        webhook,
+        background_tasks,
+        db,
+        _process_sonarr_webhook,
+    )
+
+
+async def _process_sonarr_webhook(
+    webhook: SonarrWebhook,
+    background_tasks: BackgroundTasks,
+    db: Session,
+):
     """
     Handle webhooks from Sonarr
     Supported events: Grab, Download, Test
@@ -472,6 +753,21 @@ async def radarr_webhook(
     db: Session = Depends(get_db)
 ):
     _check_webhook_auth(request)
+    return await _logged_webhook_dispatch(
+        "radarr",
+        request,
+        webhook,
+        background_tasks,
+        db,
+        _process_radarr_webhook,
+    )
+
+
+async def _process_radarr_webhook(
+    webhook: RadarrWebhook,
+    background_tasks: BackgroundTasks,
+    db: Session,
+):
     """
     Handle webhooks from Radarr
     Supported events: Grab, Download, Test
@@ -654,6 +950,21 @@ async def jellyseerr_webhook(
     db: Session = Depends(get_db)
 ):
     _check_webhook_auth(request)
+    return await _logged_webhook_dispatch(
+        "jellyseerr",
+        request,
+        webhook,
+        background_tasks,
+        db,
+        _process_jellyseerr_webhook,
+    )
+
+
+async def _process_jellyseerr_webhook(
+    webhook: dict,
+    background_tasks: BackgroundTasks,
+    db: Session,
+):
     """
     Handle webhooks from Seerr for request events and issue reports
     Supports: MEDIA_PENDING, MEDIA_APPROVED, MEDIA_AUTO_APPROVED, MEDIA_AVAILABLE,

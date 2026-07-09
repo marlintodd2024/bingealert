@@ -161,6 +161,13 @@ Implementation notes:
 - Store sanitized payload snapshots with retention limits.
 - Replay should run the same handler path with a replay marker and protection
   against duplicate sends unless the admin explicitly overrides.
+- Initial v3 slice adds the `webhook_event_log` table, sanitized inbox UI,
+  payload viewer, failed/unmatched filters, Daily Home failure jump, and guarded
+  replay for Sonarr/Radarr/Seerr webhooks.
+- Seerr `ISSUE_CREATED` and `ISSUE_COMMENT` replay is blocked for now; those
+  issue paths need stronger issue-level dedupe before manual replay is safe.
+- Setup test helpers remain a follow-up item after the inbox proves out against
+  real webhook traffic.
 
 Exit criteria:
 

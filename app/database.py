@@ -288,6 +288,28 @@ class ServiceHealthEvent(Base):
     checked_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
 
+class WebhookEventLog(Base):
+    """Sanitized webhook receipt and processing history for admin diagnostics."""
+
+    __tablename__ = "webhook_event_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    source_service = Column(String, nullable=False, index=True)
+    event_type = Column(String, nullable=False, index=True)
+    status = Column(String, nullable=False, default="received", index=True)
+    payload = Column(Text, nullable=True)
+    result_message = Column(Text, nullable=True)
+    error_message = Column(Text, nullable=True)
+    matched_request_ids = Column(Text, nullable=True)
+    matched_user_ids = Column(Text, nullable=True)
+    processed_items = Column(Integer, nullable=True)
+    replay_of_id = Column(Integer, nullable=True, index=True)
+    replayed_at = Column(DateTime, nullable=True)
+    client_ip = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    processed_at = Column(DateTime, nullable=True)
+
+
 class AdminActivityLog(Base):
     """Audit trail for admin-triggered and scheduled maintenance actions."""
 
