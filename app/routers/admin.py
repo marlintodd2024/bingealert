@@ -428,6 +428,24 @@ async def send_weekly_ops_report_now():
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+@router.post("/reports/user-digests/send")
+async def send_user_digests_now():
+    """Send user digest rows that are currently eligible for delivery."""
+    try:
+        from app.services.digest_service import send_due_user_digests
+        import asyncio
+
+        asyncio.create_task(send_due_user_digests(force=True))
+        record_admin_activity("user_digests_manual", "Manual user digest delivery started")
+        return {
+            "success": True,
+            "message": "Eligible user digests queued for delivery.",
+        }
+    except Exception as e:
+        logger.error(f"Failed to send user digests: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
 @router.get("/system-health")
 async def get_system_health():
     """Return latest service and worker health snapshot."""
@@ -2215,6 +2233,10 @@ async def get_config():
                 "backup_schedule_enabled": _s.backup_schedule_enabled,
                 "backup_schedule_interval_hours": _s.backup_schedule_interval_hours,
                 "backup_schedule_retention_count": _s.backup_schedule_retention_count,
+                "admin_daily_digest_enabled": _s.admin_daily_digest_enabled,
+                "admin_daily_digest_hour_utc": _s.admin_daily_digest_hour_utc,
+                "user_digest_hour_utc": _s.user_digest_hour_utc,
+                "webhook_event_retention_days": _s.webhook_event_retention_days,
             },
             "issue_autofix": {
                 "mode": _s.issue_autofix_mode,
@@ -2401,6 +2423,13 @@ async def update_config(config: dict, db: Session = Depends(get_db)):
     take(["operations", "backup_schedule_enabled"], "backup_schedule_enabled", transform=bool)
     take(["operations", "backup_schedule_interval_hours"], "backup_schedule_interval_hours", transform=int)
     take(["operations", "backup_schedule_retention_count"], "backup_schedule_retention_count", transform=int)
+    take(["operations", "admin_daily_digest_enabled"], "admin_daily_digest_enabled", transform=bool)
+    take(["operations", "admin_daily_digest_hour_utc"], "admin_daily_digest_hour_utc",
+         transform=bounded_int(0, 23))
+    take(["operations", "user_digest_hour_utc"], "user_digest_hour_utc",
+         transform=bounded_int(0, 23))
+    take(["operations", "webhook_event_retention_days"], "webhook_event_retention_days",
+         transform=bounded_int(1, 3650))
     if config.get("issue_autofix", {}).get("mode") in ("manual", "auto", "auto_notify"):
         updates["issue_autofix_mode"] = config["issue_autofix"]["mode"]
         label_updates.append("ISSUE_AUTOFIX_MODE")

@@ -9,7 +9,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.database import Notification, SessionLocal, SystemConfig
+from app.database import Notification, SessionLocal, SystemConfig, WebhookEventLog
 from app.services.admin_activity import record_admin_activity
 from app.services.backup_service import BackupService
 from app.services.notification_history import backfill_delivery_log_from_notifications
@@ -26,6 +26,16 @@ def purge_sent_notifications(db: Session, days_old: int) -> int:
     deleted = db.query(Notification).filter(
         Notification.sent.is_(True),
         func.coalesce(Notification.sent_at, Notification.created_at) < cutoff,
+    ).delete(synchronize_session=False)
+    return int(deleted or 0)
+
+
+def purge_webhook_events(db: Session, days_old: int) -> int:
+    """Delete sanitized webhook diagnostics after their retention window."""
+    days = max(1, min(int(days_old or 30), 3650))
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    deleted = db.query(WebhookEventLog).filter(
+        WebhookEventLog.created_at < cutoff
     ).delete(synchronize_session=False)
     return int(deleted or 0)
 
@@ -105,6 +115,21 @@ def _run_scheduled_backup(db: Session) -> str | None:
     return backup_path
 
 
+def _run_webhook_retention(db: Session) -> int:
+    state_key = "ops_webhook_retention_last_run"
+    if not _due(_get_state_datetime(db, state_key), 24):
+        return 0
+    deleted = purge_webhook_events(db, settings.webhook_event_retention_days)
+    _set_state_datetime(db, state_key, datetime.utcnow())
+    record_admin_activity(
+        "webhook_retention",
+        f"Purged {deleted} webhook diagnostic event(s)",
+        details={"days": settings.webhook_event_retention_days, "count": deleted},
+        db=db,
+    )
+    return deleted
+
+
 async def run_ops_maintenance_cycle() -> dict[str, object]:
     from app.background.system_health import (
         record_worker_failure,
@@ -121,6 +146,7 @@ async def run_ops_maintenance_cycle() -> dict[str, object]:
     db = SessionLocal()
     try:
         deleted = _run_notification_retention(db)
+        deleted_webhooks = _run_webhook_retention(db)
         backup_path = _run_scheduled_backup(db)
         db.commit()
         record_worker_success(
@@ -129,7 +155,11 @@ async def run_ops_maintenance_cycle() -> dict[str, object]:
             started_at=started_at,
             next_run_at=next_run_at,
         )
-        return {"deleted_notifications": deleted, "backup_path": backup_path}
+        return {
+            "deleted_notifications": deleted,
+            "deleted_webhook_events": deleted_webhooks,
+            "backup_path": backup_path,
+        }
     except Exception as e:
         db.rollback()
         logger.error("operational maintenance failed: %s", e, exc_info=True)

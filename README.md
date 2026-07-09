@@ -6,9 +6,9 @@ A self-hosted notification service for Plex media servers that watches **Jellyse
 ![Docker](https://img.shields.io/badge/docker-ready-brightgreen.svg)
 ![GHCR](https://img.shields.io/badge/ghcr.io-published-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.11-blue.svg)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.109-009688.svg)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.138-009688.svg)
 
-> **v2.0** ships a single-container install with SQLite, a first-run setup wizard, and required auth by default. If you're upgrading from v1.5.x, see [Migrating from v1](#migrating-from-v1).
+> **v3.0** turns BingeAlert into a Plex request operations dashboard while keeping the single-container SQLite install, first-run setup wizard, and required auth defaults introduced in v2. If you're upgrading from v1.5.x, see [Migrating from v1](#migrating-from-v1).
 
 ---
 
@@ -19,6 +19,16 @@ Your friends request movies and shows through Seerr. Sonarr and Radarr download 
 BingeAlert sits between your media stack and your users. It listens to every webhook, waits for Plex to actually index the file, then sends a polished email with a deep link. It also handles the messy edge cases — stuck downloads, failed imports, unreleased content, wrong-quality grabs, and reported issues — so you're not babysitting the stack.
 
 With the v3.0 ops cockpit work, BingeAlert is also the place an admin can answer: what happened after the request, what is still waiting, which notifications failed, and which connected services need attention.
+
+## v3 at a glance
+
+![BingeAlert v3 Daily Admin Home](docs/screenshots/v3-admin-home.png)
+
+The Daily Admin Home keeps the current operating picture and prioritized action queue together without turning the dashboard into a wall of alerts.
+
+![BingeAlert v3 mobile user status portal](docs/screenshots/v3-user-status-mobile.png)
+
+Each user gets a revocable mobile-friendly status page for requests, notification history, calendar access, issue reporting, and delivery preferences.
 
 ---
 
@@ -36,13 +46,13 @@ With the v3.0 ops cockpit work, BingeAlert is also the place an admin can answer
 - **Stuck download detection** — Background worker every 30 min; TBA episode titles are auto-fixed by refreshing metadata, true stalls trigger an admin alert.
 - **System and ops health** — Periodic checks for Plex, Seerr, Sonarr, Radarr, SMTP, workers, acquisition queues, root-folder storage, and import-to-Plex lag.
 - **Pushover push alerts** — Optional admin push notifications for service-health events, availability events, and Seerr issue activity.
-- **User status portal** — Optional magic-link page where users can see their waiting/available requests, upcoming episodes, recent notifications, and notification preferences.
+- **User status portal** — Revocable magic-link page where users can see request status and history, subscribe to their calendar, and choose instant or daily digest delivery, quiet hours, full-season waits, and quality updates.
 - **Shared requests** — Multiple users on a single request all get notified.
 - **Anime routing** — Auto-detects anime via TMDB metadata and routes to a dedicated Sonarr instance.
 - **Maintenance windows** — Schedule downtime with announcement, reminder, and completion emails. Pauses background workers automatically.
 - **Reconciliation** — Catches missed webhooks every 2h.
-- **Operations automation** — Configurable notification batching, sent-notification retention cleanup, scheduled backups, and per-section settings saves.
-- **Daily and weekly admin reports** — Manual sends from the Reports tab; the scheduled Sunday report summarizes request volume, fulfillment time, notification delivery, top requesters, and recurring failures.
+- **Operations automation** — Configurable notification batching, daily admin and user digests, sent-notification and webhook-history retention, scheduled backups, and focused per-section settings saves.
+- **Daily and weekly admin reports** — One-click sends from Reports, optional scheduled daily admin delivery, and a scheduled Sunday report covering request volume, fulfillment time, notification delivery, top requesters, and recurring failures.
 - **First-run wizard** — Web-based setup; no `.env` editing required.
 - **Required auth by default** — bcrypt password + HMAC session cookie + local-network CIDR bypass + optional Cloudflare Turnstile.
 - **PWA** — Installable web app with mobile-friendly admin dashboard.
@@ -127,8 +137,9 @@ If you have multiple Sonarr instances (anime), point both to the same `/webhooks
 
 All configuration lives in `./data/config.json`, written by the setup wizard. To change settings post-install:
 
-1. **Easiest:** edit `./data/config.json` directly, then `docker compose restart`.
-2. **Re-run the wizard:** `rm ./data/config.json && docker compose restart` — your DB and notification history are preserved; the wizard runs again.
+1. **Easiest:** use **Admin → Settings**. Pick one section, save it from the section header, then restart the container for settings that require a reload.
+2. Edit `./data/config.json` directly, then `docker compose restart`.
+3. Re-run the wizard with `rm ./data/config.json && docker compose restart` — your DB and notification history are preserved.
 
 ### Optional environment-variable fallback
 
@@ -148,15 +159,18 @@ To enable Cloudflare Turnstile on the login page, drop your site/secret keys int
 
 ### Operations automation
 
-The admin dashboard's **Settings** tab is organized into anchored sections with save buttons on each section, so you can update operations, batching, email, quality, issue handling, anime routing, reconciliation, auth, security, or connection settings without scrolling to one global save button.
+The admin dashboard's **Settings** tab shows one selected section at a time. Each editable section has one save button in its header, so operations, batching, email, quality, issue handling, anime routing, reconciliation, auth, security, and connection settings no longer form one long page.
 
 Under **Settings → Operations Automation** you can configure:
 
 - **Service Health** — periodic reachability checks for Plex, Seerr, Sonarr, Radarr, SMTP, and supporting services. SMTP failures are shown in System Health and can route to webhooks/Pushover, but BingeAlert does not try to email you through SMTP when SMTP itself is down.
 - **Alert Webhook** — generic JSON, Discord, Slack, or Pushover alert delivery for admin/operator alerts.
-- **Retention & Backups** — automatic sent-notification cleanup and scheduled local backups.
+- **Digest Delivery** — optional daily admin operations email plus the UTC delivery hour used by users who select Digest.
+- **Retention & Backups** — automatic sent-notification cleanup, 30-day sanitized webhook-history retention by default, and scheduled local backups.
 
 Under **Settings → Notification Batching** you can tune the initial availability delay, batching extension window, maximum wait, and processor check frequency. These settings control how long BingeAlert waits for nearby episode imports before sending a consolidated notification.
+
+User digest and full-season preferences are enforced by a dedicated worker. Full-season delivery waits until Sonarr reports that every monitored episode in that season has a file; quiet hours are checked again immediately before the grouped email is sent.
 
 ### Pushover push alerts
 
@@ -211,8 +225,8 @@ If you're running v1.5.x with the Postgres `bingealert-db` container, follow thi
 
 1. **Snapshot prod off-box** — `docker exec bingealert-db pg_dump -U notifyuser notifications > prod.sql`. Also copy your existing `.env`.
 2. **Stop v1** — `docker compose down`.
-3. **Bring up v2** but **don't open the wizard yet** — just let it create an empty `./data/`.
-4. **Stop v2** — `docker compose down`.
+3. **Bring up the current BingeAlert container** but **don't open the wizard yet** — just let it create an empty `./data/`.
+4. **Stop the container** — `docker compose down`.
 5. **Run the migration script** to copy your Postgres data into a fresh SQLite at `./data/bingealert.db`:
 
    ```bash
@@ -225,7 +239,7 @@ If you're running v1.5.x with the Postgres `bingealert-db` container, follow thi
 
    Expect to see `OK` per table and a `TOTAL` row that matches between source and destination.
 6. **Re-run the wizard** to populate `./data/config.json` from your old `.env` values, OR copy `.env` and `env_file: .env` it through Docker Compose.
-7. **Bring v2 up** and verify in the admin dashboard that your users / requests / notifications survived.
+7. **Bring BingeAlert up** and verify in the admin dashboard that your users / requests / notifications survived.
 
 ---
 

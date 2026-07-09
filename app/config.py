@@ -132,6 +132,11 @@ class Settings(BaseSettings):
     backup_schedule_interval_hours: int = 168
     backup_schedule_retention_count: int = 8
 
+    admin_daily_digest_enabled: bool = False
+    admin_daily_digest_hour_utc: int = 9
+    user_digest_hour_utc: int = 9
+    webhook_event_retention_days: int = 30
+
     # 'manual' | 'auto' | 'auto_notify'
     issue_autofix_mode: str = "manual"
 

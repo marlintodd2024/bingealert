@@ -1,4 +1,4 @@
-# BingeAlert v2 - Pre-built image (recommended for self-hosters).
+# BingeAlert v3 - Pre-built image (recommended for self-hosters).
 #
 # Quick start:
 #   1. mkdir -p data && chown 1000:1000 data

@@ -1,7 +1,4 @@
-"""BingeAlert v2 entry point.
-
-Phase 4 in progress: webhooks, health, and the six background workers are
-wired up. Admin endpoints and SSE log streaming come in 4d.
+"""BingeAlert application entry point.
 
 Middleware order (Starlette applies last-added-first, so this reads outside-in):
     SetupGateMiddleware  (added second below; runs first; redirects to /setup
@@ -314,12 +311,15 @@ async def _notification_processor() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info(
-        "BingeAlert v2 starting (configured=%s)", settings.is_minimally_configured()
+        "BingeAlert v%s starting (configured=%s)",
+        __version__,
+        settings.is_minimally_configured(),
     )
 
     tasks: list[asyncio.Task] = []
     if settings.is_minimally_configured():
         from app.background.maintenance_worker import maintenance_window_worker
+        from app.background.digest_worker import digest_delivery_worker
         from app.background.ops_maintenance import ops_maintenance_worker
         from app.background.quality_monitor import quality_release_monitor_worker
         from app.background.reconciliation import reconciliation_worker
@@ -331,6 +331,7 @@ async def lifespan(app: FastAPI):
             ("notification processor", _notification_processor()),
             ("reconciliation worker (every 2h)", reconciliation_worker()),
             ("weekly summary (Sun 9am UTC)", weekly_summary_worker()),
+            ("digest delivery worker", digest_delivery_worker()),
             ("stuck download monitor (every 30m)", stuck_download_monitor()),
             ("quality/release monitor (daily)", quality_release_monitor_worker()),
             ("maintenance window worker (every 60s)", maintenance_window_worker()),
@@ -356,7 +357,7 @@ async def lifespan(app: FastAPI):
             await t
         except asyncio.CancelledError:
             pass
-    logger.info("BingeAlert v2 shut down")
+    logger.info("BingeAlert v%s shut down", __version__)
 
 
 _is_dev = os.getenv("ENVIRONMENT", "production").lower() != "production"
@@ -405,7 +406,7 @@ async def service_worker():
 
 @app.get("/")
 async def root(request: Request):
-    """Placeholder root. Phase 4d replaces this with the admin dashboard."""
+    """Serve the admin dashboard once setup is complete."""
     if not settings.is_minimally_configured():
         return JSONResponse(
             status_code=503,
@@ -417,9 +418,9 @@ async def root(request: Request):
     return JSONResponse(
         content={
             "service": "BingeAlert",
-            "version": "2.0.0-dev",
+            "version": __version__,
             "status": "configured",
-            "note": "Admin dashboard is being ported in Phase 4d.",
+            "note": "Admin dashboard asset is unavailable.",
         }
     )
 

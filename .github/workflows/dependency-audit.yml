@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - v2
+      - 'codex/**'
   pull_request:
   schedule:
     - cron: "24 9 * * 1"

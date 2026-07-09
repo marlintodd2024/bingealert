@@ -1,4 +1,4 @@
-# BingeAlert v2 - Local development (builds from source).
+# BingeAlert v3 - Local development (builds from source).
 #
 # Quick start:
 #   1. mkdir -p data && chown 1000:1000 data

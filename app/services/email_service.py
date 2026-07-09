@@ -9,8 +9,7 @@ from datetime import datetime, time as dt_time, timedelta
 from app.config import normalize_smtp_security, settings
 from app.database import EpisodeTracking, Notification, User
 from app.services.notification_history import (
-    delivery_entries_for_notification,
-    record_delivery_for_notification,
+    mark_notification_delivered,
 )
 
 logger = logging.getLogger(__name__)
@@ -85,30 +84,7 @@ def Template(source):  # noqa: N802 -- preserve the existing call sites
 
 def _record_successful_delivery(db, notification: Notification, sent_at: datetime) -> None:
     """Persist durable dedupe state after an email sends successfully."""
-    record_delivery_for_notification(db, notification, sent_at=sent_at)
-    if notification.notification_type == "movie" and notification.request:
-        notification.request.status = "available"
-        return
-
-    if notification.notification_type != "episode":
-        return
-
-    for entry in delivery_entries_for_notification(notification):
-        if entry["notification_type"] != "episode":
-            continue
-        if entry["season_number"] is None or entry["episode_number"] is None:
-            continue
-        query = db.query(EpisodeTracking).filter(
-            EpisodeTracking.request_id == notification.request_id,
-            EpisodeTracking.season_number == entry["season_number"],
-            EpisodeTracking.episode_number == entry["episode_number"],
-        )
-        if entry["series_id"] is not None:
-            query = query.filter(EpisodeTracking.series_id == entry["series_id"])
-        tracking = query.first()
-        if tracking:
-            tracking.notified = True
-            tracking.available_in_plex = True
+    mark_notification_delivered(db, notification, sent_at=sent_at)
 
 
 class EmailService:
@@ -359,6 +335,7 @@ class EmailService:
         active_notifications = []
         skipped_inactive = 0
         deferred_quiet = 0
+        deferred_batch = 0
         for n in ready_notifications:
             if hasattr(n.user, 'is_active') and not n.user.is_active:
                 # Mark as sent to clear the queue (don't keep retrying for inactive users)
@@ -366,6 +343,11 @@ class EmailService:
                 n.error_message = "Skipped — user deactivated"
                 skipped_inactive += 1
             else:
+                from app.services.digest_service import should_defer_to_user_batch
+
+                if should_defer_to_user_batch(n):
+                    deferred_batch += 1
+                    continue
                 quiet_until = _quiet_hours_until(n.user, now)
                 if quiet_until:
                     n.send_after = quiet_until
@@ -379,6 +361,11 @@ class EmailService:
                 logger.info(f"Skipped {skipped_inactive} notification(s) for inactive users")
             if deferred_quiet:
                 logger.info(f"Deferred {deferred_quiet} notification(s) for user quiet hours")
+        if deferred_batch:
+            logger.info(
+                "Handed %s notification(s) to digest/full-season delivery",
+                deferred_batch,
+            )
         
         ready_notifications = active_notifications
         if not ready_notifications:
@@ -386,15 +373,19 @@ class EmailService:
         
         logger.info(f"Found {len(ready_notifications)} notifications ready to process")
         
-        # Smart batching: Group TV episodes by user + series
-        # Check Sonarr queue to see if more episodes are coming
-        from app.services.sonarr_service import SonarrService, get_all_sonarr_instances
-        sonarr_instances = get_all_sonarr_instances()
-        
         # Separate TV episodes from movies and other notification types
         tv_notifications = [n for n in ready_notifications if n.notification_type == "episode" and n.series_id]
         movie_notifications = [n for n in ready_notifications if n.notification_type == "movie"]
         other_notifications = [n for n in ready_notifications if n.notification_type in ("quality_waiting", "coming_soon", "weekly_summary", "issue_resolved", "issue_reported_admin")]
+
+        # Only initialize Sonarr clients when episode batching actually needs
+        # them. Movie and informational mail should not depend on Sonarr config.
+        if tv_notifications:
+            from app.services.sonarr_service import get_all_sonarr_instances
+
+            sonarr_instances = get_all_sonarr_instances()
+        else:
+            sonarr_instances = []
         
         # Process TV episodes with smart batching
         processed_tv = set()
@@ -497,7 +488,6 @@ class EmailService:
                 # Get poster from one of the notifications (they're all the same series)
                 # We'll use the body from the first notification but update episode list
                 from app.services.tmdb_service import TMDBService
-                from app.config import settings
                 tmdb_service = TMDBService(settings.jellyseerr_url, settings.jellyseerr_api_key)
                 poster_url = await tmdb_service.get_tv_poster(notif.request.tmdb_id)
                 

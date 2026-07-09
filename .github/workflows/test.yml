@@ -1,0 +1,39 @@
+name: Test
+
+on:
+  push:
+    branches:
+      - main
+      - v2
+      - 'codex/**'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip -r requirements.txt
+
+      - name: Compile application
+        run: python -m compileall -q app alembic tests
+
+      - name: Run release-candidate tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Parse static JavaScript
+        run: |
+          node -e "const fs=require('fs'),vm=require('vm'); for (const f of ['app/static/admin.html','app/static/user_status.html']) { const html=fs.readFileSync(f,'utf8'); const scripts=[...html.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/gi)].map(m=>m[1]); scripts.forEach((s,i)=>new vm.Script(s,{filename:f+'#script-'+(i+1)})); }"
+          node --check app/static/service-worker.js

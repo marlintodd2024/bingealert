@@ -55,6 +55,7 @@ def _preference_dict(user: User) -> dict[str, Any]:
         "notify_quality_upgrades": bool(getattr(user, "notify_quality_upgrades", True)),
         "preferred_channel": getattr(user, "preferred_channel", None) or "email",
         "available_channels": sorted(_CHANNELS),
+        "digest_hour_utc": max(0, min(23, int(settings.user_digest_hour_utc or 0))),
     }
 
 

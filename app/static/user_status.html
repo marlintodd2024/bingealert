@@ -610,6 +610,11 @@
         }
 
         function renderPreferences(prefs) {
+            const digestOption = document.querySelector('#notificationMode option[value="digest"]');
+            if (digestOption) {
+                const hour = String(prefs.digest_hour_utc ?? 9).padStart(2, '0');
+                digestOption.textContent = `Digest (daily at ${hour}:00 UTC)`;
+            }
             document.getElementById('notificationMode').value = prefs.notification_mode || 'instant';
             document.getElementById('preferredChannel').value = prefs.preferred_channel || 'email';
             document.getElementById('quietStart').value = prefs.quiet_hours_start || '22:00';

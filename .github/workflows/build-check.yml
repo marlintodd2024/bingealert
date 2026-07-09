@@ -9,6 +9,7 @@ on:
     branches:
       - main
       - v2
+      - 'codex/**'
   pull_request:
   workflow_dispatch:
 

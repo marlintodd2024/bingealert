@@ -9,7 +9,7 @@ from typing import Iterable
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
-from app.database import Notification, NotificationDeliveryLog
+from app.database import EpisodeTracking, Notification, NotificationDeliveryLog
 
 
 logger = logging.getLogger(__name__)
@@ -135,6 +135,38 @@ def record_delivery_for_notification(
         ):
             count += 1
     return count
+
+
+def mark_notification_delivered(
+    db: Session,
+    notification: Notification,
+    *,
+    sent_at: datetime,
+) -> None:
+    """Update durable dedupe and request/episode delivery state together."""
+    record_delivery_for_notification(db, notification, sent_at=sent_at)
+    if notification.notification_type == "movie" and notification.request:
+        notification.request.status = "available"
+        return
+    if notification.notification_type != "episode":
+        return
+
+    for entry in delivery_entries_for_notification(notification):
+        season_number = entry.get("season_number")
+        episode_number = entry.get("episode_number")
+        if season_number is None or episode_number is None:
+            continue
+        query = db.query(EpisodeTracking).filter(
+            EpisodeTracking.request_id == notification.request_id,
+            EpisodeTracking.season_number == season_number,
+            EpisodeTracking.episode_number == episode_number,
+        )
+        if entry.get("series_id") is not None:
+            query = query.filter(EpisodeTracking.series_id == entry["series_id"])
+        tracking = query.first()
+        if tracking:
+            tracking.notified = True
+            tracking.available_in_plex = True
 
 
 def backfill_delivery_log_from_notifications(db: Session) -> int:

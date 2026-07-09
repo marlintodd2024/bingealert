@@ -257,8 +257,8 @@ Implementation notes:
   `public_base_url` is configured. Calendar links remain separately revocable
   through `calendar_token`.
 - Quiet hours are enforced by the notification processor for opted-in users.
-  Digest delivery and full-season-only delivery are stored preferences in this
-  slice; the actual digest/full-season batching worker remains follow-up work.
+- Phase 7 completes digest delivery, full-season waits, and quality-update
+  preference enforcement through the shared digest worker.
 
 Exit criteria:
 
@@ -308,9 +308,8 @@ Implementation notes:
 - The README now frames BingeAlert as a Plex request ops dashboard, adds a
   quick demo path, and positions the project alongside Seerr, Sonarr/Radarr,
   Tautulli, Notifiarr, and broad alert hubs.
-- Optional user digest remains follow-up work. Phase 5 added the per-user
-  portal/preferences foundation, but digest batching/delivery should ship as a
-  smaller focused slice after v3.0 core reporting is validated.
+- User digest and full-season batching ship in the Phase 7 release-candidate
+  pass, using the preferences introduced in Phase 5.
 - Final screenshots should be captured from a populated v3.0 instance before
   tagging the public release.
 
@@ -320,6 +319,55 @@ Exit criteria:
   - "Your Plex request ops dashboard"
   - "Know what happened after the request"
   - "Debug notification gaps in one place"
+
+---
+
+## Phase 7 - Release Candidate and Launch Hardening
+
+Purpose: close exposed-but-inert preferences, verify upgrades, and make the
+branch safe to publish as `v3.0.0`.
+
+Delivered:
+
+- Scheduled digest worker:
+  - optional daily admin operations digest
+  - daily grouped user digest at a configurable UTC hour
+  - quiet-hour recheck before delivery
+  - full-season waits based on monitored Sonarr episode file state
+  - manual user-digest run from Reports
+- Notification consistency:
+  - digest/full-season rows are handed off by the normal processor
+  - coming-soon mail uses the shared queue instead of bypassing preferences
+  - quality-update opt-outs are enforced
+  - successful grouped sends update the durable dedupe ledger and tracking state
+- Operations hardening:
+  - SMTP health alerts are regression-tested to never use SMTP email
+  - sanitized webhook events default to 30-day retention
+  - notification processing no longer initializes Sonarr for movie-only mail
+  - fixed a local `settings` shadow that crashed normal notification delivery
+- Interface hardening:
+  - Settings shows one section at a time
+  - each editable section has exactly one immediately visible save action
+  - desktop and mobile checks found no page-level horizontal overflow
+- Release verification:
+  - standard-library regression suite for digests, season completion, dedupe,
+    SMTP alert routing, webhook sanitization/retention, and quality preferences
+  - real Alembic upgrade test from `0005_notification_delivery_log` through head
+  - CI test workflow on pull requests and `codex/**` branches
+
+Release decisions:
+
+- Webhook payloads are stored sanitized-only and pruned after 30 days by default.
+- User status pages remain token-authenticated, enabled by default, and revocable.
+- v3.0 remains SQLite-only; Postgres guidance is deferred until real event-history
+  volume demonstrates a need.
+
+Exit criteria:
+
+- Fresh schema and `v2.3.5` upgrade tests pass.
+- Notification delivery preferences affect runtime behavior.
+- Desktop/mobile dashboard and user portal checks pass without incoherent overlap.
+- Prod drift check passes immediately before the public tag is created.
 
 ---
 
@@ -343,14 +391,10 @@ building the core phases.
 3. `v3.0-beta1` - Webhook Inbox and Replay.
 4. `v3.0-beta2` - Queue, Import, and Storage Health.
 5. `v3.0-rc1` - User Status and Preferences.
-6. `v3.0` - Digests, docs, screenshots, and release polish.
+6. `v3.0-rc1` - Digests, reports, preferences, and release hardening.
+7. `v3.0` - Drift check, final package verification, tag, and public release.
 
 ## Open Decisions
 
-- Should raw webhook payloads be stored encrypted, sanitized-only, or not at all?
-- How long should timeline and webhook diagnostic rows be retained by default?
-- Should user status pages be enabled by default or opt-in?
-- Should v3.0 keep SQLite-only support, or add optional Postgres guidance for
-  heavier event histories?
 - Which push provider should follow Pushover first: ntfy, Gotify, Discord, or
   Apprise?

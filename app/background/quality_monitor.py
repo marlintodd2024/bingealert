@@ -374,34 +374,21 @@ class QualityReleaseMonitor:
         else:
             subject += f" - Premieres {formatted_date}"
         
-        # Create notification record
+        # Queue through the shared processor so quiet hours, digest mode, and
+        # SMTP retry behavior are consistent with every other user message.
         notification = Notification(
             user_id=user.id,
             request_id=request.id,
             notification_type="coming_soon",
             subject=subject,
             body=html_body,
-            sent=False
+            sent=False,
+            send_after=datetime.utcnow(),
         )
         db.add(notification)
         db.commit()
-        
-        # Send immediately
-        try:
-            await self.email_service.send_email(
-                to_email=user.email,
-                subject=subject,
-                html_body=html_body
-            )
-            notification.sent = True
-            notification.sent_at = datetime.now(timezone.utc)
-            db.commit()
-            
-            logger.info(f"Sent 'coming soon' notification for {request.title} to {user.email}")
-        except Exception as e:
-            logger.error(f"Failed to send coming soon notification: {e}")
-            notification.error_message = str(e)
-            db.commit()
+
+        logger.info("Queued 'coming soon' notification for %s to %s", request.title, user.email)
     
     async def _send_quality_waiting_notification(
         self,
@@ -410,16 +397,21 @@ class QualityReleaseMonitor:
         db: Session
     ):
         """Send 'waiting for quality' notification"""
-        
+        user = request.user
+        if not bool(getattr(user, "notify_quality_upgrades", True)):
+            logger.info(
+                "Skipped quality update for %s because %s disabled quality updates",
+                request.title,
+                user.email,
+            )
+            return
+
         # Get poster
         poster_url = None
         if request.media_type == 'tv':
             poster_url = await self.tmdb.get_tv_poster(request.tmdb_id)
         else:
             poster_url = await self.tmdb.get_movie_poster(request.tmdb_id)
-        
-        # Get user
-        user = request.user
         
         # Create HTML email
         html_body = self.email_service.render_quality_waiting_notification(

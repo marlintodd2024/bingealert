@@ -988,11 +988,20 @@
             background: rgba(229, 160, 13, 0.12);
             color: #f4c542;
         }
+        .settings-nav a.active {
+            background: rgba(229, 160, 13, 0.16);
+            color: #f4c542;
+            box-shadow: inset 2px 0 0 #e5a00d;
+        }
         .settings-content {
             min-width: 0;
         }
         .settings-section {
+            display: none;
             scroll-margin-top: 18px;
+        }
+        .settings-section.active {
+            display: block;
         }
         .settings-section-header {
             display: flex;
@@ -3256,6 +3265,7 @@
                 <button onclick="loadOpsReport(true)" id="reportRefreshBtn" class="secondary">🔄 Refresh</button>
                 <button onclick="sendAdminReport('daily')" id="dailyDigestBtn" class="secondary">📬 Send Daily Digest</button>
                 <button onclick="sendAdminReport('weekly')" id="weeklyReportBtn" class="secondary">📊 Send Weekly Report</button>
+                <button onclick="sendUserDigests()" id="userDigestBtn" class="secondary">📨 Run User Digests</button>
             </div>
 
             <div class="report-meta" id="reportGenerated">Loading operations report...</div>
@@ -3554,7 +3564,7 @@
                 </nav>
                 <div class="settings-content">
             <!-- System Updates Section -->
-            <div id="settings-updates" class="settings-card settings-section" style="background: rgba(255, 255, 255, 0.05);">
+            <div id="settings-updates" class="settings-card settings-section active" style="background: rgba(255, 255, 255, 0.05);">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; flex-wrap: wrap;">
                     <div>
                         <h3 style="margin-bottom: 8px; color: #e5a00d;">⬆️ System & Updates</h3>
@@ -3713,6 +3723,27 @@
                     </div>
                 </div>
 
+                <h4 style="margin: 0 0 12px; color: #fff; font-size: 14px;">Digest Delivery</h4>
+                <div class="settings-grid" style="margin-bottom: 18px;">
+                    <div class="settings-field">
+                        <label>Daily Admin Digest</label>
+                        <div class="inline-switch">
+                            <input type="checkbox" id="config-admin-daily-digest-enabled">
+                            <span>Send the 24-hour operations digest automatically</span>
+                        </div>
+                    </div>
+                    <div class="settings-field">
+                        <label>Admin Digest Hour</label>
+                        <input type="number" id="config-admin-daily-digest-hour" min="0" max="23">
+                        <small>UTC hour, from 0 through 23.</small>
+                    </div>
+                    <div class="settings-field">
+                        <label>User Digest Hour</label>
+                        <input type="number" id="config-user-digest-hour" min="0" max="23">
+                        <small>UTC hour for users who selected Digest.</small>
+                    </div>
+                </div>
+
                 <h4 style="margin: 0 0 12px; color: #fff; font-size: 14px;">Retention & Backups</h4>
                 <div class="settings-grid">
                     <div class="settings-field">
@@ -3731,6 +3762,11 @@
                         <label>Purge Interval</label>
                         <input type="number" id="config-notification-retention-interval" min="1" max="720">
                         <small>Hours between automatic purge runs.</small>
+                    </div>
+                    <div class="settings-field">
+                        <label>Webhook Event History</label>
+                        <input type="number" id="config-webhook-event-retention-days" min="1" max="3650">
+                        <small>Days to retain sanitized webhook diagnostics.</small>
                     </div>
                     <div class="settings-field">
                         <label>Scheduled Backups</label>
@@ -4450,7 +4486,6 @@
             <div class="settings-save-row">
                 <button onclick="loadConfig()" class="secondary" style="margin-right: 10px;">↻ Reload</button>
                 <button onclick="restartContainer()" style="background: #ff9800; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; margin-right: 10px;">🔄 Restart</button>
-                <button onclick="saveConfig()" id="saveConfigBtn">💾 Save All</button>
             </div>
                 </div>
             </div>
@@ -5381,6 +5416,54 @@
         function invalidateTabCache(tab) {
             if (tab) tabCache[tab] = false;
             else Object.keys(tabCache).forEach(k => tabCache[k] = false);
+        }
+
+        function showSettingsSection(sectionId, updateHash = true) {
+            const requested = document.getElementById(sectionId);
+            const section = requested?.classList.contains('settings-section')
+                ? requested
+                : document.getElementById('settings-updates');
+            if (!section) return;
+
+            document.querySelectorAll('#settingsTab .settings-section').forEach(item => {
+                item.classList.toggle('active', item === section);
+            });
+            document.querySelectorAll('#settingsTab .settings-nav a').forEach(link => {
+                link.classList.toggle('active', link.getAttribute('href') === `#${section.id}`);
+            });
+            if (updateHash && window.history?.replaceState) {
+                window.history.replaceState(null, '', `#${section.id}`);
+            }
+            section.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        }
+
+        function initializeSettingsSections() {
+            document.querySelectorAll('#settingsTab .settings-section').forEach(section => {
+                const footer = section.querySelector('.settings-section-footer');
+                const button = footer?.querySelector('button');
+                const header = section.querySelector('.settings-section-header');
+                if (button && header) {
+                    let actions = header.querySelector('.settings-section-actions');
+                    if (!actions) {
+                        actions = document.createElement('div');
+                        actions.className = 'settings-section-actions';
+                        header.appendChild(actions);
+                    }
+                    actions.appendChild(button);
+                    footer.remove();
+                }
+            });
+
+            document.querySelectorAll('#settingsTab .settings-nav a').forEach(link => {
+                link.addEventListener('click', event => {
+                    event.preventDefault();
+                    showSettingsSection(link.getAttribute('href').slice(1));
+                });
+            });
+            const initialId = window.location.hash.startsWith('#settings-')
+                ? window.location.hash.slice(1)
+                : 'settings-updates';
+            showSettingsSection(initialId, false);
         }
 
         async function loadUsers(force) {
@@ -6750,6 +6833,26 @@
             }
         }
 
+        async function sendUserDigests() {
+            const btn = document.getElementById('userDigestBtn');
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = '⏳ Running Digests...';
+            }
+            try {
+                const response = await fetch(`${API_BASE}/admin/reports/user-digests/send`, { method: 'POST' });
+                const data = await readJsonResponse(response, 'User digest request failed');
+                showSuccess(data.message || 'Eligible user digests queued for delivery.');
+            } catch (error) {
+                showError('Failed to run user digests: ' + error.message);
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = '📨 Run User Digests';
+                }
+            }
+        }
+
         function showActivityView(view) {
             activityViewMode = view === 'logs' ? 'logs' : 'feed';
             const feedView = document.getElementById('activityFeedView');
@@ -8075,6 +8178,10 @@
                     document.getElementById('config-backup-schedule-enabled').checked = config.operations.backup_schedule_enabled === true;
                     document.getElementById('config-backup-schedule-interval').value = config.operations.backup_schedule_interval_hours || '168';
                     document.getElementById('config-backup-schedule-retention').value = config.operations.backup_schedule_retention_count || '8';
+                    document.getElementById('config-admin-daily-digest-enabled').checked = config.operations.admin_daily_digest_enabled === true;
+                    document.getElementById('config-admin-daily-digest-hour').value = config.operations.admin_daily_digest_hour_utc ?? '9';
+                    document.getElementById('config-user-digest-hour').value = config.operations.user_digest_hour_utc ?? '9';
+                    document.getElementById('config-webhook-event-retention-days').value = config.operations.webhook_event_retention_days || '30';
                 }
                 
                 // Populate Quality Monitoring fields
@@ -8305,7 +8412,11 @@
                         notification_retention_interval_hours: configInt('config-notification-retention-interval', 24),
                         backup_schedule_enabled: document.getElementById('config-backup-schedule-enabled').checked,
                         backup_schedule_interval_hours: configInt('config-backup-schedule-interval', 168),
-                        backup_schedule_retention_count: configInt('config-backup-schedule-retention', 8)
+                        backup_schedule_retention_count: configInt('config-backup-schedule-retention', 8),
+                        admin_daily_digest_enabled: document.getElementById('config-admin-daily-digest-enabled').checked,
+                        admin_daily_digest_hour_utc: configInt('config-admin-daily-digest-hour', 9),
+                        user_digest_hour_utc: configInt('config-user-digest-hour', 9),
+                        webhook_event_retention_days: configInt('config-webhook-event-retention-days', 30)
                     }
                 })
             };
@@ -8320,8 +8431,7 @@
         async function saveConfig(section = 'all', triggerButton = null) {
             const btn = triggerButton
                 || document.querySelector(`[data-save-section="${section}"]`)
-                || document.querySelector(`[data-save-section="${section}-footer"]`)
-                || document.getElementById('saveConfigBtn');
+                || document.querySelector(`[data-save-section="${section}-footer"]`);
             const originalText = btn ? btn.textContent : '';
             const scrollY = window.scrollY;
             if (btn) {
@@ -8593,6 +8703,7 @@
             // place. Then lazy-load: only stats + the visible tab; the rest
             // load on first switchTab().
             restorePersistedState();
+            initializeSettingsSections();
             loadStats();
             const activeTab = document.querySelector('.tab-content.active');
             const activeId = activeTab ? activeTab.id.replace(/Tab$/, '') : 'users';
