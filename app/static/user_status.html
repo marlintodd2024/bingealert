@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#111318">
+    <title>BingeAlert Status</title>
+    <style>
+        :root {
+            --bg: #111318;
+            --panel: rgba(255, 255, 255, 0.055);
+            --panel-strong: rgba(255, 255, 255, 0.085);
+            --border: rgba(255, 255, 255, 0.11);
+            --border-soft: rgba(255, 255, 255, 0.07);
+            --text: #eceff3;
+            --muted: #a4a8b1;
+            --dim: #747984;
+            --accent: #e2a532;
+            --success: #4caf50;
+            --warning: #ff9800;
+            --error: #f44336;
+            --info: #2196f3;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: linear-gradient(180deg, #101114 0%, var(--bg) 100%);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.45;
+        }
+
+        .shell {
+            width: min(1120px, calc(100% - 28px));
+            margin: 0 auto;
+            padding: 22px 0 36px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 18px;
+            padding: 22px;
+            margin-bottom: 16px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--panel);
+        }
+
+        h1 {
+            margin: 0 0 6px;
+            color: var(--accent);
+            font-size: clamp(24px, 4vw, 36px);
+            line-height: 1.08;
+        }
+
+        h2 {
+            margin: 0 0 12px;
+            color: var(--text);
+            font-size: 18px;
+            line-height: 1.25;
+        }
+
+        .subtitle {
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        a.button,
+        button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 38px;
+            padding: 9px 13px;
+            border: 1px solid rgba(226, 165, 50, 0.35);
+            border-radius: 8px;
+            background: rgba(226, 165, 50, 0.14);
+            color: var(--accent);
+            font: inherit;
+            font-size: 13px;
+            font-weight: 700;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        button.secondary,
+        a.button.secondary {
+            border-color: var(--border);
+            background: rgba(255, 255, 255, 0.055);
+            color: var(--text);
+        }
+
+        button:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .metric {
+            min-height: 78px;
+            padding: 13px;
+            border: 1px solid var(--border-soft);
+            border-radius: 8px;
+            background: var(--panel);
+        }
+
+        .metric-label {
+            margin-bottom: 7px;
+            color: var(--muted);
+            font-size: 10px;
+            font-weight: 750;
+            letter-spacing: 0.55px;
+            text-transform: uppercase;
+        }
+
+        .metric-value {
+            color: var(--accent);
+            font-size: 26px;
+            font-weight: 850;
+            line-height: 1;
+        }
+
+        section {
+            margin-bottom: 16px;
+            padding: 18px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--panel);
+        }
+
+        .section-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .segmented {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .segmented button {
+            min-height: 34px;
+            padding: 7px 10px;
+            border-color: var(--border);
+            background: rgba(255, 255, 255, 0.045);
+            color: var(--muted);
+        }
+
+        .segmented button.active {
+            border-color: rgba(226, 165, 50, 0.45);
+            background: rgba(226, 165, 50, 0.16);
+            color: var(--accent);
+        }
+
+        .request-list {
+            display: grid;
+            gap: 10px;
+        }
+
+        .request-item {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 12px;
+            padding: 13px;
+            border: 1px solid var(--border-soft);
+            border-left: 4px solid var(--dim);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.035);
+        }
+
+        .request-item.available { border-left-color: var(--success); }
+        .request-item.downloaded { border-left-color: var(--info); }
+        .request-item.waiting { border-left-color: var(--warning); }
+        .request-item.pending { border-left-color: var(--dim); }
+
+        .request-title {
+            margin-bottom: 5px;
+            font-weight: 800;
+            overflow-wrap: anywhere;
+        }
+
+        .request-meta,
+        .request-detail,
+        .small {
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .request-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            min-height: 24px;
+            padding: 4px 8px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.075);
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: capitalize;
+        }
+
+        .pill.available { color: var(--success); }
+        .pill.downloaded { color: var(--info); }
+        .pill.waiting { color: var(--warning); }
+        .pill.pending { color: var(--muted); }
+        .pill.sent { color: var(--success); }
+        .pill.failed { color: var(--error); }
+
+        .table-wrap {
+            overflow-x: auto;
+            border: 1px solid var(--border-soft);
+            border-radius: 8px;
+        }
+
+        table {
+            width: 100%;
+            min-width: 720px;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            padding: 11px 12px;
+            border-bottom: 1px solid var(--border-soft);
+            text-align: left;
+            vertical-align: top;
+            font-size: 13px;
+        }
+
+        th {
+            color: var(--muted);
+            background: rgba(255, 255, 255, 0.04);
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        tr:last-child td {
+            border-bottom: 0;
+        }
+
+        .prefs-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+            gap: 12px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 6px;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        input,
+        select {
+            width: 100%;
+            min-height: 40px;
+            padding: 9px 10px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.065);
+            color: var(--text);
+            font: inherit;
+        }
+
+        select option {
+            background: #1d2028;
+            color: var(--text);
+        }
+
+        .check-row {
+            display: flex;
+            gap: 9px;
+            align-items: center;
+            min-height: 40px;
+        }
+
+        .check-row input {
+            width: 18px;
+            min-height: 18px;
+        }
+
+        .form-actions {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-top: 14px;
+            flex-wrap: wrap;
+        }
+
+        .toast {
+            position: fixed;
+            right: 16px;
+            bottom: 16px;
+            max-width: min(420px, calc(100vw - 32px));
+            padding: 12px 14px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: #1a1d24;
+            color: var(--text);
+            box-shadow: 0 16px 42px rgba(0, 0, 0, 0.35);
+            display: none;
+            z-index: 20;
+        }
+
+        .empty {
+            padding: 24px;
+            color: var(--muted);
+            text-align: center;
+        }
+
+        @media (max-width: 760px) {
+            .shell {
+                width: min(100% - 18px, 1120px);
+                padding-top: 10px;
+            }
+
+            header,
+            .section-head,
+            .request-item {
+                display: block;
+            }
+
+            .header-actions,
+            .request-actions {
+                justify-content: flex-start;
+                margin-top: 12px;
+            }
+
+            section {
+                padding: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main class="shell">
+        <header>
+            <div>
+                <h1 id="pageTitle">BingeAlert Status</h1>
+                <div class="subtitle" id="pageSubtitle">Loading your requests...</div>
+            </div>
+            <div class="header-actions">
+                <a class="button secondary" id="calendarLink" href="#" style="display:none;">Calendar</a>
+                <a class="button secondary" id="seerrLink" href="#" target="_blank" rel="noopener" style="display:none;">Report Issue</a>
+                <button class="secondary" id="refreshBtn" type="button">Refresh</button>
+            </div>
+        </header>
+
+        <div class="summary">
+            <div class="metric">
+                <div class="metric-label">Active</div>
+                <div class="metric-value" id="metricActive">-</div>
+            </div>
+            <div class="metric">
+                <div class="metric-label">Waiting</div>
+                <div class="metric-value" id="metricWaiting">-</div>
+            </div>
+            <div class="metric">
+                <div class="metric-label">Downloaded</div>
+                <div class="metric-value" id="metricDownloaded">-</div>
+            </div>
+            <div class="metric">
+                <div class="metric-label">Available</div>
+                <div class="metric-value" id="metricAvailable">-</div>
+            </div>
+        </div>
+
+        <section>
+            <div class="section-head">
+                <h2>Requests</h2>
+                <div class="segmented" id="requestFilters">
+                    <button type="button" data-filter="active" class="active">Active</button>
+                    <button type="button" data-filter="all">All</button>
+                    <button type="button" data-filter="available">Available</button>
+                </div>
+            </div>
+            <div class="request-list" id="requestList">
+                <div class="empty">Loading requests...</div>
+            </div>
+        </section>
+
+        <section>
+            <h2>Notification History</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Created</th>
+                            <th>Title</th>
+                            <th>Type</th>
+                            <th>Status</th>
+                            <th>Delivery</th>
+                        </tr>
+                    </thead>
+                    <tbody id="notificationBody">
+                        <tr><td colspan="5" class="empty">Loading notifications...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section>
+            <div class="section-head">
+                <h2>Preferences</h2>
+                <span class="small" id="prefStatus"></span>
+            </div>
+            <form id="preferencesForm">
+                <div class="prefs-grid">
+                    <div>
+                        <label for="notificationMode">Notification Mode</label>
+                        <select id="notificationMode" name="notification_mode">
+                            <option value="instant">Instant</option>
+                            <option value="digest">Digest</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="preferredChannel">Delivery Channel</label>
+                        <select id="preferredChannel" name="preferred_channel">
+                            <option value="email">Email</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="quietStart">Quiet Start</label>
+                        <input id="quietStart" name="quiet_hours_start" type="time" value="22:00">
+                    </div>
+                    <div>
+                        <label for="quietEnd">Quiet End</label>
+                        <input id="quietEnd" name="quiet_hours_end" type="time" value="07:00">
+                    </div>
+                    <label class="check-row">
+                        <input id="quietEnabled" name="quiet_hours_enabled" type="checkbox">
+                        <span>Enable quiet hours</span>
+                    </label>
+                    <label class="check-row">
+                        <input id="fullSeasonOnly" name="notify_full_season_only" type="checkbox">
+                        <span>Wait for full seasons</span>
+                    </label>
+                    <label class="check-row">
+                        <input id="qualityUpgrades" name="notify_quality_upgrades" type="checkbox">
+                        <span>Quality updates</span>
+                    </label>
+                </div>
+                <div class="form-actions">
+                    <span class="small">Quiet hours use the BingeAlert server clock.</span>
+                    <button id="savePrefsBtn" type="submit">Save Preferences</button>
+                </div>
+            </form>
+        </section>
+    </main>
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const token = decodeURIComponent(window.location.pathname.split('/').filter(Boolean).pop() || '');
+        let statusData = null;
+        let currentFilter = 'active';
+
+        function escapeHtml(value) {
+            const div = document.createElement('div');
+            div.textContent = value == null ? '' : String(value);
+            return div.innerHTML;
+        }
+
+        function escapeAttr(value) {
+            return escapeHtml(value).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        function formatDateTime(value) {
+            if (!value) return '-';
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return '-';
+            return date.toLocaleString();
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.style.display = 'block';
+            clearTimeout(showToast._timer);
+            showToast._timer = setTimeout(() => { toast.style.display = 'none'; }, 3500);
+        }
+
+        function stateLabel(state) {
+            const labels = {
+                pending: 'Pending',
+                waiting: 'Waiting',
+                downloaded: 'Downloaded',
+                available: 'Available',
+                declined: 'Declined'
+            };
+            return labels[state] || (state || 'Unknown');
+        }
+
+        function notificationStatus(item) {
+            if (item.error_message) return '<span class="pill failed">Failed</span>';
+            if (item.sent) return '<span class="pill sent">Sent</span>';
+            if (item.send_after) return '<span class="pill waiting">Queued</span>';
+            return '<span class="pill pending">Pending</span>';
+        }
+
+        function countByState(requests, state) {
+            return requests.filter(request => request.state === state).length;
+        }
+
+        function renderLinks(links) {
+            const calendar = document.getElementById('calendarLink');
+            const seerr = document.getElementById('seerrLink');
+            const calendarHref = links.webcal_url || links.calendar_url || (links.calendar_path ? window.location.origin + links.calendar_path : '');
+            if (calendarHref) {
+                calendar.href = calendarHref;
+                calendar.style.display = 'inline-flex';
+            } else {
+                calendar.style.display = 'none';
+            }
+            if (links.seerr_url) {
+                seerr.href = links.seerr_url;
+                seerr.style.display = 'inline-flex';
+            } else {
+                seerr.style.display = 'none';
+            }
+        }
+
+        function renderRequests() {
+            const list = document.getElementById('requestList');
+            const all = statusData?.requests || [];
+            const filtered = all.filter(request => {
+                if (currentFilter === 'all') return true;
+                if (currentFilter === 'active') return request.state !== 'available' && request.status !== 'declined';
+                return request.state === currentFilter;
+            });
+            if (!filtered.length) {
+                list.innerHTML = '<div class="empty">No requests match this view.</div>';
+                return;
+            }
+            list.innerHTML = filtered.map(request => {
+                const episodeLine = request.media_type === 'tv'
+                    ? `<div class="request-detail">${request.available_episodes || 0}/${request.episode_count || 0} tracked episodes available - ${request.notified_episodes || 0} notified</div>`
+                    : '';
+                const seerrLink = statusData.links?.seerr_url
+                    ? `<a class="button secondary" href="${escapeAttr(statusData.links.seerr_url)}" target="_blank" rel="noopener">Report Issue</a>`
+                    : '';
+                return `
+                    <article class="request-item ${escapeHtml(request.state || 'pending')}">
+                        <div>
+                            <div class="request-title">${escapeHtml(request.title)}</div>
+                            <div class="request-meta">${escapeHtml(request.media_type)} - ${escapeHtml(request.role)} - Requested ${formatDateTime(request.created_at)}</div>
+                            ${episodeLine}
+                        </div>
+                        <div class="request-actions">
+                            <span class="pill ${escapeHtml(request.state || 'pending')}">${escapeHtml(stateLabel(request.state))}</span>
+                            ${seerrLink}
+                        </div>
+                    </article>
+                `;
+            }).join('');
+        }
+
+        function renderNotifications() {
+            const body = document.getElementById('notificationBody');
+            const rows = statusData?.notifications || [];
+            if (!rows.length) {
+                body.innerHTML = '<tr><td colspan="5" class="empty">No notifications yet.</td></tr>';
+                return;
+            }
+            body.innerHTML = rows.map(item => `
+                <tr>
+                    <td>${formatDateTime(item.created_at)}</td>
+                    <td><strong>${escapeHtml(item.request_title || item.subject)}</strong><br><span class="small">${escapeHtml(item.subject)}</span></td>
+                    <td>${escapeHtml(item.notification_type)}</td>
+                    <td>${notificationStatus(item)}</td>
+                    <td>${item.sent ? formatDateTime(item.sent_at) : (item.error_message ? escapeHtml(item.error_message) : formatDateTime(item.send_after))}</td>
+                </tr>
+            `).join('');
+        }
+
+        function renderPreferences(prefs) {
+            document.getElementById('notificationMode').value = prefs.notification_mode || 'instant';
+            document.getElementById('preferredChannel').value = prefs.preferred_channel || 'email';
+            document.getElementById('quietStart').value = prefs.quiet_hours_start || '22:00';
+            document.getElementById('quietEnd').value = prefs.quiet_hours_end || '07:00';
+            document.getElementById('quietEnabled').checked = !!prefs.quiet_hours_enabled;
+            document.getElementById('fullSeasonOnly').checked = !!prefs.notify_full_season_only;
+            document.getElementById('qualityUpgrades').checked = !!prefs.notify_quality_upgrades;
+        }
+
+        function renderStatus(data) {
+            statusData = data;
+            const requests = data.requests || [];
+            const active = requests.filter(request => request.state !== 'available' && request.status !== 'declined').length;
+            document.getElementById('pageTitle').textContent = `${data.user.username}'s BingeAlert`;
+            document.getElementById('pageSubtitle').textContent = `${requests.length} request${requests.length === 1 ? '' : 's'} tracked`;
+            document.getElementById('metricActive').textContent = active.toLocaleString();
+            document.getElementById('metricWaiting').textContent = countByState(requests, 'waiting').toLocaleString();
+            document.getElementById('metricDownloaded').textContent = countByState(requests, 'downloaded').toLocaleString();
+            document.getElementById('metricAvailable').textContent = countByState(requests, 'available').toLocaleString();
+            renderLinks(data.links || {});
+            renderRequests();
+            renderNotifications();
+            renderPreferences(data.preferences || {});
+        }
+
+        async function loadStatus() {
+            const btn = document.getElementById('refreshBtn');
+            btn.disabled = true;
+            try {
+                const response = await fetch(`/user/api/${encodeURIComponent(token)}`, {
+                    cache: 'no-store',
+                    headers: { Accept: 'application/json' }
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail || 'Could not load status');
+                renderStatus(data);
+            } catch (error) {
+                document.getElementById('pageSubtitle').textContent = error.message;
+                document.getElementById('requestList').innerHTML = '<div class="empty">Status page unavailable.</div>';
+                showToast(error.message);
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        async function savePreferences(event) {
+            event.preventDefault();
+            const btn = document.getElementById('savePrefsBtn');
+            btn.disabled = true;
+            document.getElementById('prefStatus').textContent = 'Saving...';
+            const payload = {
+                notification_mode: document.getElementById('notificationMode').value,
+                preferred_channel: document.getElementById('preferredChannel').value,
+                quiet_hours_enabled: document.getElementById('quietEnabled').checked,
+                quiet_hours_start: document.getElementById('quietStart').value,
+                quiet_hours_end: document.getElementById('quietEnd').value,
+                notify_full_season_only: document.getElementById('fullSeasonOnly').checked,
+                notify_quality_upgrades: document.getElementById('qualityUpgrades').checked
+            };
+            try {
+                const response = await fetch(`/user/api/${encodeURIComponent(token)}/preferences`, {
+                    method: 'PUT',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail || 'Could not save preferences');
+                renderPreferences(data.preferences || payload);
+                document.getElementById('prefStatus').textContent = 'Saved';
+                showToast('Preferences saved.');
+            } catch (error) {
+                document.getElementById('prefStatus').textContent = 'Save failed';
+                showToast(error.message);
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        document.getElementById('refreshBtn').addEventListener('click', loadStatus);
+        document.getElementById('preferencesForm').addEventListener('submit', savePreferences);
+        document.querySelectorAll('#requestFilters button').forEach(button => {
+            button.addEventListener('click', () => {
+                currentFilter = button.dataset.filter;
+                document.querySelectorAll('#requestFilters button').forEach(item => item.classList.remove('active'));
+                button.classList.add('active');
+                renderRequests();
+            });
+        });
+        loadStatus();
+    </script>
+</body>
+</html>

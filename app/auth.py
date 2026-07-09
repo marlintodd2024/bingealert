@@ -58,6 +58,9 @@ _PUBLIC_PATHS = (
     # Per-user .ics calendar feed -- the URL embeds a long random token that
     # IS the credential, so calendar apps subscribe without a login session.
     "/calendar/",
+    # Per-user status/preferences portal -- same bearer-token model as the
+    # calendar feed, scoped to one user and revocable by admins.
+    "/user/",
 )
 
 

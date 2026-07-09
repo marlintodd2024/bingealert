@@ -110,6 +110,23 @@ class User(Base):
         index=True,
         default=lambda: secrets.token_urlsafe(24),
     )
+    # Separate bearer secret for the user-facing status/preferences portal.
+    # Kept independent from calendar_token so either public URL can be revoked
+    # without breaking the other.
+    status_token = Column(
+        String,
+        unique=True,
+        nullable=True,
+        index=True,
+        default=lambda: secrets.token_urlsafe(32),
+    )
+    notification_mode = Column(String, default="instant", nullable=False)
+    quiet_hours_enabled = Column(Boolean, default=False, nullable=False)
+    quiet_hours_start = Column(String, default="22:00", nullable=False)
+    quiet_hours_end = Column(String, default="07:00", nullable=False)
+    notify_full_season_only = Column(Boolean, default=False, nullable=False)
+    notify_quality_upgrades = Column(Boolean, default=True, nullable=False)
+    preferred_channel = Column(String, default="email", nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

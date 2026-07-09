@@ -4,6 +4,7 @@ from sqlalchemy import and_, func, or_
 import logging
 import os
 import json
+import secrets
 from datetime import datetime, timedelta
 
 from app.database import (
@@ -140,6 +141,15 @@ def _parse_payload(value):
         return json.loads(value)
     except Exception:
         return {"_raw": value}
+
+
+def _public_link(path: str) -> str | None:
+    from app.config import settings as _settings
+
+    base = (_settings.public_base_url or "").strip().rstrip("/")
+    if not base or not base.startswith(("http://", "https://")):
+        return None
+    return f"{base}{path}"
 
 
 @router.get("/daily-brief")
@@ -673,17 +683,26 @@ async def list_users(skip: int = 0, limit: int = 50, db: Session = Depends(get_d
     users = db.query(User).order_by(User.created_at.desc()).offset(skip).limit(limit).all()
     return {
         "users": [
-            {
-                "id": u.id,
-                "jellyseerr_id": u.jellyseerr_id,
-                "email": u.email,
-                "username": u.username,
-                "is_active": u.is_active if hasattr(u, 'is_active') else True,
-                "deactivated_at": u.deactivated_at.isoformat() + 'Z' if hasattr(u, 'deactivated_at') and u.deactivated_at else None,
-                "created_at": u.created_at.isoformat() + 'Z' if u.created_at else None
-            }
+            _user_to_admin_dict(u)
             for u in users
         ]
+    }
+
+
+def _user_to_admin_dict(user: User) -> dict:
+    status_path = f"/user/{user.status_token}" if user.status_token else None
+    return {
+        "id": user.id,
+        "jellyseerr_id": user.jellyseerr_id,
+        "email": user.email,
+        "username": user.username,
+        "is_active": user.is_active if hasattr(user, 'is_active') else True,
+        "deactivated_at": user.deactivated_at.isoformat() + 'Z' if hasattr(user, 'deactivated_at') and user.deactivated_at else None,
+        "created_at": user.created_at.isoformat() + 'Z' if user.created_at else None,
+        "status_path": status_path,
+        "status_url": _public_link(status_path) if status_path else None,
+        "notification_mode": getattr(user, "notification_mode", "instant"),
+        "preferred_channel": getattr(user, "preferred_channel", "email"),
     }
 
 
@@ -713,6 +732,32 @@ async def toggle_user_active(user_id: int, db: Session = Depends(get_db)):
         "success": True,
         "message": f"User {user.username} {action}",
         "is_active": user.is_active
+    }
+
+
+@router.post("/users/{user_id}/reset-status-link")
+async def reset_user_status_link(user_id: int, db: Session = Depends(get_db)):
+    """Revoke and regenerate a user's public status/preferences link."""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.status_token = secrets.token_urlsafe(32)
+    db.commit()
+    db.refresh(user)
+    record_admin_activity(
+        "user_status_link_reset",
+        f"Reset user status link for {user.username}",
+        db=db,
+        details={"user_id": user.id},
+    )
+    db.commit()
+    status_path = f"/user/{user.status_token}"
+    return {
+        "success": True,
+        "message": f"Status link reset for {user.username}",
+        "status_path": status_path,
+        "status_url": _public_link(status_path),
     }
 
 

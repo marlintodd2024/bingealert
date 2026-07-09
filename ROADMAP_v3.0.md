@@ -248,6 +248,17 @@ Implementation notes:
 - Keep magic links long, random, revocable, and scoped.
 - Preferences should default to current behavior.
 - Avoid requiring users to create accounts in v3.0.
+- Initial v3 slice adds a separate `users.status_token`, public `/user/{token}`
+  status portal, scoped `/user/api/{token}` JSON, and per-user preference
+  saving without requiring accounts.
+- Admins can copy or reset each user's status/preferences link from the Users
+  table. Resetting the token immediately revokes the old link.
+- Notification emails now include the status/preferences link when
+  `public_base_url` is configured. Calendar links remain separately revocable
+  through `calendar_token`.
+- Quiet hours are enforced by the notification processor for opted-in users.
+  Digest delivery and full-season-only delivery are stored preferences in this
+  slice; the actual digest/full-season batching worker remains follow-up work.
 
 Exit criteria:
 

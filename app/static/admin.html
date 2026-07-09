@@ -5226,6 +5226,70 @@
             }
         }
 
+        function userPortalUrl(user) {
+            if (!user) return '';
+            if (user.status_url) return user.status_url;
+            if (user.status_path) return window.location.origin + user.status_path;
+            return '';
+        }
+
+        async function copyTextToClipboard(text) {
+            if (!text) return false;
+            try {
+                await navigator.clipboard.writeText(text);
+                return true;
+            } catch (_) {
+                const input = document.createElement('input');
+                input.value = text;
+                input.setAttribute('readonly', 'readonly');
+                input.style.position = 'fixed';
+                input.style.opacity = '0';
+                document.body.appendChild(input);
+                input.select();
+                const ok = document.execCommand('copy');
+                document.body.removeChild(input);
+                return ok;
+            }
+        }
+
+        async function copyUserPortalLink(userId) {
+            const user = allUsers.find(item => item.id === userId);
+            const url = userPortalUrl(user);
+            if (!url) {
+                showError('No status portal link available for this user.');
+                return;
+            }
+            if (await copyTextToClipboard(url)) {
+                showSuccess('Status portal link copied.');
+            } else {
+                showInfo(url);
+            }
+        }
+
+        async function resetUserStatusLink(userId, username) {
+            const ok = await showConfirm(
+                'The old user status/preferences link will stop working immediately.',
+                {
+                    title: `Reset status link for "${username}"?`,
+                    okText: 'Reset Link',
+                    danger: true
+                }
+            );
+            if (!ok) return;
+            try {
+                const response = await fetch(`${API_BASE}/admin/users/${userId}/reset-status-link`, { method: 'POST' });
+                const data = await readJsonResponse(response, 'Status link reset failed');
+                const url = data.status_url || (data.status_path ? window.location.origin + data.status_path : '');
+                showSuccess(data.message || 'Status link reset.');
+                if (url && await copyTextToClipboard(url)) {
+                    showSuccess('New status portal link copied.');
+                }
+                await loadUsers(true);
+            } catch (error) {
+                showError('Failed to reset status link: ' + error.message);
+            }
+        }
+
         async function toggleUserActive(userId, username, currentlyActive) {
             const action = currentlyActive ? 'deactivate' : 'reactivate';
             const ok = await showConfirm(
@@ -5344,23 +5408,33 @@
                 return;
             }
 
-            tbody.innerHTML = users.map(user => `
-                <tr style="${user.is_active === false ? 'opacity: 0.55;' : ''}">
-                    <td>${user.id}</td>
-                    <td>${user.username}</td>
-                    <td>${user.email}</td>
-                    <td>${user.jellyseerr_id}</td>
-                    <td>
-                        <span class="badge ${user.is_active === false ? 'declined' : 'available'}">${user.is_active === false ? 'Inactive' : 'Active'}</span>
-                        ${user.deactivated_at ? `<br><small style="color: var(--text-secondary); font-size: 0.75em;">Since ${new Date(user.deactivated_at).toLocaleDateString()}</small>` : ''}
-                    </td>
-                    <td>
-                        <button class="action-btn" onclick="toggleUserActive(${user.id}, '${escapeAttr(user.username)}', ${user.is_active !== false})" title="${user.is_active === false ? 'Reactivate user' : 'Deactivate user'}">
-                            ${user.is_active === false ? '✅ Activate' : '⏸️ Deactivate'}
-                        </button>
-                    </td>
-                </tr>
-            `).join('');
+            tbody.innerHTML = users.map(user => {
+                const portalUrl = userPortalUrl(user);
+                const portalButtons = portalUrl ? `
+                    <button class="action-btn" onclick="copyUserPortalLink(${user.id})" title="Copy status portal link">🔗 Copy Portal</button>
+                    <a class="action-btn" href="${escapeAttr(portalUrl)}" target="_blank" rel="noopener" style="text-decoration:none;">Open</a>
+                ` : '';
+                return `
+                    <tr style="${user.is_active === false ? 'opacity: 0.55;' : ''}">
+                        <td>${user.id}</td>
+                        <td>${escapeHtml(user.username)}</td>
+                        <td>${escapeHtml(user.email)}</td>
+                        <td>${user.jellyseerr_id}</td>
+                        <td>
+                            <span class="badge ${user.is_active === false ? 'declined' : 'available'}">${user.is_active === false ? 'Inactive' : 'Active'}</span>
+                            ${user.deactivated_at ? `<br><small style="color: var(--text-secondary); font-size: 0.75em;">Since ${new Date(user.deactivated_at).toLocaleDateString()}</small>` : ''}
+                            <br><small style="color: var(--text-secondary); font-size: 0.75em;">${escapeHtml(user.notification_mode || 'instant')} · ${escapeHtml(user.preferred_channel || 'email')}</small>
+                        </td>
+                        <td style="white-space: nowrap;">
+                            <button class="action-btn" onclick="toggleUserActive(${user.id}, '${escapeAttr(user.username)}', ${user.is_active !== false})" title="${user.is_active === false ? 'Reactivate user' : 'Deactivate user'}">
+                                ${user.is_active === false ? '✅ Activate' : '⏸️ Deactivate'}
+                            </button>
+                            ${portalButtons}
+                            <button class="action-btn" onclick="resetUserStatusLink(${user.id}, '${escapeAttr(user.username)}')" title="Reset status portal link">Reset Link</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
         }
 
         function renderRequests(requests) {

@@ -4,7 +4,7 @@ from email.mime.multipart import MIMEMultipart
 from jinja2 import Environment
 import logging
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, time as dt_time, timedelta
 
 from app.config import normalize_smtp_security, settings
 from app.database import EpisodeTracking, Notification, User
@@ -39,6 +39,41 @@ def _safe_url(url: Optional[str]) -> Optional[str]:
         return None
     u = url.strip()
     return u if u.startswith(("http://", "https://")) else None
+
+
+def _parse_hhmm(value: Optional[str]) -> Optional[dt_time]:
+    if not value:
+        return None
+    try:
+        hour_text, minute_text = str(value).split(":", 1)
+        hour = int(hour_text)
+        minute = int(minute_text)
+        if 0 <= hour <= 23 and 0 <= minute <= 59:
+            return dt_time(hour, minute)
+    except Exception:
+        return None
+    return None
+
+
+def _quiet_hours_until(user: Optional[User], now: datetime) -> Optional[datetime]:
+    if not user or not getattr(user, "quiet_hours_enabled", False):
+        return None
+    start = _parse_hhmm(getattr(user, "quiet_hours_start", None))
+    end = _parse_hhmm(getattr(user, "quiet_hours_end", None))
+    if not start or not end or start == end:
+        return None
+
+    current = now.time()
+    today = now.date()
+    if start < end:
+        if start <= current < end:
+            return datetime.combine(today, end)
+        return None
+    if current >= start:
+        return datetime.combine(today + timedelta(days=1), end)
+    if current < end:
+        return datetime.combine(today, end)
+    return None
 
 
 def Template(source):  # noqa: N802 -- preserve the existing call sites
@@ -150,15 +185,15 @@ class EmailService:
             return False
     
     def _inject_calendar_footer(self, html_body: str, user: Optional[User]) -> str:
-        """Append a 'Subscribe to your upcoming-episodes calendar' footer.
+        """Append user self-service links to notification emails.
 
         Returns html_body unchanged if any prerequisite is missing (no user,
-        no public_base_url configured, no calendar_token on the row, no
-        </body> close tag in the rendered HTML). All three substitutions are
-        server-controlled values, so we build the URL with f-strings and
-        rely on the secret token being a urlsafe random string.
+        no public_base_url configured, no </body> close tag in the rendered
+        HTML). Substitutions are server-controlled values, so we build URLs
+        with f-strings and rely on the secret tokens being urlsafe random
+        strings.
         """
-        if not user or not user.calendar_token:
+        if not user:
             return html_body
         base = (settings.public_base_url or "").strip().rstrip("/")
         # Defensive scheme check: the value flows into an <a href> in the
@@ -171,26 +206,42 @@ class EmailService:
         if "</body>" not in html_body:
             return html_body
 
-        url_https = f"{base}/calendar/{user.calendar_token}.ics"
+        calendar_https = f"{base}/calendar/{user.calendar_token}.ics" if user.calendar_token else None
+        status_https = f"{base}/user/{user.status_token}" if getattr(user, "status_token", None) else None
         # webcal:// triggers the OS calendar-subscribe handler on most
         # platforms; the https URL is the literal fallback users can paste
         # into clients that don't honor the scheme rewrite.
-        url_webcal = url_https
-        for scheme in ("https://", "http://"):
-            if url_webcal.startswith(scheme):
-                url_webcal = "webcal://" + url_webcal[len(scheme):]
-                break
+        url_webcal = calendar_https
+        if url_webcal:
+            for scheme in ("https://", "http://"):
+                if url_webcal.startswith(scheme):
+                    url_webcal = "webcal://" + url_webcal[len(scheme):]
+                    break
 
-        footer = (
-            '<div style="max-width:600px;margin:24px auto 0;padding:16px 20px;'
-            "border-top:1px solid #e5e5e5;font-family:-apple-system,Segoe UI,"
-            'Roboto,sans-serif;font-size:13px;color:#555;">'
+        status_link = (
+            f'<p style="margin:0 0 8px;">🎛️ <a href="{status_https}" '
+            'style="color:#e5a00d;text-decoration:none;">View request status and preferences</a></p>'
+            if status_https
+            else ""
+        )
+        calendar_link = (
             "<p style=\"margin:0 0 6px;\">📅 <strong>Subscribe to your "
             "upcoming-episodes calendar.</strong></p>"
             f'<p style="margin:0 0 6px;"><a href="{url_webcal}" '
             'style="color:#e5a00d;text-decoration:none;">Add to your calendar app</a></p>'
             '<p style="margin:0;font-size:11px;color:#888;">Or paste this URL '
-            f'into your calendar app: <code>{url_https}</code></p>'
+            f'into your calendar app: <code>{calendar_https}</code></p>'
+            if calendar_https
+            else ""
+        )
+        if not status_link and not calendar_link:
+            return html_body
+
+        footer = (
+            '<div style="max-width:600px;margin:24px auto 0;padding:16px 20px;'
+            "border-top:1px solid #e5e5e5;font-family:-apple-system,Segoe UI,"
+            'Roboto,sans-serif;font-size:13px;color:#555;">'
+            f"{status_link}{calendar_link}"
             "</div>\n"
         )
         return html_body.replace("</body>", footer + "</body>", 1)
@@ -307,6 +358,7 @@ class EmailService:
         # Filter out notifications for inactive users
         active_notifications = []
         skipped_inactive = 0
+        deferred_quiet = 0
         for n in ready_notifications:
             if hasattr(n.user, 'is_active') and not n.user.is_active:
                 # Mark as sent to clear the queue (don't keep retrying for inactive users)
@@ -314,11 +366,19 @@ class EmailService:
                 n.error_message = "Skipped — user deactivated"
                 skipped_inactive += 1
             else:
-                active_notifications.append(n)
+                quiet_until = _quiet_hours_until(n.user, now)
+                if quiet_until:
+                    n.send_after = quiet_until
+                    deferred_quiet += 1
+                else:
+                    active_notifications.append(n)
         
-        if skipped_inactive:
+        if skipped_inactive or deferred_quiet:
             db.commit()
-            logger.info(f"Skipped {skipped_inactive} notification(s) for inactive users")
+            if skipped_inactive:
+                logger.info(f"Skipped {skipped_inactive} notification(s) for inactive users")
+            if deferred_quiet:
+                logger.info(f"Deferred {deferred_quiet} notification(s) for user quiet hours")
         
         ready_notifications = active_notifications
         if not ready_notifications:

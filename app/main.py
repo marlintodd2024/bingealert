@@ -36,6 +36,7 @@ from app.routers import calendar as calendar_router
 from app.routers import health as health_router
 from app.routers import setup as setup_router
 from app.routers import sse as sse_router
+from app.routers import user_portal as user_portal_router
 from app.routers import webhooks as webhooks_router
 
 
@@ -380,6 +381,7 @@ app.include_router(health_router.router, prefix="/health", tags=["Health"])
 app.include_router(webhooks_router.router, prefix="/webhooks", tags=["Webhooks"])
 app.include_router(admin_router.router, prefix="/admin", tags=["Admin"])
 app.include_router(calendar_router.router, tags=["Calendar"])  # public per-user .ics feed
+app.include_router(user_portal_router.router, tags=["User Portal"])  # public token-scoped user portal
 app.include_router(sse_router.router, tags=["SSE"])  # already prefixes /sse internally
 
 if _STATIC_DIR.is_dir():
