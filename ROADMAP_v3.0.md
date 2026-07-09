@@ -117,8 +117,10 @@ Deliverables:
 
 Implementation notes:
 
-- Add a `request_event_log` or equivalent append-only table.
-- Backfill enough synthetic events from current rows to make old requests useful.
+- Initial v3 slice: add `/admin/requests/{request_id}/timeline` and synthesize
+  useful events from current rows so old requests are immediately useful.
+- Later hardening slice: add a `request_event_log` or equivalent append-only
+  table for exact grabbed/imported/indexed transitions.
 - Log new events from webhooks, reconciliation, notification processing, and issue
   handling.
 - Keep payloads sanitized. Store event facts, not raw secrets.

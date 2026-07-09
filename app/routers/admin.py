@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
-from sqlalchemy.orm import Session
-from sqlalchemy import func, or_
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import and_, func, or_
 import logging
 import os
 import json
@@ -13,6 +13,7 @@ from app.database import (
     MediaRequest,
     EpisodeTracking,
     Notification,
+    NotificationDeliveryLog,
     ReportedIssue,
     ServiceHealthStatus,
     SharedRequest,
@@ -32,6 +33,18 @@ from app.services.admin_activity import record_admin_activity
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _iso(dt):
+    return dt.isoformat() + "Z" if dt else None
+
+
+def _sort_datetime(dt):
+    if not dt:
+        return datetime.min
+    if getattr(dt, "tzinfo", None) is not None:
+        return dt.replace(tzinfo=None)
+    return dt
 
 
 @router.post("/sync/users")
@@ -553,6 +566,391 @@ async def list_requests(skip: int = 0, limit: int = 50, db: Session = Depends(ge
     }
 
 
+@router.get("/requests/{request_id}/timeline")
+async def get_request_timeline(request_id: int, db: Session = Depends(get_db)):
+    """Build a request-level operations timeline from current records."""
+    try:
+        media_request = (
+            db.query(MediaRequest)
+            .options(joinedload(MediaRequest.user))
+            .filter(MediaRequest.id == request_id)
+            .first()
+        )
+        if not media_request:
+            raise HTTPException(status_code=404, detail="Request not found")
+
+        now = datetime.utcnow()
+        events = []
+
+        def add_event(at, kind, source, status, title, detail=None, meta=None):
+            events.append({
+                "at": _iso(at),
+                "_sort_at": _sort_datetime(at),
+                "kind": kind,
+                "source": source,
+                "status": status,
+                "title": title,
+                "detail": detail,
+                "meta": meta or {},
+            })
+
+        requester = media_request.user
+        shared_rows = (
+            db.query(SharedRequest)
+            .options(joinedload(SharedRequest.user), joinedload(SharedRequest.added_by_user))
+            .filter(SharedRequest.request_id == request_id)
+            .order_by(SharedRequest.added_at.asc())
+            .all()
+        )
+        episodes = (
+            db.query(EpisodeTracking)
+            .filter(EpisodeTracking.request_id == request_id)
+            .order_by(EpisodeTracking.created_at.desc(), EpisodeTracking.air_date.desc())
+            .limit(150)
+            .all()
+        )
+        notifications = (
+            db.query(Notification)
+            .options(joinedload(Notification.user))
+            .filter(Notification.request_id == request_id)
+            .order_by(Notification.created_at.desc())
+            .limit(150)
+            .all()
+        )
+        delivery_logs = (
+            db.query(NotificationDeliveryLog)
+            .filter(NotificationDeliveryLog.request_id == request_id)
+            .order_by(NotificationDeliveryLog.created_at.desc())
+            .limit(150)
+            .all()
+        )
+        issues = (
+            db.query(ReportedIssue)
+            .options(joinedload(ReportedIssue.user))
+            .filter(
+                or_(
+                    ReportedIssue.request_id == request_id,
+                    and_(
+                        ReportedIssue.request_id == None,
+                        ReportedIssue.tmdb_id == media_request.tmdb_id,
+                        ReportedIssue.media_type == media_request.media_type,
+                    ),
+                )
+            )
+            .order_by(ReportedIssue.created_at.desc())
+            .limit(100)
+            .all()
+        )
+
+        delivery_user_ids = {row.user_id for row in delivery_logs}
+        user_map = {}
+        if delivery_user_ids:
+            user_map = {
+                user.id: user
+                for user in db.query(User).filter(User.id.in_(delivery_user_ids)).all()
+            }
+
+        add_event(
+            media_request.created_at,
+            "request",
+            "Seerr",
+            "info",
+            "Request created",
+            f"{requester.username if requester else 'Unknown user'} requested {media_request.title}.",
+            {"jellyseerr_request_id": media_request.jellyseerr_request_id},
+        )
+
+        if media_request.updated_at:
+            status = media_request.status or "unknown"
+            if status == "available":
+                status_label = "success"
+                source = "Radarr" if media_request.media_type == "movie" else "Sonarr"
+                title = "Marked available"
+                detail = "The request is currently available."
+            elif status == "approved":
+                status_label = "info"
+                source = "Seerr"
+                title = "Request approved"
+                detail = "The request is approved and waiting for acquisition or import."
+            elif status == "pending":
+                status_label = "warning"
+                source = "Seerr"
+                title = "Request pending"
+                detail = "The request has not reached an available state yet."
+            else:
+                status_label = "warning"
+                source = "BingeAlert"
+                title = f"Request status: {status}"
+                detail = "BingeAlert has not classified this status yet."
+            add_event(media_request.updated_at, "request", source, status_label, title, detail)
+
+        for shared in shared_rows:
+            added_user = shared.user
+            added_by = f" by {shared.added_by_user.username}" if shared.added_by_user else ""
+            add_event(
+                shared.added_at,
+                "user",
+                "BingeAlert",
+                "info",
+                "Shared request added",
+                f"{added_user.username if added_user else 'Unknown user'} was added{added_by}.",
+                {"user_id": shared.user_id},
+            )
+
+        for episode in episodes:
+            episode_code = f"S{episode.season_number:02d}E{episode.episode_number:02d}"
+            episode_title = f"{episode_code}"
+            if episode.episode_title:
+                episode_title += f" - {episode.episode_title}"
+
+            if episode.available_in_plex and episode.notified:
+                status = "success"
+                title = "Episode available and notified"
+                detail = f"{episode_title} is available in Plex and marked notified."
+                at = episode.created_at
+            elif episode.available_in_plex:
+                status = "success"
+                title = "Episode available in Plex"
+                detail = f"{episode_title} is available but notification state is not complete."
+                at = episode.created_at
+            elif episode.notified:
+                status = "success"
+                title = "Episode marked notified"
+                detail = f"{episode_title} has been marked notified."
+                at = episode.created_at
+            elif episode.air_date and _sort_datetime(episode.air_date) > now:
+                status = "future"
+                title = "Episode scheduled"
+                detail = f"{episode_title} airs on {_iso(episode.air_date)}."
+                at = episode.air_date
+            else:
+                status = "info"
+                title = "Episode tracked"
+                detail = f"{episode_title} is tracked for this request."
+                at = episode.created_at or episode.air_date
+
+            add_event(
+                at,
+                "episode",
+                "Sonarr / Plex",
+                status,
+                title,
+                detail,
+                {
+                    "series_id": episode.series_id,
+                    "season_number": episode.season_number,
+                    "episode_number": episode.episode_number,
+                    "available_in_plex": bool(episode.available_in_plex),
+                    "notified": bool(episode.notified),
+                },
+            )
+
+        for notification in notifications:
+            user = notification.user
+            user_label = user.email if user else f"user #{notification.user_id}"
+            type_label = (notification.notification_type or "notification").replace("_", " ")
+            if notification.error_message and not notification.sent:
+                status = "error"
+                title = "Notification delivery failed"
+                detail = f"{type_label.title()} notification for {user_label}: {notification.error_message}"
+                at = notification.sent_at or notification.send_after or notification.created_at
+            elif notification.sent:
+                status = "success"
+                title = "Notification sent"
+                detail = f"{type_label.title()} notification sent to {user_label}."
+                at = notification.sent_at or notification.created_at
+            elif notification.send_after and _sort_datetime(notification.send_after) > now:
+                status = "future"
+                title = "Notification scheduled"
+                detail = f"{type_label.title()} notification queued for {user_label}."
+                at = notification.send_after
+            elif notification.send_after and _sort_datetime(notification.send_after) <= now:
+                status = "warning"
+                title = "Notification ready to send"
+                detail = f"{type_label.title()} notification is past its send-after time."
+                at = notification.send_after
+            else:
+                status = "info"
+                title = "Notification queued"
+                detail = f"{type_label.title()} notification queued for {user_label}."
+                at = notification.created_at
+
+            add_event(
+                at,
+                "notification",
+                "BingeAlert",
+                status,
+                title,
+                detail,
+                {
+                    "notification_id": notification.id,
+                    "notification_type": notification.notification_type,
+                    "sent": bool(notification.sent),
+                    "send_after": _iso(notification.send_after),
+                },
+            )
+
+        for delivery in delivery_logs:
+            user = user_map.get(delivery.user_id)
+            user_label = user.email if user else f"user #{delivery.user_id}"
+            episode_scope = ""
+            if delivery.season_number is not None and delivery.episode_number is not None:
+                episode_scope = f" S{delivery.season_number:02d}E{delivery.episode_number:02d}"
+            add_event(
+                delivery.sent_at or delivery.created_at,
+                "ledger",
+                "Delivery ledger",
+                "success" if delivery.sent_at else "info",
+                "Delivery ledger recorded",
+                f"{delivery.notification_type}{episode_scope} delivery key recorded for {user_label}.",
+                {
+                    "delivery_log_id": delivery.id,
+                    "dedupe_key": delivery.dedupe_key,
+                    "sent_at": _iso(delivery.sent_at),
+                },
+            )
+
+        for issue in issues:
+            scope = ""
+            if issue.season_number is not None:
+                scope = f" S{issue.season_number:02d}"
+                if issue.episode_number is not None:
+                    scope += f"E{issue.episode_number:02d}"
+            reporter = issue.user.username if issue.user else "Unknown user"
+            add_event(
+                issue.created_at,
+                "issue",
+                "Seerr",
+                "warning" if issue.status != "resolved" else "info",
+                "Issue reported",
+                f"{reporter} reported {issue.issue_type or 'other'} issue{scope}: {issue.issue_message or 'No message provided.'}",
+                {"issue_id": issue.id, "status": issue.status},
+            )
+            if issue.status == "fixing" and issue.updated_at:
+                add_event(
+                    issue.updated_at,
+                    "issue",
+                    "BingeAlert",
+                    "info",
+                    "Issue fix in progress",
+                    issue.action_taken or "Blacklist/search workflow started.",
+                    {"issue_id": issue.id},
+                )
+            if issue.status == "failed" and issue.updated_at:
+                add_event(
+                    issue.updated_at,
+                    "issue",
+                    "BingeAlert",
+                    "error",
+                    "Issue fix failed",
+                    issue.error_message or "No error detail recorded.",
+                    {"issue_id": issue.id},
+                )
+            if issue.resolved_at:
+                add_event(
+                    issue.resolved_at,
+                    "issue",
+                    "BingeAlert",
+                    "success",
+                    "Issue resolved",
+                    issue.action_taken or "Issue marked resolved.",
+                    {"issue_id": issue.id},
+                )
+
+        events.sort(key=lambda item: (item["_sort_at"], item["kind"], item["title"]))
+        timeline = []
+        for event in events[:250]:
+            event.pop("_sort_at", None)
+            timeline.append(event)
+
+        episode_summary = {
+            "tracked": len(episodes),
+            "available": sum(1 for episode in episodes if episode.available_in_plex),
+            "notified": sum(1 for episode in episodes if episode.notified),
+            "future": sum(
+                1 for episode in episodes
+                if episode.air_date and _sort_datetime(episode.air_date) > now
+            ),
+        }
+        notification_summary = {
+            "total": len(notifications),
+            "sent": sum(1 for notification in notifications if notification.sent),
+            "pending": sum(1 for notification in notifications if not notification.sent),
+            "failed": sum(
+                1 for notification in notifications
+                if notification.error_message and not notification.sent
+            ),
+            "scheduled": sum(
+                1 for notification in notifications
+                if (
+                    not notification.sent
+                    and notification.send_after
+                    and _sort_datetime(notification.send_after) > now
+                )
+            ),
+        }
+        issue_summary = {
+            "total": len(issues),
+            "open": sum(1 for issue in issues if issue.status in {"reported", "fixing", "failed"}),
+            "resolved": sum(1 for issue in issues if issue.status == "resolved"),
+            "failed": sum(1 for issue in issues if issue.status == "failed"),
+        }
+
+        return {
+            "request": {
+                "id": media_request.id,
+                "jellyseerr_request_id": media_request.jellyseerr_request_id,
+                "media_type": media_request.media_type,
+                "tmdb_id": media_request.tmdb_id,
+                "title": media_request.title,
+                "status": media_request.status,
+                "season_count": media_request.season_count,
+                "created_at": _iso(media_request.created_at),
+                "updated_at": _iso(media_request.updated_at),
+                "requester": {
+                    "user_id": requester.id if requester else None,
+                    "username": requester.username if requester else None,
+                    "email": requester.email if requester else None,
+                },
+            },
+            "summary": {
+                "shared_users": len(shared_rows),
+                "delivery_records": len(delivery_logs),
+                "events": len(timeline),
+                "truncated": len(events) > len(timeline),
+                "episodes": episode_summary,
+                "notifications": notification_summary,
+                "issues": issue_summary,
+            },
+            "users": [
+                {
+                    "user_id": media_request.user_id,
+                    "username": requester.username if requester else None,
+                    "email": requester.email if requester else None,
+                    "is_original": True,
+                    "added_at": _iso(media_request.created_at),
+                    "added_by": None,
+                }
+            ] + [
+                {
+                    "user_id": shared.user_id,
+                    "username": shared.user.username if shared.user else None,
+                    "email": shared.user.email if shared.user else None,
+                    "is_original": False,
+                    "added_at": _iso(shared.added_at),
+                    "added_by": shared.added_by_user.username if shared.added_by_user else None,
+                }
+                for shared in shared_rows
+            ],
+            "timeline": timeline,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get request timeline {request_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
 @router.get("/notifications")
 async def list_notifications(
     skip: int = 0,
@@ -572,6 +970,7 @@ async def list_notifications(
         "notifications": [
             {
                 "id": n.id,
+                "request_id": n.request_id,
                 "user_email": n.user.email,
                 "type": n.notification_type,
                 "subject": n.subject,
@@ -2203,6 +2602,7 @@ async def get_issues(db: Session = Depends(get_db)):
         for issue in issues:
             result.append({
                 "id": issue.id,
+                "request_id": issue.request_id,
                 "seerr_issue_id": issue.seerr_issue_id,
                 "title": issue.title,
                 "media_type": issue.media_type,

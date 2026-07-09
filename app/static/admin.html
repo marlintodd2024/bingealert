@@ -397,6 +397,186 @@
             text-align: center;
         }
 
+        #requestTimelineModal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 1001;
+            align-items: center;
+            justify-content: center;
+            padding: 18px;
+            background: rgba(0, 0, 0, 0.78);
+        }
+
+        #requestTimelineModal.open {
+            display: flex;
+        }
+
+        .timeline-modal-box {
+            width: min(980px, 96vw);
+            max-height: min(860px, 92vh);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            background: #17191f;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 8px;
+            box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
+        }
+
+        .timeline-modal-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+            padding: 18px 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .timeline-modal-title {
+            margin: 0 0 6px;
+            color: var(--text-primary);
+            font-size: 20px;
+            line-height: 1.2;
+        }
+
+        .timeline-modal-meta {
+            color: var(--text-secondary);
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        .timeline-modal-body {
+            overflow: auto;
+            padding: 18px 20px 20px;
+        }
+
+        .timeline-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+            gap: 10px;
+            margin-bottom: 18px;
+        }
+
+        .timeline-summary-item {
+            padding: 11px 12px;
+            background: rgba(255, 255, 255, 0.045);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+            min-height: 68px;
+        }
+
+        .timeline-summary-label {
+            margin-bottom: 6px;
+            color: var(--text-secondary);
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.45px;
+            line-height: 1.2;
+            text-transform: uppercase;
+        }
+
+        .timeline-summary-value {
+            color: var(--accent-primary);
+            font-size: 21px;
+            font-weight: 800;
+            line-height: 1.1;
+        }
+
+        .timeline-users {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 18px;
+        }
+
+        .timeline-user-pill {
+            max-width: 100%;
+            padding: 6px 9px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: var(--text-secondary);
+            font-size: 12px;
+            line-height: 1.3;
+            overflow-wrap: anywhere;
+        }
+
+        .timeline-list {
+            position: relative;
+            display: grid;
+            gap: 10px;
+        }
+
+        .timeline-event {
+            display: grid;
+            grid-template-columns: 112px minmax(0, 1fr);
+            gap: 12px;
+            padding: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-left: 4px solid var(--text-muted);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        .timeline-event.success {
+            border-left-color: var(--success);
+        }
+
+        .timeline-event.warning,
+        .timeline-event.future {
+            border-left-color: var(--warning);
+        }
+
+        .timeline-event.error {
+            border-left-color: var(--error);
+        }
+
+        .timeline-event.info {
+            border-left-color: #2196f3;
+        }
+
+        .timeline-event-time {
+            color: var(--text-muted);
+            font-size: 11px;
+            line-height: 1.35;
+        }
+
+        .timeline-event-main {
+            min-width: 0;
+        }
+
+        .timeline-event-topline {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 5px;
+        }
+
+        .timeline-event-title {
+            color: var(--text-primary);
+            font-size: 14px;
+            font-weight: 750;
+            line-height: 1.25;
+            overflow-wrap: anywhere;
+        }
+
+        .timeline-event-detail {
+            color: var(--text-secondary);
+            font-size: 12px;
+            line-height: 1.45;
+            overflow-wrap: anywhere;
+        }
+
+        .timeline-event-source {
+            color: var(--text-muted);
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.35px;
+            text-transform: uppercase;
+        }
+
         .actions {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -685,6 +865,16 @@
             background: rgba(255, 152, 0, 0.18);
             color: #ff9800;
             border: 1px solid rgba(255, 152, 0, 0.35);
+        }
+        .status-pill.info {
+            background: rgba(33, 150, 243, 0.18);
+            color: #64b5f6;
+            border: 1px solid rgba(33, 150, 243, 0.35);
+        }
+        .status-pill.future {
+            background: rgba(255, 193, 7, 0.18);
+            color: #ffc107;
+            border: 1px solid rgba(255, 193, 7, 0.35);
         }
         .status-pill.not_configured,
         .status-pill.unknown,
@@ -1523,6 +1713,18 @@
 
             .daily-action-list {
                 max-height: none;
+            }
+
+            .timeline-modal-head {
+                flex-direction: column;
+            }
+
+            .timeline-event {
+                grid-template-columns: 1fr;
+            }
+
+            .timeline-event-time {
+                font-size: 12px;
             }
 
             .stats-grid {
@@ -4059,6 +4261,26 @@
         </div>
     </div>
 
+    <!-- Request Timeline Modal -->
+    <div id="requestTimelineModal" role="dialog" aria-modal="true" aria-labelledby="requestTimelineTitle" onclick="if (event.target === this) closeRequestTimelineModal()">
+        <div class="timeline-modal-box">
+            <div class="timeline-modal-head">
+                <div>
+                    <h2 class="timeline-modal-title" id="requestTimelineTitle">Request Timeline</h2>
+                    <div class="timeline-modal-meta" id="requestTimelineMeta">Loading...</div>
+                </div>
+                <button onclick="closeRequestTimelineModal()" class="secondary" style="padding: 8px 12px; font-size: 12px;">Close</button>
+            </div>
+            <div class="timeline-modal-body">
+                <div class="timeline-summary-grid" id="requestTimelineSummary"></div>
+                <div class="timeline-users" id="requestTimelineUsers"></div>
+                <div class="timeline-list" id="requestTimelineEvents">
+                    <div class="empty-hint"><div class="empty-icon">🧭</div><div>Loading request timeline...</div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Security: HTML/attribute escaping to prevent XSS from API data
         function escapeHtml(str) {
@@ -4289,6 +4511,139 @@
             const date = new Date(value);
             if (Number.isNaN(date.getTime())) return '-';
             return date.toLocaleString();
+        }
+
+        function formatShortDateTime(value) {
+            if (!value) return '-';
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return '-';
+            return date.toLocaleString([], {
+                month: 'short',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit'
+            });
+        }
+
+        function timelineStatusLabel(status) {
+            const labels = {
+                success: 'Done',
+                warning: 'Needs review',
+                error: 'Error',
+                info: 'Info',
+                future: 'Scheduled'
+            };
+            return labels[status] || 'Info';
+        }
+
+        function renderTimelineSummaryItem(label, value, note) {
+            return `
+                <div class="timeline-summary-item">
+                    <div class="timeline-summary-label">${escapeHtml(label)}</div>
+                    <div class="timeline-summary-value">${escapeHtml(value)}</div>
+                    ${note ? `<div class="daily-metric-note">${escapeHtml(note)}</div>` : ''}
+                </div>
+            `;
+        }
+
+        function closeRequestTimelineModal() {
+            const modal = document.getElementById('requestTimelineModal');
+            if (modal) modal.classList.remove('open');
+        }
+
+        function renderRequestTimeline(data) {
+            const request = data.request || {};
+            const summary = data.summary || {};
+            const episodes = summary.episodes || {};
+            const notifications = summary.notifications || {};
+            const issues = summary.issues || {};
+            const users = Array.isArray(data.users) ? data.users : [];
+            const timeline = Array.isArray(data.timeline) ? data.timeline : [];
+
+            setText('requestTimelineTitle', request.title || 'Request Timeline');
+            const typeLabel = request.media_type === 'tv' ? 'TV Show' : 'Movie';
+            setText(
+                'requestTimelineMeta',
+                `${typeLabel} · ${request.status || 'unknown'} · Request #${request.id || '-'} · Seerr #${request.jellyseerr_request_id || '-'} · Updated ${formatDateTime(request.updated_at)}`
+            );
+
+            const summaryEl = document.getElementById('requestTimelineSummary');
+            if (summaryEl) {
+                summaryEl.innerHTML = [
+                    renderTimelineSummaryItem('Users', formatCount((users || []).length), `${summary.shared_users || 0} shared`),
+                    renderTimelineSummaryItem('Episodes', formatCount(episodes.tracked || 0), `${formatCount(episodes.available || 0)} available · ${formatCount(episodes.notified || 0)} notified`),
+                    renderTimelineSummaryItem('Notifications', formatCount(notifications.total || 0), `${formatCount(notifications.sent || 0)} sent · ${formatCount(notifications.pending || 0)} pending`),
+                    renderTimelineSummaryItem('Issues', formatCount(issues.open || 0), `${formatCount(issues.resolved || 0)} resolved · ${formatCount(issues.failed || 0)} failed`),
+                    renderTimelineSummaryItem('Delivery Ledger', formatCount(summary.delivery_records || 0), 'Durable sent/dedupe records'),
+                    renderTimelineSummaryItem('Events', formatCount(summary.events || timeline.length || 0), summary.truncated ? 'Showing first 250' : 'Full synthetic timeline')
+                ].join('');
+            }
+
+            const usersEl = document.getElementById('requestTimelineUsers');
+            if (usersEl) {
+                usersEl.innerHTML = users.length
+                    ? users.map(user => `
+                        <span class="timeline-user-pill" title="${escapeHtml(user.email || '')}">
+                            ${user.is_original ? 'Requester' : 'Shared'}: ${escapeHtml(user.username || user.email || 'Unknown user')}
+                        </span>
+                    `).join('')
+                    : '<span class="timeline-user-pill">No users attached</span>';
+            }
+
+            const eventsEl = document.getElementById('requestTimelineEvents');
+            if (!eventsEl) return;
+            if (!timeline.length) {
+                eventsEl.innerHTML = '<div class="empty-hint"><div class="empty-icon">🧭</div><div>No timeline events found for this request yet.</div></div>';
+                return;
+            }
+
+            eventsEl.innerHTML = timeline.map(event => {
+                const status = String(event.status || 'info').replace(/[^\w-]/g, '') || 'info';
+                return `
+                    <div class="timeline-event ${status}">
+                        <div class="timeline-event-time">${escapeHtml(formatShortDateTime(event.at))}</div>
+                        <div class="timeline-event-main">
+                            <div class="timeline-event-topline">
+                                <span class="timeline-event-title">${escapeHtml(event.title || 'Timeline event')}</span>
+                                <span class="status-pill ${status}">${escapeHtml(timelineStatusLabel(status))}</span>
+                                <span class="timeline-event-source">${escapeHtml(event.source || event.kind || 'BingeAlert')}</span>
+                            </div>
+                            <div class="timeline-event-detail">${escapeHtml(event.detail || '')}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function openRequestTimeline(requestId) {
+            if (!requestId) return;
+            const modal = document.getElementById('requestTimelineModal');
+            const eventsEl = document.getElementById('requestTimelineEvents');
+            if (modal) modal.classList.add('open');
+            setText('requestTimelineTitle', 'Request Timeline');
+            setText('requestTimelineMeta', `Loading request #${requestId}...`);
+            const summaryEl = document.getElementById('requestTimelineSummary');
+            const usersEl = document.getElementById('requestTimelineUsers');
+            if (summaryEl) summaryEl.innerHTML = '';
+            if (usersEl) usersEl.innerHTML = '';
+            if (eventsEl) {
+                eventsEl.innerHTML = '<div class="empty-hint"><div class="empty-icon">🧭</div><div>Loading request timeline...</div></div>';
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/admin/requests/${requestId}/timeline`, {
+                    cache: 'no-store',
+                    headers: { 'Accept': 'application/json' }
+                });
+                const data = await readJsonResponse(response, 'Request timeline failed');
+                renderRequestTimeline(data);
+            } catch (error) {
+                setText('requestTimelineMeta', 'Could not load timeline');
+                if (eventsEl) {
+                    eventsEl.innerHTML = `<div class="empty-hint"><div class="empty-icon">⚠</div><div>${escapeHtml(error.message || 'Timeline request failed')}</div></div>`;
+                }
+                showError('Failed to load request timeline: ' + error.message);
+            }
         }
 
         function renderVersionFooter(info) {
@@ -4846,6 +5201,7 @@
                     <td><span class="badge ${req.status}">${req.status}</span></td>
                     <td>${new Date(req.created_at).toLocaleString()}</td>
                     <td>
+                        <button class="action-btn" onclick="openRequestTimeline(${req.id})">🧭 Timeline</button>
                         <button class="action-btn" onclick="manageSharedUsers(${req.id}, '${escapeAttr(req.title)}')">👥 Users</button>
                         ${req.media_type === 'tv' ? `<button class="action-btn" onclick="importEpisodes(${req.id})">📥 Import</button>` : ''}
                     </td>
@@ -4899,6 +5255,7 @@
                     <td>${new Date(notif.created_at).toLocaleString()}</td>
                     <td>${sentAtDisplay}</td>
                     <td>
+                        ${notif.request_id ? `<button class="action-btn" onclick="openRequestTimeline(${notif.request_id})">🧭 Timeline</button>` : ''}
                         <button class="action-btn" onclick="resendNotification(${notif.id})">🔁 ${notif.sent ? 'Resend' : 'Send Now'}</button>
                     </td>
                 </tr>
@@ -5256,6 +5613,9 @@
                     '<span style="color: #666;">—</span>';
                 
                 let actions = '';
+                if (issue.request_id) {
+                    actions += `<button onclick="openRequestTimeline(${issue.request_id})" style="padding: 4px 10px; background: rgba(255,255,255,0.08); color: #e4e4e4; border: 1px solid rgba(255,255,255,0.14); border-radius: 4px; cursor: pointer; font-size: 12px; margin-right: 4px;" title="Open request timeline">🧭</button>`;
+                }
                 if (issue.status === 'reported' || issue.status === 'failed') {
                     actions += `<button onclick="fixIssue(${issue.id})" style="padding: 4px 10px; background: #2196f3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; margin-right: 4px;" title="Blacklist only the affected movie, season, or episode and search for a replacement">🔧 Fix</button>`;
                     actions += `<button onclick="resolveIssue(${issue.id})" style="padding: 4px 10px; background: #4caf50; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; margin-right: 4px;" title="Mark as resolved without re-downloading">✅</button>`;
@@ -6006,9 +6366,15 @@
             if (e.key === 'Escape') {
                 const helpOpen = document.getElementById('shortcutHelpModal');
                 const notesOpen = document.getElementById('releaseNotesModal');
+                const timelineOpen = document.getElementById('requestTimelineModal');
                 if (notesOpen && notesOpen.classList.contains('open')) {
                     e.preventDefault();
                     closeReleaseNotesModal();
+                    return;
+                }
+                if (timelineOpen && timelineOpen.classList.contains('open')) {
+                    e.preventDefault();
+                    closeRequestTimelineModal();
                     return;
                 }
                 if (helpOpen && helpOpen.style.display === 'flex') {
