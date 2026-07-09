@@ -6,7 +6,7 @@
 // buildValidatedUrl() locks fetches to http/https + same hostname and
 // rejects path-traversal sequences before they reach fetch().
 
-const CACHE_NAME = 'bingealert-v1';
+const CACHE_NAME = 'bingealert-v2';
 const STATIC_ASSETS = [
   '/',
   '/static/admin.html',

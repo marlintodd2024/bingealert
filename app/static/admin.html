@@ -639,6 +639,13 @@
             gap: 10px;
             flex-wrap: wrap;
         }
+        .settings-section-footer {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 18px;
+            padding-top: 14px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+        }
         .settings-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -2987,6 +2994,9 @@
                 </div>
 
                 <div id="configValidationResults" class="config-validation-list"></div>
+                <div class="settings-section-footer">
+                    <button onclick="saveConfig('operations', this)" data-save-section="operations-footer" class="section-save-btn">💾 Save Operations</button>
+                </div>
             </div>
 
             <!-- Batch Timing Section -->
@@ -3037,6 +3047,9 @@
                                style="width: 100%; padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e4e4e4; font-size: 16px;">
                         <small style="color: #666; font-size: 11px;">Seconds between queue checks</small>
                     </div>
+                </div>
+                <div class="settings-section-footer">
+                    <button onclick="saveConfig('timing', this)" data-save-section="timing-footer" class="section-save-btn">💾 Save Batching</button>
                 </div>
             </div>
 
@@ -3116,6 +3129,9 @@
                         <small style="color: #666; font-size: 11px;">Where users reach this BingeAlert from outside your network. Used for the "Subscribe to your calendar" link in notification emails (and future password-reset links). Leave blank to omit those links. Must start with http:// or https://.</small>
                     </div>
                 </div>
+                <div class="settings-section-footer">
+                    <button onclick="saveConfig('email', this)" data-save-section="email-footer" class="section-save-btn">💾 Save Email</button>
+                </div>
             </div>
 
             <!-- Quality Monitoring Section -->
@@ -3189,6 +3205,9 @@
                         • <strong>On Import</strong> - Sends available notification when download completes
                     </span>
                 </div>
+                <div class="settings-section-footer">
+                    <button onclick="saveConfig('quality', this)" data-save-section="quality-footer" class="section-save-btn">💾 Save Quality</button>
+                </div>
             </div>
 
             <!-- Issue Auto-fix Section -->
@@ -3232,6 +3251,9 @@
                         Enable <strong>Issue Created</strong> webhook event in Seerr → Settings → Notifications → Webhook
                     </span>
                 </div>
+                <div class="settings-section-footer">
+                    <button onclick="saveConfig('issue', this)" data-save-section="issue-footer" class="section-save-btn">💾 Save Issues</button>
+                </div>
             </div>
 
             <!-- Seerr Anime Overrides -->
@@ -3269,6 +3291,9 @@
                     </div>
                 </div>
                 <small style="color: #666; font-size: 11px;">Leave blank to use Seerr's default routing. Use "Discover" to find the correct IDs.</small>
+                <div class="settings-section-footer">
+                    <button onclick="saveConfig('anime', this)" data-save-section="anime-footer" class="section-save-btn">💾 Save Anime</button>
+                </div>
             </div>
 
             <!-- Reconciliation & Issue Cleanup -->
@@ -3357,6 +3382,9 @@
                         <small style="color: #666; font-size: 11px;">Mark issues as failed if no resolution after this long</small>
                     </div>
                 </div>
+                <div class="settings-section-footer">
+                    <button onclick="saveConfig('reconciliation', this)" data-save-section="reconciliation-footer" class="section-save-btn">💾 Save Reconciliation</button>
+                </div>
             </div>
 
             <!-- Authentication & Security Section -->
@@ -3442,6 +3470,9 @@
                         </div>
                     </div>
                 </div>
+                <div class="settings-section-footer">
+                    <button onclick="saveConfig('auth', this)" data-save-section="auth-footer" class="section-save-btn">💾 Save Auth</button>
+                </div>
             </div>
 
             <!-- Webhook & Application Security Section -->
@@ -3523,6 +3554,9 @@
                     <div id="security-checklist" style="font-size: 13px; line-height: 2;">
                         <!-- Populated by loadConfig -->
                     </div>
+                </div>
+                <div class="settings-section-footer">
+                    <button onclick="saveConfig('security', this)" data-save-section="security-footer" class="section-save-btn">💾 Save Security</button>
                 </div>
             </div>
 
@@ -3659,6 +3693,9 @@
                 </div>
             </div>
 
+            <div class="settings-section-footer">
+                <button onclick="saveConfig('connections', this)" data-save-section="connections-footer" class="section-save-btn">💾 Save Connections</button>
+            </div>
             </div>
 
             <div class="settings-save-row">
@@ -6591,8 +6628,8 @@
             return builders[section]();
         }
 
-        async function saveConfig(section = 'all') {
-            const btn = document.querySelector(`[data-save-section="${section}"]`) || document.getElementById('saveConfigBtn');
+        async function saveConfig(section = 'all', triggerButton = null) {
+            const btn = triggerButton || document.querySelector(`[data-save-section="${section}"]`) || document.getElementById('saveConfigBtn');
             const originalText = btn ? btn.textContent : '';
             const scrollY = window.scrollY;
             if (btn) {
