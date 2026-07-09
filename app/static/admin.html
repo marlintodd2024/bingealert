@@ -2857,7 +2857,6 @@
                     </div>
                     <div class="settings-section-actions">
                         <button onclick="runConfigValidation()" id="configValidateBtn" class="secondary section-save-btn">✅ Validate Config</button>
-                        <button onclick="saveConfig('operations')" data-save-section="operations" class="section-save-btn">💾 Save Operations</button>
                     </div>
                 </div>
 
@@ -3009,7 +3008,6 @@
                             When an episode downloads, it waits for more episodes and intelligently batches them together.
                         </p>
                     </div>
-                    <button onclick="saveConfig('timing')" data-save-section="timing" class="section-save-btn">💾 Save Batching</button>
                 </div>
                 
                 <div style="background: rgba(229, 160, 13, 0.1); padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #e5a00d;">
@@ -3060,7 +3058,6 @@
                         <h3 style="margin-bottom: 10px; color: #e5a00d;">📧 Email Settings</h3>
                         <p style="color: #999; margin-bottom: 20px; font-size: 13px;">Configure your SMTP server and email sender details.</p>
                     </div>
-                    <button onclick="saveConfig('email')" data-save-section="email" class="section-save-btn">💾 Save Email</button>
                 </div>
                 
                 <!-- SMTP Server -->
@@ -3143,7 +3140,6 @@
                             Automatically notify users when their requested content isn't available yet due to release dates or quality profile settings.
                         </p>
                     </div>
-                    <button onclick="saveConfig('quality')" data-save-section="quality" class="section-save-btn">💾 Save Quality</button>
                 </div>
                 
                 <div style="background: rgba(138, 43, 226, 0.1); padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #8a2be2;">
@@ -3219,7 +3215,6 @@
                             When users report issues in Seerr (bad audio, wrong subtitles, corrupted video, etc.), the portal can automatically blacklist the current file and trigger a new search in Sonarr/Radarr.
                         </p>
                     </div>
-                    <button onclick="saveConfig('issue')" data-save-section="issue" class="section-save-btn">💾 Save Issues</button>
                 </div>
                 
                 <div style="background: rgba(244, 67, 54, 0.1); padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #f44336;">
@@ -3265,7 +3260,6 @@
                             When using Request on Behalf, BingeAlert auto-detects anime (Animation genre + Japanese origin) and routes it to your anime Sonarr instance in Seerr. Configure the server and profile IDs below.
                         </p>
                     </div>
-                    <button onclick="saveConfig('anime')" data-save-section="anime" class="section-save-btn">💾 Save Anime</button>
                 </div>
                 
                 <div style="margin-bottom: 15px;">
@@ -3305,7 +3299,6 @@
                             The reconciliation worker periodically checks for missed webhooks, orphaned episodes, and stale issues that need cleanup.
                         </p>
                     </div>
-                    <button onclick="saveConfig('reconciliation')" data-save-section="reconciliation" class="section-save-btn">💾 Save Reconciliation</button>
                 </div>
                 
                 <div style="background: rgba(76, 175, 80, 0.1); padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #4CAF50;">
@@ -3396,7 +3389,6 @@
                             Require a password for external access. Local network connections bypass the login page automatically.
                         </p>
                     </div>
-                    <button onclick="saveConfig('auth')" data-save-section="auth" class="section-save-btn">💾 Save Auth</button>
                 </div>
                 
                 <div style="display: grid; grid-template-columns: auto 1fr; gap: 20px; align-items: start; margin-bottom: 20px;">
@@ -3484,7 +3476,6 @@
                             Restrict which IPs can send webhooks to BingeAlert and control application-level security settings. Changes require a container restart.
                         </p>
                     </div>
-                    <button onclick="saveConfig('security')" data-save-section="security" class="section-save-btn">💾 Save Security</button>
                 </div>
                 
                 <!-- Webhook IP Allowlist -->
@@ -3567,7 +3558,6 @@
                         <h3 style="margin-bottom: 15px; color: #e5a00d;">🔗 Connected Services</h3>
                         <p style="color: #999; margin-bottom: 20px; font-size: 13px;">Configure connections to your media management services.</p>
                     </div>
-                    <button onclick="saveConfig('connections')" data-save-section="connections" class="section-save-btn">💾 Save Connections</button>
                 </div>
 
             <div class="settings-service-grid">
@@ -6629,7 +6619,10 @@
         }
 
         async function saveConfig(section = 'all', triggerButton = null) {
-            const btn = triggerButton || document.querySelector(`[data-save-section="${section}"]`) || document.getElementById('saveConfigBtn');
+            const btn = triggerButton
+                || document.querySelector(`[data-save-section="${section}"]`)
+                || document.querySelector(`[data-save-section="${section}-footer"]`)
+                || document.getElementById('saveConfigBtn');
             const originalText = btn ? btn.textContent : '';
             const scrollY = window.scrollY;
             if (btn) {
