@@ -269,15 +269,16 @@ async def _notification_processor() -> None:
 
     while True:
         started_at = None
+        interval_seconds = max(30, min(300, int(settings.notification_check_frequency_seconds or 60)))
         try:
-            await asyncio.sleep(60)
+            await asyncio.sleep(interval_seconds)
             if is_maintenance_active():
                 logger.debug("maintenance active -- skipping notification drain")
                 continue
             started_at = record_worker_started(
                 "notification_processor",
                 "Notification processor",
-                next_run_at=datetime.utcnow() + timedelta(seconds=60),
+                next_run_at=datetime.utcnow() + timedelta(seconds=interval_seconds),
             )
             db = SessionLocal()
             try:
@@ -288,7 +289,7 @@ async def _notification_processor() -> None:
                 "notification_processor",
                 "Notification processor",
                 started_at=started_at,
-                next_run_at=datetime.utcnow() + timedelta(seconds=60),
+                next_run_at=datetime.utcnow() + timedelta(seconds=interval_seconds),
             )
         except asyncio.CancelledError:
             raise
@@ -299,7 +300,7 @@ async def _notification_processor() -> None:
                 "Notification processor",
                 e,
                 started_at=started_at,
-                next_run_at=datetime.utcnow() + timedelta(seconds=60),
+                next_run_at=datetime.utcnow() + timedelta(seconds=interval_seconds),
             )
 
 

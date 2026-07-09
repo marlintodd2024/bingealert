@@ -353,7 +353,9 @@ class EmailService:
             
             # ALSO check if there are more pending notifications for this series coming soon
             # (episodes that downloaded but haven't reached their send_after time yet)
-            future_window = now + timedelta(minutes=10)  # Look 10 minutes ahead
+            extension_minutes = max(1, min(10, int(settings.notification_extension_delay_minutes or 3)))
+            max_wait_minutes = max(5, min(60, int(settings.notification_max_wait_minutes or 20)))
+            future_window = now + timedelta(minutes=min(max_wait_minutes, 10))
             pending_notifications = db.query(Notification).filter(
                 Notification.sent == False,
                 Notification.user_id == notif.user_id,
@@ -366,12 +368,11 @@ class EmailService:
             
             # Calculate how old this notification is
             age_minutes = (now - notif.created_at).total_seconds() / 60
-            max_wait_minutes = 20  # Maximum 20 minutes total wait
             
             # Extend if: more episodes in queue OR more notifications pending
             if (queue_episodes or pending_notifications > 0) and age_minutes < max_wait_minutes:
                 # More episodes coming! Extend delay
-                extend_by = min(3, max_wait_minutes - age_minutes)  # Extend by 3 min or remaining time
+                extend_by = min(extension_minutes, max_wait_minutes - age_minutes)
                 new_send_after = now + timedelta(minutes=extend_by)
                 notif.send_after = new_send_after
                 db.commit()
@@ -389,7 +390,7 @@ class EmailService:
             # No more episodes coming OR hit max wait time - batch and send!
             # Find all notifications for same user + series that are ready OR will be ready soon
             # This ensures we don't split episodes that are just a minute apart
-            soon = now + timedelta(minutes=5)  # Include notifications ready within 5 minutes (increased from 2)
+            soon = now + timedelta(minutes=max(1, min(extension_minutes, 5)))
             batch = db.query(Notification).filter(
                 Notification.sent == False,
                 Notification.user_id == notif.user_id,

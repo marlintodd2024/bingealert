@@ -28,10 +28,13 @@ BingeAlert sits between your media stack and your users. It listens to every web
 - **Import failure auto-fix** — When Sonarr/Radarr import fails, the bad release is blocklisted and re-searched. Admin email when it happens.
 - **Issue auto-fix** — Issues reported in Seerr (bad audio, wrong subs, corrupted file) trigger a blacklist + re-search. Configurable as manual review, full auto, or auto-with-notification.
 - **Stuck download detection** — Background worker every 30 min; TBA episode titles are auto-fixed by refreshing metadata, true stalls trigger an admin alert.
+- **System health alerts** — Periodic checks for Plex, Seerr, Sonarr, Radarr, SMTP, and related services, with email/webhook/Pushover alert routing.
+- **Pushover push alerts** — Optional admin push notifications for service-health events, availability events, and Seerr issue activity.
 - **Shared requests** — Multiple users on a single request all get notified.
 - **Anime routing** — Auto-detects anime via TMDB metadata and routes to a dedicated Sonarr instance.
 - **Maintenance windows** — Schedule downtime with announcement, reminder, and completion emails. Pauses background workers automatically.
 - **Reconciliation** — Catches missed webhooks every 2h.
+- **Operations automation** — Configurable notification batching, sent-notification retention cleanup, scheduled backups, and per-section settings saves.
 - **Weekly summary** — Sundays 9am UTC.
 - **First-run wizard** — Web-based setup; no `.env` editing required.
 - **Required auth by default** — bcrypt password + HMAC session cookie + local-network CIDR bypass + optional Cloudflare Turnstile.
@@ -121,6 +124,50 @@ Auth is **required by default**. The wizard collects an admin password (bcrypt-h
 By default the local network CIDRs `192.168.0.0/16, 10.0.0.0/8, 172.16.0.0/12, 127.0.0.0/8` bypass the password — useful for home installs. Narrow them in the wizard if you prefer.
 
 To enable Cloudflare Turnstile on the login page, drop your site/secret keys into `config.json` and restart.
+
+### Operations automation
+
+The admin dashboard's **Settings** tab is organized into anchored sections with save buttons on each section, so you can update operations, batching, email, quality, issue handling, anime routing, reconciliation, auth, security, or connection settings without scrolling to one global save button.
+
+Under **Settings → Operations Automation** you can configure:
+
+- **Service Health** — periodic reachability checks for Plex, Seerr, Sonarr, Radarr, SMTP, and supporting services. SMTP failures are shown in System Health and can route to webhooks/Pushover, but BingeAlert does not try to email you through SMTP when SMTP itself is down.
+- **Alert Webhook** — generic JSON, Discord, Slack, or Pushover alert delivery for admin/operator alerts.
+- **Retention & Backups** — automatic sent-notification cleanup and scheduled local backups.
+
+Under **Settings → Notification Batching** you can tune the initial availability delay, batching extension window, maximum wait, and processor check frequency. These settings control how long BingeAlert waits for nearby episode imports before sending a consolidated notification.
+
+### Pushover push alerts
+
+BingeAlert can send operator push notifications through Pushover for service-health failures/recoveries, new episode/movie availability, and Seerr issues reported/resolved. This is an admin alert channel; user-facing availability emails still go through SMTP.
+
+1. Create or log into your Pushover account and make sure the Pushover app is installed on the devices that should receive BingeAlert alerts.
+2. Register a Pushover application at [pushover.net/apps/build](https://pushover.net/apps/build). Name it `BingeAlert` and optionally upload an icon. Copy the generated **Application API Token**.
+3. Copy your **User Key** from the Pushover dashboard, or use a Pushover group key if multiple operators should receive the same alerts.
+4. In BingeAlert, open **Admin → Settings → Operations Automation**.
+5. Under **Alert Webhook**, enable **Webhook Alerts**, set **Alert Provider** to **Pushover**, then paste:
+   - **Pushover App Token** = the application API token from step 2.
+   - **Pushover User/Group Key** = the user or group key from step 3.
+   - **Pushover Sound** = optional sound name such as `pushover`, `siren`, or `none`.
+6. Hover or focus the small `i` beside each Pushover field if you need an in-app reminder of where to get the value.
+7. Click **Send Test Push**. You should receive `BingeAlert test push`.
+8. Click **Save Operations**, then restart the container so the running settings singleton reloads.
+
+For config-file or environment-based installs, the relevant keys are:
+
+```json
+{
+  "alert_webhook_enabled": true,
+  "alert_webhook_type": "pushover",
+  "pushover_app_token": "APP_TOKEN_FROM_PUSHOVER",
+  "pushover_user_key": "USER_OR_GROUP_KEY_FROM_PUSHOVER",
+  "pushover_sound": "pushover"
+}
+```
+
+Equivalent `.env` names are `ALERT_WEBHOOK_ENABLED`, `ALERT_WEBHOOK_TYPE`, `PUSHOVER_APP_TOKEN`, `PUSHOVER_USER_KEY`, and `PUSHOVER_SOUND`.
+
+Pushover treats application tokens and user/group keys as private secrets. Leave saved secret fields blank in the BingeAlert UI unless you are replacing them.
 
 ---
 

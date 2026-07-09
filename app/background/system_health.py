@@ -25,6 +25,7 @@ from app.database import (
 )
 from app.security import clean_email_address, html_escape, normalize_http_url
 from app.services.email_service import EmailService
+from app.services.pushover_service import PushoverService
 
 
 logger = logging.getLogger(__name__)
@@ -291,7 +292,7 @@ async def _send_service_alert(kind: str, row_data: dict[str, Any]) -> bool:
 
 
 async def _send_webhook_alert(kind: str, row_data: dict[str, Any]) -> bool:
-    if not settings.alert_webhook_enabled or not settings.alert_webhook_url:
+    if not settings.alert_webhook_enabled:
         return False
 
     is_recovery = kind == "recovery"
@@ -308,6 +309,12 @@ async def _send_webhook_alert(kind: str, row_data: dict[str, Any]) -> bool:
         f"Error: {row_data.get('last_error') or 'none'}"
     )
     webhook_type = (settings.alert_webhook_type or "generic").strip().lower()
+    if webhook_type == "pushover":
+        return await PushoverService().send_service_health(kind, row_data)
+
+    if not settings.alert_webhook_url:
+        return False
+
     if webhook_type == "discord":
         payload = {
             "content": text,
@@ -335,10 +342,21 @@ async def _send_webhook_alert(kind: str, row_data: dict[str, Any]) -> bool:
     return True
 
 
+def _can_email_alert_service(row_data: dict[str, Any]) -> bool:
+    return row_data.get("service_key") != "smtp" and row_data.get("service_type") != "smtp"
+
+
 async def _send_alert_channels(kind: str, row_data: dict[str, Any]) -> None:
     if settings.service_health_email_alerts_enabled:
-        await _send_service_alert(kind, row_data)
-    if settings.alert_webhook_enabled and settings.alert_webhook_url:
+        if _can_email_alert_service(row_data):
+            await _send_service_alert(kind, row_data)
+        else:
+            logger.info(
+                "service health email alert skipped for %s because SMTP is the email transport",
+                row_data.get("service_key"),
+            )
+    webhook_type = (settings.alert_webhook_type or "generic").strip().lower()
+    if settings.alert_webhook_enabled and (settings.alert_webhook_url or webhook_type == "pushover"):
         await _send_webhook_alert(kind, row_data)
 
 

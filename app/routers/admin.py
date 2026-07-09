@@ -211,10 +211,23 @@ async def validate_config():
             try:
                 normalize_http_url(_s.public_base_url)
                 add("email", "Public base URL", "ok", _s.public_base_url)
-            except ValueError as e:
-                add("email", "Public base URL", "error", str(e))
+            except ValueError:
+                add("email", "Public base URL", "error", "Invalid public base URL")
         else:
             add("email", "Public base URL", "warn", "Not set; email calendar links are omitted")
+
+        if _s.alert_webhook_type == "pushover" or _s.pushover_app_token or _s.pushover_user_key:
+            pushover_configured = bool(_s.pushover_app_token and _s.pushover_user_key)
+            if _s.alert_webhook_enabled and _s.alert_webhook_type == "pushover":
+                status = "ok" if pushover_configured else "error"
+            else:
+                status = "ok" if pushover_configured else "warn"
+            add(
+                "integrations",
+                "Pushover",
+                status,
+                "Configured" if pushover_configured else "Missing app token or user/group key",
+            )
 
         from app.background.system_health import run_service_health_checks
 
@@ -226,11 +239,17 @@ async def validate_config():
                 status = "ok"
             else:
                 status = "error"
+            if status == "ok":
+                message = "Reachability check passed"
+            elif status == "warn":
+                message = "Service is not configured"
+            else:
+                message = "Reachability check failed; see System Health for details"
             add(
                 "integrations",
                 service.get("service_name") or service.get("service_key"),
                 status,
-                service.get("last_error") or service.get("status") or "unknown",
+                message,
             )
 
         summary = {
@@ -242,7 +261,12 @@ async def validate_config():
         return {"checks": checks, "summary": summary, "checked_at": datetime.utcnow().isoformat()}
     except Exception as e:
         logger.error(f"Config validation failed: {e}", exc_info=True)
-        record_admin_activity("config_validate", "Configuration validation failed", status="error", details={"error": str(e)})
+        record_admin_activity(
+            "config_validate",
+            "Configuration validation failed",
+            status="error",
+            details={"error": "Configuration validation failed"},
+        )
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -1255,16 +1279,12 @@ async def get_config():
         except ValueError:
             smtp_security = "starttls"
 
-        # NOTIFICATION_* timing values were never actually consumed by any worker
-        # in v1 -- the email service has its own hardcoded thresholds. They're
-        # echoed back unchanged so the admin UI keeps showing fields the user
-        # remembers, but POST /config drops them.
         config = {
             "timing": {
-                "initial_delay_minutes": 7,
-                "extension_delay_minutes": 3,
-                "max_wait_minutes": 20,
-                "check_frequency_seconds": 60,
+                "initial_delay_minutes": _s.notification_initial_delay_minutes,
+                "extension_delay_minutes": _s.notification_extension_delay_minutes,
+                "max_wait_minutes": _s.notification_max_wait_minutes,
+                "check_frequency_seconds": _s.notification_check_frequency_seconds,
             },
             "smtp": {
                 "host": _s.smtp_host or "",
@@ -1309,6 +1329,9 @@ async def get_config():
                 "alert_webhook_enabled": _s.alert_webhook_enabled,
                 "alert_webhook_url": _mask_secret(_s.alert_webhook_url),
                 "alert_webhook_type": _s.alert_webhook_type,
+                "pushover_app_token": _mask_secret(_s.pushover_app_token),
+                "pushover_user_key": _mask_secret(_s.pushover_user_key),
+                "pushover_sound": _s.pushover_sound or "",
                 "notification_retention_enabled": _s.notification_retention_enabled,
                 "notification_retention_days": _s.notification_retention_days,
                 "notification_retention_interval_hours": _s.notification_retention_interval_hours,
@@ -1423,6 +1446,14 @@ async def update_config(config: dict, db: Session = Depends(get_db)):
             return
         label_updates.append(label or settings_key.upper())
 
+    def bounded_int(min_value: int, max_value: int):
+        def _transform(value):
+            number = int(value)
+            if number < min_value or number > max_value:
+                raise ValueError
+            return number
+        return _transform
+
     # SMTP / email
     take(["smtp", "host"], "smtp_host")
     take(["smtp", "port"], "smtp_port", transform=int)
@@ -1439,6 +1470,16 @@ async def update_config(config: dict, db: Session = Depends(get_db)):
     # slash trimmed; empty allowed (footer injection skips when blank).
     take(["public_base_url"], "public_base_url",
          transform=lambda v: normalize_http_url(v, allow_empty=True), allow_empty=True)
+
+    # Notification batching / processor timing
+    take(["timing", "initial_delay_minutes"], "notification_initial_delay_minutes",
+         transform=bounded_int(1, 30))
+    take(["timing", "extension_delay_minutes"], "notification_extension_delay_minutes",
+         transform=bounded_int(1, 10))
+    take(["timing", "max_wait_minutes"], "notification_max_wait_minutes",
+         transform=bounded_int(5, 60))
+    take(["timing", "check_frequency_seconds"], "notification_check_frequency_seconds",
+         transform=bounded_int(30, 300))
 
     # Seerr / Sonarr / Radarr / Plex
     take(["jellyseerr", "url"], "jellyseerr_url", transform=normalize_http_url)
@@ -1469,11 +1510,14 @@ async def update_config(config: dict, db: Session = Depends(get_db)):
          transform=lambda v: normalize_http_url(v, allow_empty=True), secret=True, allow_empty=True)
     webhook_type = str(config.get("operations", {}).get("alert_webhook_type", "")).strip().lower()
     if webhook_type:
-        if webhook_type not in {"generic", "discord", "slack"}:
+        if webhook_type not in {"generic", "discord", "slack", "pushover"}:
             validation_errors.append("ALERT_WEBHOOK_TYPE")
         else:
             updates["alert_webhook_type"] = webhook_type
             label_updates.append("ALERT_WEBHOOK_TYPE")
+    take(["operations", "pushover_app_token"], "pushover_app_token", secret=True)
+    take(["operations", "pushover_user_key"], "pushover_user_key", secret=True)
+    take(["operations", "pushover_sound"], "pushover_sound", allow_empty=True)
     take(["operations", "notification_retention_enabled"], "notification_retention_enabled", transform=bool)
     take(["operations", "notification_retention_days"], "notification_retention_days", transform=int)
     take(["operations", "notification_retention_interval_hours"], "notification_retention_interval_hours", transform=int)
@@ -2373,6 +2417,49 @@ async def test_email_connection(data: dict):
         
     except Exception as e:
         logger.error(f"SMTP test failed: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/test-pushover")
+async def test_pushover_connection(data: dict):
+    """Send a Pushover test notification using posted or saved credentials."""
+    try:
+        from app.config import settings as _s
+        from app.services.pushover_service import PushoverService
+
+        app_token = str(data.get("app_token") or "").strip()
+        user_key = str(data.get("user_key") or "").strip()
+        sound = str(data.get("sound") or "").strip()
+
+        if not app_token or _is_masked_value(app_token):
+            app_token = _s.pushover_app_token or ""
+        if not user_key or _is_masked_value(user_key):
+            user_key = _s.pushover_user_key or ""
+
+        if not app_token or not user_key:
+            raise HTTPException(
+                status_code=400,
+                detail="Pushover app token and user/group key are required",
+            )
+
+        success = await PushoverService().send(
+            title="BingeAlert test push",
+            message="Pushover alerts are connected.",
+            priority=0,
+            app_token=app_token,
+            user_key=user_key,
+            sound=sound or None,
+            require_enabled=False,
+        )
+        if not success:
+            raise HTTPException(status_code=500, detail="Pushover test failed")
+
+        record_admin_activity("test_pushover", "Sent Pushover test notification")
+        return {"success": True, "message": "Pushover test notification sent"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Pushover test failed: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 

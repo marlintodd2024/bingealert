@@ -101,6 +101,11 @@ class Settings(BaseSettings):
     admin_email: Optional[str] = None  # falls back to smtp_from at use site
 
     # ----- Feature toggles (carried forward from v1.5.x) -----
+    notification_initial_delay_minutes: int = 7
+    notification_extension_delay_minutes: int = 3
+    notification_max_wait_minutes: int = 20
+    notification_check_frequency_seconds: int = 60
+
     quality_monitor_enabled: bool = True
     quality_monitor_interval_hours: int = 24
     quality_waiting_delay_seconds: int = 300
@@ -114,7 +119,10 @@ class Settings(BaseSettings):
 
     alert_webhook_enabled: bool = False
     alert_webhook_url: Optional[str] = None
-    alert_webhook_type: str = "generic"  # generic | discord | slack
+    alert_webhook_type: str = "generic"  # generic | discord | slack | pushover
+    pushover_app_token: Optional[str] = None
+    pushover_user_key: Optional[str] = None
+    pushover_sound: Optional[str] = None
 
     notification_retention_enabled: bool = False
     notification_retention_days: int = 90

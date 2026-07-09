@@ -3,7 +3,7 @@ import hmac
 import ipaddress
 from sqlalchemy.orm import Session
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
 
 from app.database import get_db, MediaRequest, EpisodeTracking, Notification, User, SessionLocal
@@ -14,6 +14,7 @@ from app.services.notification_history import (
     has_delivery,
     movie_dedupe_key,
 )
+from app.services.pushover_service import PushoverService
 from app.services.sonarr_service import SonarrService
 from app.config import settings
 from app.security import clean_email_address, sanitize_for_log
@@ -157,6 +158,11 @@ def _check_webhook_auth(request: Request):
     raise HTTPException(status_code=403, detail="Forbidden")
 
 email_service = EmailService()
+
+
+def _notification_initial_delay() -> timedelta:
+    minutes = max(1, min(30, int(settings.notification_initial_delay_minutes or 7)))
+    return timedelta(minutes=minutes)
 
 
 async def _process_pending_notifications_background():
@@ -387,10 +393,8 @@ async def sonarr_webhook(
                 )
                 subject = f"New Episode: {webhook.series.title} S{ep['season']:02d}E{ep['episode']:02d}"
 
-                # Set send_after to 7 minutes from now (420 seconds)
-                # This gives time for: 2 min batch window + 5 min Plex indexing
-                from datetime import timedelta
-                send_after = datetime.utcnow() + timedelta(seconds=420)
+                # Give Plex time to index and let nearby episode imports batch.
+                send_after = datetime.utcnow() + _notification_initial_delay()
 
                 notification = Notification(
                     user_id=batch['user'].id,
@@ -424,6 +428,23 @@ async def sonarr_webhook(
                 # Re-raise other errors
                 db.rollback()
                 raise
+
+        if notifications_created > 0:
+            pushover_episodes = []
+            seen_episode_keys = set()
+            for batch in user_episode_batches.values():
+                for ep in batch.get('episodes', []):
+                    key = (ep.get('season'), ep.get('episode'))
+                    if key in seen_episode_keys:
+                        continue
+                    seen_episode_keys.add(key)
+                    pushover_episodes.append(ep)
+            background_tasks.add_task(
+                PushoverService().send_episode_available,
+                series_title=webhook.series.title,
+                episodes=pushover_episodes,
+                notification_count=notifications_created,
+            )
         
         # Check if this download resolves any reported issues
         background_tasks.add_task(_check_issue_resolution, webhook.series.tmdbId, "tv")
@@ -581,9 +602,7 @@ async def radarr_webhook(
                         poster_url=poster_url
                     )
                     
-                    # Set send_after to 5 minutes from now (300 seconds) to allow Plex to index
-                    from datetime import timedelta
-                    send_after = datetime.utcnow() + timedelta(seconds=300)
+                    send_after = datetime.utcnow() + _notification_initial_delay()
                     
                     notification = Notification(
                         user_id=user.id,
@@ -601,6 +620,13 @@ async def radarr_webhook(
             request.status = "available"
         
         db.commit()
+
+        if notifications_created > 0:
+            background_tasks.add_task(
+                PushoverService().send_movie_available,
+                movie_title=webhook.movie.title,
+                notification_count=notifications_created,
+            )
         
         # Check if this download resolves any reported issues
         background_tasks.add_task(_check_issue_resolution, webhook.movie.tmdbId, "movie")
@@ -644,7 +670,7 @@ async def jellyseerr_webhook(
             return await _handle_issue_webhook(webhook, background_tasks, db)
         
         if notification_type == 'ISSUE_RESOLVED':
-            return await _handle_issue_resolved_webhook(webhook, db)
+            return await _handle_issue_resolved_webhook(webhook, background_tasks, db)
         
         if notification_type == 'ISSUE_REOPENED':
             return await _handle_issue_reopened_webhook(webhook, db)
@@ -958,6 +984,15 @@ async def _handle_issue_webhook(webhook: dict, background_tasks: BackgroundTasks
         # Get autofix mode
         import os
         autofix_mode = os.getenv("ISSUE_AUTOFIX_MODE", app_settings.issue_autofix_mode)
+
+        background_tasks.add_task(
+            PushoverService().send_issue_reported,
+            title=title,
+            media_type=media_type,
+            issue_type=issue_type,
+            reported_by=reported_by_username or reported_by_email or "Unknown",
+            autofix_mode=autofix_mode,
+        )
         
         # Send admin notification (always in manual, optionally in auto modes)
         if autofix_mode == "manual" or autofix_mode == "auto_notify":
@@ -983,7 +1018,7 @@ async def _handle_issue_webhook(webhook: dict, background_tasks: BackgroundTasks
         return WebhookResponse(success=False, message=f"Error: {str(e)}")
 
 
-async def _handle_issue_resolved_webhook(webhook: dict, db: Session):
+async def _handle_issue_resolved_webhook(webhook: dict, background_tasks: BackgroundTasks, db: Session):
     """Handle ISSUE_RESOLVED webhook from Seerr — mark matching issues as resolved"""
     from app.database import ReportedIssue
     from datetime import datetime
@@ -1012,6 +1047,14 @@ async def _handle_issue_resolved_webhook(webhook: dict, db: Session):
         
         db.commit()
         logger.info(f"Issue resolved via Seerr: TMDB {tmdb_id} — marked {resolved_count} issue(s) as resolved")
+
+        if resolved_count > 0:
+            background_tasks.add_task(
+                PushoverService().send_issue_resolved,
+                title=open_issues[0].title if open_issues else f"TMDB {tmdb_id}",
+                media_type=media_type,
+                resolved_count=resolved_count,
+            )
         
         return WebhookResponse(
             success=True,
@@ -1223,8 +1266,7 @@ async def _check_issue_resolution(tmdb_id: int, media_type: str):
                         poster_url=poster_url
                     )
                     
-                    from datetime import timedelta
-                    send_after = datetime.utcnow() + timedelta(seconds=300)  # 5 min delay for Plex indexing
+                    send_after = datetime.utcnow() + _notification_initial_delay()
                     
                     notification = Notification(
                         user_id=issue.user_id,
@@ -1238,6 +1280,11 @@ async def _check_issue_resolution(tmdb_id: int, media_type: str):
                     logger.info(f"Queued 'Issue Resolved' notification for user {issue.user.email}")
             
             db.commit()
+            await PushoverService().send_issue_resolved(
+                title=fixing_issues[0].title,
+                media_type=media_type,
+                resolved_count=len(fixing_issues),
+            )
         finally:
             db.close()
     except Exception as e:

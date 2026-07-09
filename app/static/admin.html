@@ -182,7 +182,7 @@
             gap: 10px;
             margin-bottom: 18px;
             overflow-x: auto;
-            padding-bottom: 4px;
+            padding: 2px 2px 6px;
             scrollbar-gutter: stable;
             -webkit-overflow-scrolling: touch;
         }
@@ -197,13 +197,13 @@
             display: flex;
             flex-direction: column;
             justify-content: center;
-            transition: border-color 0.2s, background 0.2s, transform 0.2s;
+            transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
         }
 
         .stat-card:hover {
-            transform: translateY(-1px);
             background: rgba(255, 255, 255, 0.075);
             border-color: rgba(229, 160, 13, 0.35);
+            box-shadow: inset 0 0 0 1px rgba(229, 160, 13, 0.08);
         }
 
         .stat-label {
@@ -551,9 +551,93 @@
         }
         .settings-card {
             background: rgba(255, 255, 255, 0.05);
-            padding: 20px;
-            border-radius: 12px;
-            margin-bottom: 20px;
+            padding: 18px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+        .settings-shell {
+            display: grid;
+            grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
+            gap: 18px;
+            align-items: start;
+        }
+        .settings-nav {
+            position: sticky;
+            top: 14px;
+            display: grid;
+            gap: 6px;
+            max-height: calc(100vh - 28px);
+            overflow: auto;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.045);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+        }
+        .settings-nav-label {
+            color: #777;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            margin: 2px 8px 4px;
+            text-transform: uppercase;
+        }
+        .settings-nav a {
+            display: block;
+            padding: 8px 10px;
+            border-radius: 6px;
+            color: #cfd3da;
+            font-size: 12px;
+            line-height: 1.25;
+            text-decoration: none;
+        }
+        .settings-nav a:hover {
+            background: rgba(229, 160, 13, 0.12);
+            color: #f4c542;
+        }
+        .settings-content {
+            min-width: 0;
+        }
+        .settings-section {
+            scroll-margin-top: 18px;
+        }
+        .settings-section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+        .settings-section-header h3 {
+            margin: 0 0 8px !important;
+        }
+        .settings-section-header p {
+            color: #999;
+            font-size: 13px;
+            line-height: 1.6;
+            margin: 0 !important;
+        }
+        .settings-section-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+        .section-save-btn {
+            padding: 8px 12px;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+        .settings-service-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 16px;
+        }
+        .settings-save-row {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            flex-wrap: wrap;
         }
         .settings-grid {
             display: grid;
@@ -566,6 +650,59 @@
             color: #e5a00d;
             font-size: 13px;
             font-weight: bold;
+        }
+        .settings-field label.label-with-help {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            max-width: 100%;
+            position: relative;
+        }
+        .field-help {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            border: 1px solid rgba(229, 160, 13, 0.45);
+            color: #e5a00d;
+            background: rgba(229, 160, 13, 0.1);
+            cursor: help;
+            flex: 0 0 auto;
+            font-size: 12px;
+            font-weight: 800;
+            line-height: 1;
+        }
+        .field-help::after {
+            content: attr(data-help);
+            position: absolute;
+            left: calc(100% + 10px);
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 40;
+            width: min(320px, calc(100vw - 56px));
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(229, 160, 13, 0.28);
+            background: #171717;
+            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+            color: #e4e4e4;
+            font-size: 12px;
+            font-weight: 500;
+            line-height: 1.45;
+            text-transform: none;
+            white-space: normal;
+            pointer-events: none;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.15s ease, visibility 0.15s ease;
+        }
+        .field-help:hover::after,
+        .field-help:focus::after {
+            opacity: 1;
+            visibility: visible;
         }
         .settings-field input,
         .settings-field select {
@@ -1259,6 +1396,39 @@
 
             div[style*="grid-template-columns: 2fr 1fr"] {
                 grid-template-columns: 1fr !important;
+            }
+
+            .settings-shell {
+                grid-template-columns: 1fr;
+            }
+
+            .settings-nav {
+                position: static;
+                display: flex;
+                gap: 6px;
+                overflow-x: auto;
+                max-height: none;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .settings-nav-label {
+                display: none;
+            }
+
+            .settings-nav a {
+                flex: 0 0 auto;
+                white-space: nowrap;
+            }
+
+            .settings-service-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .field-help::after {
+                left: auto;
+                right: 0;
+                top: calc(100% + 8px);
+                transform: none;
             }
         }
 
@@ -1958,6 +2128,8 @@
         #backupTab > div[style*="background: rgba(255, 255, 255, 0.05)"],
         #maintenanceTab > div[style*="background: rgba(255, 255, 255, 0.05)"],
         #settingsTab > div[style*="background: rgba(255, 255, 255, 0.05)"],
+        #settingsTab .settings-content > div[style*="background: rgba(255, 255, 255, 0.05)"],
+        #settingsTab .settings-card,
         #upcomingGroupedContent > div[style*="background: rgba(255, 255, 255, 0.05)"] {
             background: var(--surface) !important;
             border: 1px solid var(--border-soft) !important;
@@ -2335,7 +2507,7 @@
                 </select>
                 <button onclick="loadIssues(true)" class="secondary" style="padding: 10px 15px;">🔄 Refresh</button>
             </div>
-            
+
             <div class="data-table">
                 <table>
                     <thead>
@@ -2599,8 +2771,24 @@
         </div>
 
         <div id="settingsTab" class="tab-content">
+            <div class="settings-shell">
+                <nav class="settings-nav" aria-label="Settings sections">
+                    <div class="settings-nav-label">Settings</div>
+                    <a href="#settings-updates">Updates</a>
+                    <a href="#settings-operations">Operations</a>
+                    <a href="#settings-timing">Batching</a>
+                    <a href="#settings-email">Email</a>
+                    <a href="#settings-quality">Quality</a>
+                    <a href="#settings-issues">Issues</a>
+                    <a href="#settings-anime">Anime Routing</a>
+                    <a href="#settings-reconciliation">Reconciliation</a>
+                    <a href="#settings-auth">Auth</a>
+                    <a href="#settings-security">Security</a>
+                    <a href="#settings-connections">Connections</a>
+                </nav>
+                <div class="settings-content">
             <!-- System Updates Section -->
-            <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 12px; margin-bottom: 20px;">
+            <div id="settings-updates" class="settings-card settings-section" style="background: rgba(255, 255, 255, 0.05);">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; flex-wrap: wrap;">
                     <div>
                         <h3 style="margin-bottom: 8px; color: #e5a00d;">⬆️ System & Updates</h3>
@@ -2654,13 +2842,16 @@
             </div>
 
             <!-- Operations Automation Section -->
-            <div class="settings-card">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; flex-wrap: wrap;">
+            <div id="settings-operations" class="settings-card settings-section">
+                <div class="settings-section-header">
                     <div>
                         <h3 style="margin-bottom: 8px; color: #e5a00d;">🩺 Operations Automation</h3>
                         <p style="color: #999; font-size: 13px; line-height: 1.6; margin: 0;">Periodic service checks, alert routing, notification cleanup, scheduled backups, and config validation.</p>
                     </div>
-                    <button onclick="runConfigValidation()" id="configValidateBtn" class="secondary" style="padding: 8px 12px; font-size: 12px;">✅ Validate Config</button>
+                    <div class="settings-section-actions">
+                        <button onclick="runConfigValidation()" id="configValidateBtn" class="secondary section-save-btn">✅ Validate Config</button>
+                        <button onclick="saveConfig('operations')" data-save-section="operations" class="section-save-btn">💾 Save Operations</button>
+                    </div>
                 </div>
 
                 <h4 style="margin: 0 0 12px; color: #fff; font-size: 14px;">Service Health</h4>
@@ -2678,6 +2869,7 @@
                             <input type="checkbox" id="config-service-health-email-alerts">
                             <span>Email admin when services fail</span>
                         </div>
+                        <small>SMTP outages stay in System Health and webhooks instead of trying to email through SMTP.</small>
                     </div>
                     <div class="settings-field">
                         <label>Interval</label>
@@ -2707,21 +2899,52 @@
                         <label>Webhook Alerts</label>
                         <div class="inline-switch">
                             <input type="checkbox" id="config-alert-webhook-enabled">
-                            <span>Send alerts to a webhook</span>
+                            <span>Send alerts to a webhook or Pushover</span>
                         </div>
                     </div>
                     <div class="settings-field">
-                        <label>Webhook Type</label>
-                        <select id="config-alert-webhook-type">
+                        <label>Alert Provider</label>
+                        <select id="config-alert-webhook-type" onchange="syncAlertProviderFields()">
                             <option value="generic">Generic JSON</option>
                             <option value="discord">Discord</option>
                             <option value="slack">Slack</option>
+                            <option value="pushover">Pushover</option>
                         </select>
                     </div>
-                    <div class="settings-field" style="grid-column: 1 / -1;">
+                    <div class="settings-field" id="config-alert-webhook-url-field" style="grid-column: 1 / -1;">
                         <label>Webhook URL</label>
                         <input type="password" id="config-alert-webhook-url" placeholder="Leave blank to keep current">
                         <small>Stored as a secret. Leave blank when saving unless replacing it.</small>
+                    </div>
+                    <div id="config-pushover-fields" class="settings-grid" style="grid-column: 1 / -1; display: none;">
+                        <div class="settings-field">
+                            <label class="label-with-help">
+                                Pushover App Token
+                                <span class="field-help" tabindex="0" role="button" aria-label="How to get a Pushover app token" data-help="Create a Pushover application at pushover.net/apps/build. Copy the Application API Token from that app and paste it here.">i</span>
+                            </label>
+                            <input type="password" id="config-pushover-app-token" placeholder="Leave blank to keep current">
+                            <small>Application API token from Pushover.</small>
+                        </div>
+                        <div class="settings-field">
+                            <label class="label-with-help">
+                                Pushover User/Group Key
+                                <span class="field-help" tabindex="0" role="button" aria-label="How to get a Pushover user or group key" data-help="Copy your User Key from the Pushover dashboard after logging in. To notify multiple admins, create a Pushover delivery group and paste the group key instead.">i</span>
+                            </label>
+                            <input type="password" id="config-pushover-user-key" placeholder="Leave blank to keep current">
+                            <small>Your user key or group key.</small>
+                        </div>
+                        <div class="settings-field">
+                            <label class="label-with-help">
+                                Pushover Sound
+                                <span class="field-help" tabindex="0" role="button" aria-label="How to choose a Pushover sound" data-help="Optional. Use a Pushover sound name like pushover, siren, vibrate, or none. Leave blank to use the default sound for your Pushover account.">i</span>
+                            </label>
+                            <input type="text" id="config-pushover-sound" placeholder="Optional, e.g. pushover">
+                            <small>Optional sound name. Leave blank for Pushover default.</small>
+                        </div>
+                        <div class="settings-field" style="grid-column: 1 / -1;">
+                            <button onclick="testPushover()" id="testPushoverBtn" class="secondary section-save-btn">Send Test Push</button>
+                            <small>Uses the values above, or saved values if the fields are masked.</small>
+                        </div>
                     </div>
                 </div>
 
@@ -2767,12 +2990,17 @@
             </div>
 
             <!-- Batch Timing Section -->
-            <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 12px; margin-bottom: 20px;">
-                <h3 style="margin-bottom: 10px; color: #e5a00d;">⏱️ Smart Batching Settings</h3>
-                <p style="color: #999; margin-bottom: 20px; font-size: 13px; line-height: 1.6;">
-                    The portal automatically groups multiple episodes into single emails to prevent notification spam. 
-                    When an episode downloads, it waits for more episodes and intelligently batches them together.
-                </p>
+            <div id="settings-timing" class="settings-card settings-section" style="background: rgba(255, 255, 255, 0.05);">
+                <div class="settings-section-header">
+                    <div>
+                        <h3 style="margin-bottom: 10px; color: #e5a00d;">⏱️ Smart Batching Settings</h3>
+                        <p style="color: #999; margin-bottom: 20px; font-size: 13px; line-height: 1.6;">
+                            The portal automatically groups multiple episodes into single emails to prevent notification spam.
+                            When an episode downloads, it waits for more episodes and intelligently batches them together.
+                        </p>
+                    </div>
+                    <button onclick="saveConfig('timing')" data-save-section="timing" class="section-save-btn">💾 Save Batching</button>
+                </div>
                 
                 <div style="background: rgba(229, 160, 13, 0.1); padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #e5a00d;">
                     <strong style="color: #e5a00d;">How it works:</strong><br>
@@ -2813,9 +3041,14 @@
             </div>
 
             <!-- Email Settings Section -->
-            <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 12px; margin-bottom: 20px;">
-                <h3 style="margin-bottom: 10px; color: #e5a00d;">📧 Email Settings</h3>
-                <p style="color: #999; margin-bottom: 20px; font-size: 13px;">Configure your SMTP server and email sender details.</p>
+            <div id="settings-email" class="settings-card settings-section" style="background: rgba(255, 255, 255, 0.05);">
+                <div class="settings-section-header">
+                    <div>
+                        <h3 style="margin-bottom: 10px; color: #e5a00d;">📧 Email Settings</h3>
+                        <p style="color: #999; margin-bottom: 20px; font-size: 13px;">Configure your SMTP server and email sender details.</p>
+                    </div>
+                    <button onclick="saveConfig('email')" data-save-section="email" class="section-save-btn">💾 Save Email</button>
+                </div>
                 
                 <!-- SMTP Server -->
                 <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
@@ -2886,11 +3119,16 @@
             </div>
 
             <!-- Quality Monitoring Section -->
-            <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 12px; margin-bottom: 20px;">
-                <h3 style="margin-bottom: 10px; color: #e5a00d;">🔍 Quality & Release Monitoring</h3>
-                <p style="color: #999; margin-bottom: 20px; font-size: 13px; line-height: 1.6;">
-                    Automatically notify users when their requested content isn't available yet due to release dates or quality profile settings.
-                </p>
+            <div id="settings-quality" class="settings-card settings-section" style="background: rgba(255, 255, 255, 0.05);">
+                <div class="settings-section-header">
+                    <div>
+                        <h3 style="margin-bottom: 10px; color: #e5a00d;">🔍 Quality & Release Monitoring</h3>
+                        <p style="color: #999; margin-bottom: 20px; font-size: 13px; line-height: 1.6;">
+                            Automatically notify users when their requested content isn't available yet due to release dates or quality profile settings.
+                        </p>
+                    </div>
+                    <button onclick="saveConfig('quality')" data-save-section="quality" class="section-save-btn">💾 Save Quality</button>
+                </div>
                 
                 <div style="background: rgba(138, 43, 226, 0.1); padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #8a2be2;">
                     <strong style="color: #8a2be2;">How it works:</strong><br>
@@ -2954,11 +3192,16 @@
             </div>
 
             <!-- Issue Auto-fix Section -->
-            <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 12px; margin-bottom: 20px;">
-                <h3 style="margin-bottom: 10px; color: #f44336;">🚨 Issue Auto-fix</h3>
-                <p style="color: #999; margin-bottom: 20px; font-size: 13px; line-height: 1.6;">
-                    When users report issues in Seerr (bad audio, wrong subtitles, corrupted video, etc.), the portal can automatically blacklist the current file and trigger a new search in Sonarr/Radarr.
-                </p>
+            <div id="settings-issues" class="settings-card settings-section" style="background: rgba(255, 255, 255, 0.05);">
+                <div class="settings-section-header">
+                    <div>
+                        <h3 style="margin-bottom: 10px; color: #f44336;">🚨 Issue Auto-fix</h3>
+                        <p style="color: #999; margin-bottom: 20px; font-size: 13px; line-height: 1.6;">
+                            When users report issues in Seerr (bad audio, wrong subtitles, corrupted video, etc.), the portal can automatically blacklist the current file and trigger a new search in Sonarr/Radarr.
+                        </p>
+                    </div>
+                    <button onclick="saveConfig('issue')" data-save-section="issue" class="section-save-btn">💾 Save Issues</button>
+                </div>
                 
                 <div style="background: rgba(244, 67, 54, 0.1); padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #f44336;">
                     <strong style="color: #f44336;">How it works:</strong><br>
@@ -2992,11 +3235,16 @@
             </div>
 
             <!-- Seerr Anime Overrides -->
-            <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 12px; margin-bottom: 20px;">
-                <h3 style="margin-bottom: 10px; color: #e5a00d;">🎌 Seerr Anime Routing</h3>
-                <p style="color: #999; margin-bottom: 15px; font-size: 13px; line-height: 1.6;">
-                    When using Request on Behalf, BingeAlert auto-detects anime (Animation genre + Japanese origin) and routes it to your anime Sonarr instance in Seerr. Configure the server and profile IDs below.
-                </p>
+            <div id="settings-anime" class="settings-card settings-section" style="background: rgba(255, 255, 255, 0.05);">
+                <div class="settings-section-header">
+                    <div>
+                        <h3 style="margin-bottom: 10px; color: #e5a00d;">🎌 Seerr Anime Routing</h3>
+                        <p style="color: #999; margin-bottom: 15px; font-size: 13px; line-height: 1.6;">
+                            When using Request on Behalf, BingeAlert auto-detects anime (Animation genre + Japanese origin) and routes it to your anime Sonarr instance in Seerr. Configure the server and profile IDs below.
+                        </p>
+                    </div>
+                    <button onclick="saveConfig('anime')" data-save-section="anime" class="section-save-btn">💾 Save Anime</button>
+                </div>
                 
                 <div style="margin-bottom: 15px;">
                     <button onclick="discoverSeerrServers()" class="action-btn" style="margin-bottom: 10px;">🔍 Discover Seerr Sonarr Servers</button>
@@ -3024,11 +3272,16 @@
             </div>
 
             <!-- Reconciliation & Issue Cleanup -->
-            <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 12px; margin-bottom: 20px;">
-                <h3 style="margin-bottom: 10px; color: #e5a00d;">🔄 Reconciliation & Issue Cleanup</h3>
-                <p style="color: #999; margin-bottom: 20px; font-size: 13px; line-height: 1.6;">
-                    The reconciliation worker periodically checks for missed webhooks, orphaned episodes, and stale issues that need cleanup.
-                </p>
+            <div id="settings-reconciliation" class="settings-card settings-section" style="background: rgba(255, 255, 255, 0.05);">
+                <div class="settings-section-header">
+                    <div>
+                        <h3 style="margin-bottom: 10px; color: #e5a00d;">🔄 Reconciliation & Issue Cleanup</h3>
+                        <p style="color: #999; margin-bottom: 20px; font-size: 13px; line-height: 1.6;">
+                            The reconciliation worker periodically checks for missed webhooks, orphaned episodes, and stale issues that need cleanup.
+                        </p>
+                    </div>
+                    <button onclick="saveConfig('reconciliation')" data-save-section="reconciliation" class="section-save-btn">💾 Save Reconciliation</button>
+                </div>
                 
                 <div style="background: rgba(76, 175, 80, 0.1); padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #4CAF50;">
                     <strong style="color: #4CAF50;">How it works:</strong><br>
@@ -3107,11 +3360,16 @@
             </div>
 
             <!-- Authentication & Security Section -->
-            <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 12px; margin-bottom: 20px;">
-                <h3 style="margin-bottom: 10px; color: #e5a00d;">🔐 Authentication & Security</h3>
-                <p style="color: #999; margin-bottom: 20px; font-size: 13px; line-height: 1.6;">
-                    Require a password for external access. Local network connections bypass the login page automatically.
-                </p>
+            <div id="settings-auth" class="settings-card settings-section" style="background: rgba(255, 255, 255, 0.05);">
+                <div class="settings-section-header">
+                    <div>
+                        <h3 style="margin-bottom: 10px; color: #e5a00d;">🔐 Authentication & Security</h3>
+                        <p style="color: #999; margin-bottom: 20px; font-size: 13px; line-height: 1.6;">
+                            Require a password for external access. Local network connections bypass the login page automatically.
+                        </p>
+                    </div>
+                    <button onclick="saveConfig('auth')" data-save-section="auth" class="section-save-btn">💾 Save Auth</button>
+                </div>
                 
                 <div style="display: grid; grid-template-columns: auto 1fr; gap: 20px; align-items: start; margin-bottom: 20px;">
                     <div style="display: flex; align-items: center; gap: 10px;">
@@ -3187,11 +3445,16 @@
             </div>
 
             <!-- Webhook & Application Security Section -->
-            <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 12px; margin-bottom: 20px;">
-                <h3 style="margin-bottom: 10px; color: #e5a00d;">🛡️ Webhook & Application Security</h3>
-                <p style="color: #999; margin-bottom: 20px; font-size: 13px; line-height: 1.6;">
-                    Restrict which IPs can send webhooks to BingeAlert and control application-level security settings. Changes require a container restart.
-                </p>
+            <div id="settings-security" class="settings-card settings-section" style="background: rgba(255, 255, 255, 0.05);">
+                <div class="settings-section-header">
+                    <div>
+                        <h3 style="margin-bottom: 10px; color: #e5a00d;">🛡️ Webhook & Application Security</h3>
+                        <p style="color: #999; margin-bottom: 20px; font-size: 13px; line-height: 1.6;">
+                            Restrict which IPs can send webhooks to BingeAlert and control application-level security settings. Changes require a container restart.
+                        </p>
+                    </div>
+                    <button onclick="saveConfig('security')" data-save-section="security" class="section-save-btn">💾 Save Security</button>
+                </div>
                 
                 <!-- Webhook IP Allowlist -->
                 <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
@@ -3264,10 +3527,16 @@
             </div>
 
             <!-- Services Section -->
-            <h3 style="margin-bottom: 15px; color: #e5a00d;">🔗 Connected Services</h3>
-            <p style="color: #999; margin-bottom: 20px; font-size: 13px;">Configure connections to your media management services.</p>
-            
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+            <div id="settings-connections" class="settings-card settings-section">
+                <div class="settings-section-header">
+                    <div>
+                        <h3 style="margin-bottom: 15px; color: #e5a00d;">🔗 Connected Services</h3>
+                        <p style="color: #999; margin-bottom: 20px; font-size: 13px;">Configure connections to your media management services.</p>
+                    </div>
+                    <button onclick="saveConfig('connections')" data-save-section="connections" class="section-save-btn">💾 Save Connections</button>
+                </div>
+
+            <div class="settings-service-grid">
                 <!-- Overseerr/Jellyseerr -->
                 <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 12px;">
                     <h3 style="margin-bottom: 10px; color: #e5a00d;">🎬 Overseerr / Jellyseerr</h3>
@@ -3390,10 +3659,14 @@
                 </div>
             </div>
 
-            <div style="text-align: right;">
+            </div>
+
+            <div class="settings-save-row">
                 <button onclick="loadConfig()" class="secondary" style="margin-right: 10px;">↻ Reload</button>
                 <button onclick="restartContainer()" style="background: #ff9800; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; margin-right: 10px;">🔄 Restart</button>
-                <button onclick="saveConfig()" id="saveConfigBtn">💾 Save</button>
+                <button onclick="saveConfig()" id="saveConfigBtn">💾 Save All</button>
+            </div>
+                </div>
             </div>
         </div>
 
@@ -5881,6 +6154,45 @@
             document.getElementById('config-webhook-secret-hint').style.color = '#e5a00d';
         }
 
+        function syncAlertProviderFields() {
+            const provider = document.getElementById('config-alert-webhook-type')?.value || 'generic';
+            const webhookUrlField = document.getElementById('config-alert-webhook-url-field');
+            const pushoverFields = document.getElementById('config-pushover-fields');
+            if (webhookUrlField) webhookUrlField.style.display = provider === 'pushover' ? 'none' : '';
+            if (pushoverFields) pushoverFields.style.display = provider === 'pushover' ? 'grid' : 'none';
+        }
+
+        async function testPushover() {
+            const btn = document.getElementById('testPushoverBtn');
+            const originalText = btn ? btn.textContent : '';
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'Sending...';
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/admin/test-pushover`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        app_token: document.getElementById('config-pushover-app-token').value,
+                        user_key: document.getElementById('config-pushover-user-key').value,
+                        sound: document.getElementById('config-pushover-sound').value.trim()
+                    })
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.detail || 'Pushover test failed');
+                showToast('success', data.message || 'Pushover test notification sent', { duration: 5000 });
+            } catch (error) {
+                showError('Pushover test failed: ' + error.message);
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = originalText || 'Send Test Push';
+                }
+            }
+        }
+
         function updateSecurityChecklist(config) {
             const el = document.getElementById('security-checklist');
             if (!el) return;
@@ -6000,6 +6312,10 @@
                     document.getElementById('config-alert-webhook-enabled').checked = config.operations.alert_webhook_enabled === true;
                     document.getElementById('config-alert-webhook-type').value = config.operations.alert_webhook_type || 'generic';
                     document.getElementById('config-alert-webhook-url').value = config.operations.alert_webhook_url || '';
+                    document.getElementById('config-pushover-app-token').value = config.operations.pushover_app_token || '';
+                    document.getElementById('config-pushover-user-key').value = config.operations.pushover_user_key || '';
+                    document.getElementById('config-pushover-sound').value = config.operations.pushover_sound || '';
+                    syncAlertProviderFields();
                     document.getElementById('config-notification-retention-enabled').checked = config.operations.notification_retention_enabled === true;
                     document.getElementById('config-notification-retention-days').value = config.operations.notification_retention_days || '90';
                     document.getElementById('config-notification-retention-interval').value = config.operations.notification_retention_interval_hours || '24';
@@ -6091,36 +6407,44 @@
             }
         }
 
-        async function saveConfig() {
-            const btn = document.getElementById('saveConfigBtn');
-            // Capture scroll position so the user stays where they were after save
-            const scrollY = window.scrollY;
-            btn.disabled = true;
-            btn.textContent = '⏳ Saving...';
-            
-            try {
-                // Helper to build URL from host+port
-                const buildUrl = (hostId, portId) => {
-                    const host = document.getElementById(hostId).value.trim();
-                    const port = document.getElementById(portId).value.trim();
-                    if (!host) return '';
-                    
-                    // If host already has protocol, use as-is
-                    if (host.startsWith('http://') || host.startsWith('https://')) {
-                        return host;
-                    }
-                    
-                    // Build URL from host:port
-                    return `http://${host}${port ? ':' + port : ''}`;
-                };
-                
-                const config = {
+        const CONFIG_SAVE_LABELS = {
+            all: 'All settings',
+            timing: 'Smart batching settings',
+            email: 'Email settings',
+            connections: 'Connected services',
+            quality: 'Quality monitoring',
+            issue: 'Issue auto-fix',
+            anime: 'Anime routing',
+            reconciliation: 'Reconciliation settings',
+            auth: 'Authentication settings',
+            security: 'Security settings',
+            operations: 'Operations settings'
+        };
+
+        function buildConfigUrl(hostId, portId) {
+            const host = document.getElementById(hostId).value.trim();
+            const port = document.getElementById(portId).value.trim();
+            if (!host) return '';
+            if (host.startsWith('http://') || host.startsWith('https://')) return host;
+            return `http://${host}${port ? ':' + port : ''}`;
+        }
+
+        function configInt(id, fallback) {
+            const value = parseInt(document.getElementById(id).value, 10);
+            return Number.isFinite(value) ? value : fallback;
+        }
+
+        function buildConfigSection(section = 'all') {
+            const builders = {
+                timing: () => ({
                     timing: {
-                        initial_delay_minutes: parseInt(document.getElementById('config-initial-delay').value),
-                        extension_delay_minutes: parseInt(document.getElementById('config-extension-delay').value),
-                        max_wait_minutes: parseInt(document.getElementById('config-max-wait').value),
-                        check_frequency_seconds: parseInt(document.getElementById('config-check-frequency').value)
-                    },
+                        initial_delay_minutes: configInt('config-initial-delay', 7),
+                        extension_delay_minutes: configInt('config-extension-delay', 3),
+                        max_wait_minutes: configInt('config-max-wait', 20),
+                        check_frequency_seconds: configInt('config-check-frequency', 60)
+                    }
+                }),
+                email: () => ({
                     smtp: {
                         host: document.getElementById('config-smtp-host').value,
                         port: document.getElementById('config-smtp-port').value,
@@ -6134,56 +6458,70 @@
                         password: document.getElementById('config-smtp-password').value
                     },
                     admin_email: document.getElementById('config-admin-email').value.trim(),
-                    public_base_url: document.getElementById('config-public-base-url').value.trim(),
+                    public_base_url: document.getElementById('config-public-base-url').value.trim()
+                }),
+                connections: () => ({
                     jellyseerr: {
-                        url: buildUrl('config-jellyseerr-host', 'config-jellyseerr-port'),
+                        url: buildConfigUrl('config-jellyseerr-host', 'config-jellyseerr-port'),
                         api_key: document.getElementById('config-jellyseerr-api').value
                     },
                     sonarr: {
-                        url: buildUrl('config-sonarr-host', 'config-sonarr-port'),
+                        url: buildConfigUrl('config-sonarr-host', 'config-sonarr-port'),
                         api_key: document.getElementById('config-sonarr-api').value
                     },
                     sonarr_anime: {
-                        url: document.getElementById('config-sonarr-anime-host').value ? buildUrl('config-sonarr-anime-host', 'config-sonarr-anime-port') : '',
+                        url: document.getElementById('config-sonarr-anime-host').value ? buildConfigUrl('config-sonarr-anime-host', 'config-sonarr-anime-port') : '',
                         api_key: document.getElementById('config-sonarr-anime-api').value
                     },
                     radarr: {
-                        url: buildUrl('config-radarr-host', 'config-radarr-port'),
+                        url: buildConfigUrl('config-radarr-host', 'config-radarr-port'),
                         api_key: document.getElementById('config-radarr-api').value
                     },
                     plex: {
-                        url: buildUrl('config-plex-host', 'config-plex-port'),
+                        url: buildConfigUrl('config-plex-host', 'config-plex-port'),
                         token: document.getElementById('config-plex-token').value
-                    },
+                    }
+                }),
+                quality: () => ({
                     quality_monitor: {
                         enabled: document.getElementById('config-quality-monitor-enabled').checked,
-                        interval_hours: parseInt(document.getElementById('config-quality-monitor-interval').value),
-                        waiting_delay_seconds: parseInt(document.getElementById('config-quality-waiting-delay').value)
-                    },
+                        interval_hours: configInt('config-quality-monitor-interval', 24),
+                        waiting_delay_seconds: configInt('config-quality-waiting-delay', 300)
+                    }
+                }),
+                issue: () => ({
                     issue_autofix: {
                         mode: document.getElementById('config-issue-autofix-mode').value
-                    },
+                    }
+                }),
+                anime: () => ({
                     seerr_anime: {
                         server_id: document.getElementById('config-seerr-anime-server-id').value,
                         profile_id: document.getElementById('config-seerr-anime-profile-id').value,
                         root_folder: document.getElementById('config-seerr-anime-root-folder').value
-                    },
+                    }
+                }),
+                reconciliation: () => ({
                     reconciliation: {
-                        interval_hours: parseInt(document.getElementById('config-recon-interval').value),
-                        notification_lookback_days: parseInt(document.getElementById('config-recon-notification-lookback').value),
-                        issue_fixing_cutoff_hours: parseInt(document.getElementById('config-recon-fixing-cutoff').value),
-                        issue_reported_cutoff_hours: parseInt(document.getElementById('config-recon-reported-cutoff').value),
-                        issue_abandon_days: parseInt(document.getElementById('config-recon-abandon-days').value)
-                    },
+                        interval_hours: configInt('config-recon-interval', 2),
+                        notification_lookback_days: configInt('config-recon-notification-lookback', 90),
+                        issue_fixing_cutoff_hours: configInt('config-recon-fixing-cutoff', 1),
+                        issue_reported_cutoff_hours: configInt('config-recon-reported-cutoff', 24),
+                        issue_abandon_days: configInt('config-recon-abandon-days', 7)
+                    }
+                }),
+                auth: () => ({
                     auth: {
                         enabled: document.getElementById('config-auth-enabled').checked,
                         password: document.getElementById('config-auth-password').value,
                         local_network_cidr: document.getElementById('config-auth-local-cidr').value,
-                        session_timeout_hours: parseInt(document.getElementById('config-auth-session-timeout').value),
+                        session_timeout_hours: configInt('config-auth-session-timeout', 24),
                         turnstile_enabled: document.getElementById('config-turnstile-enabled').checked,
                         turnstile_site_key: document.getElementById('config-turnstile-site-key').value,
                         turnstile_secret_key: document.getElementById('config-turnstile-secret-key').value
-                    },
+                    }
+                }),
+                security: () => ({
                     security: {
                         webhook_allowed_ips: document.getElementById('config-webhook-allowed-ips').value.trim(),
                         webhook_secret: document.getElementById('config-webhook-secret').value,
@@ -6191,48 +6529,76 @@
                         environment: document.getElementById('config-environment').value,
                         app_secret_key: (() => {
                             const input = document.getElementById('config-app-secret-key');
-                            // Only send if user generated a new key (not the masked placeholder)
                             return input.readOnly ? '' : input.value;
                         })()
-                    },
+                    }
+                }),
+                operations: () => ({
                     operations: {
                         service_health_enabled: document.getElementById('config-service-health-enabled').checked,
                         service_health_email_alerts_enabled: document.getElementById('config-service-health-email-alerts').checked,
-                        service_health_interval_minutes: parseInt(document.getElementById('config-service-health-interval').value),
-                        service_health_failure_threshold: parseInt(document.getElementById('config-service-health-threshold').value),
-                        service_health_alert_cooldown_minutes: parseInt(document.getElementById('config-service-health-cooldown').value),
-                        service_health_history_days: parseInt(document.getElementById('config-service-health-history-days').value),
+                        service_health_interval_minutes: configInt('config-service-health-interval', 15),
+                        service_health_failure_threshold: configInt('config-service-health-threshold', 2),
+                        service_health_alert_cooldown_minutes: configInt('config-service-health-cooldown', 240),
+                        service_health_history_days: configInt('config-service-health-history-days', 14),
                         alert_webhook_enabled: document.getElementById('config-alert-webhook-enabled').checked,
                         alert_webhook_type: document.getElementById('config-alert-webhook-type').value,
                         alert_webhook_url: document.getElementById('config-alert-webhook-url').value,
+                        pushover_app_token: document.getElementById('config-pushover-app-token').value,
+                        pushover_user_key: document.getElementById('config-pushover-user-key').value,
+                        pushover_sound: document.getElementById('config-pushover-sound').value.trim(),
                         notification_retention_enabled: document.getElementById('config-notification-retention-enabled').checked,
-                        notification_retention_days: parseInt(document.getElementById('config-notification-retention-days').value),
-                        notification_retention_interval_hours: parseInt(document.getElementById('config-notification-retention-interval').value),
+                        notification_retention_days: configInt('config-notification-retention-days', 90),
+                        notification_retention_interval_hours: configInt('config-notification-retention-interval', 24),
                         backup_schedule_enabled: document.getElementById('config-backup-schedule-enabled').checked,
-                        backup_schedule_interval_hours: parseInt(document.getElementById('config-backup-schedule-interval').value),
-                        backup_schedule_retention_count: parseInt(document.getElementById('config-backup-schedule-retention').value)
+                        backup_schedule_interval_hours: configInt('config-backup-schedule-interval', 168),
+                        backup_schedule_retention_count: configInt('config-backup-schedule-retention', 8)
                     }
-                };
-                
+                })
+            };
+
+            if (section === 'all') {
+                return Object.assign({}, ...Object.keys(builders).map(key => builders[key]()));
+            }
+            if (!builders[section]) throw new Error(`Unknown settings section: ${section}`);
+            return builders[section]();
+        }
+
+        async function saveConfig(section = 'all') {
+            const btn = document.querySelector(`[data-save-section="${section}"]`) || document.getElementById('saveConfigBtn');
+            const originalText = btn ? btn.textContent : '';
+            const scrollY = window.scrollY;
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = '⏳ Saving...';
+            }
+
+            try {
+                const config = buildConfigSection(section);
                 const response = await fetch(`${API_BASE}/admin/config`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(config)
                 });
                 
-                const result = await response.json();
+                const result = await response.json().catch(() => ({}));
                 
                 if (response.ok) {
-                    showToast('success', 'Settings saved — restart to apply password / secret-key changes.', { duration: 5000 });
+                    const label = CONFIG_SAVE_LABELS[section] || 'Settings';
+                    const restartNote = ['all', 'auth', 'security', 'connections'].includes(section)
+                        ? ' Restart if you changed auth, secrets, or service endpoints.'
+                        : '';
+                    showToast('success', `${label} saved.${restartNote}`, { duration: 5000 });
                 } else {
                     showError(result.detail || 'Failed to save configuration');
                 }
             } catch (error) {
                 showError('Failed to save configuration: ' + error.message);
             } finally {
-                btn.disabled = false;
-                btn.textContent = '💾 Save Configuration';
-                // Restore scroll position so the page doesn't jump after save
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = originalText || '💾 Save';
+                }
                 window.scrollTo({ top: scrollY, behavior: 'instant' in window ? 'instant' : 'auto' });
             }
         }
