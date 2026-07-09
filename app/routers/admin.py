@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 import logging
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.database import (
     AdminActivityLog,
@@ -13,9 +13,12 @@ from app.database import (
     MediaRequest,
     EpisodeTracking,
     Notification,
+    ReportedIssue,
+    ServiceHealthStatus,
     SharedRequest,
     SystemConfig,
     MaintenanceWindow,
+    WorkerHealthStatus,
 )
 from app.services.jellyseerr_sync import JellyseerrSyncService
 from app.services.email_service import EmailService
@@ -102,6 +105,218 @@ async def get_stats(db: Session = Depends(get_db)):
         return stats
     except Exception as e:
         logger.error(f"Failed to get stats: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/daily-brief")
+async def get_daily_brief(db: Session = Depends(get_db)):
+    """Return a compact admin action summary for the dashboard."""
+    try:
+        now = datetime.utcnow()
+        since = now - timedelta(hours=24)
+        overdue_cutoff = now - timedelta(hours=1)
+
+        def count(query):
+            return int(query.scalar() or 0)
+
+        total_users = count(db.query(func.count(User.id)))
+        active_users = count(db.query(func.count(User.id)).filter(User.is_active == True))
+        requests_created_24h = count(
+            db.query(func.count(MediaRequest.id)).filter(MediaRequest.created_at >= since)
+        )
+        requests_fulfilled_24h = count(
+            db.query(func.count(MediaRequest.id)).filter(
+                MediaRequest.status == "available",
+                MediaRequest.updated_at >= since,
+            )
+        )
+        tracking_requests = count(
+            db.query(func.count(MediaRequest.id)).filter(MediaRequest.status != "available")
+        )
+        notifications_sent_24h = count(
+            db.query(func.count(Notification.id)).filter(
+                Notification.sent == True,
+                Notification.sent_at >= since,
+            )
+        )
+        pending_notifications = count(
+            db.query(func.count(Notification.id)).filter(Notification.sent == False)
+        )
+        ready_notifications = count(
+            db.query(func.count(Notification.id)).filter(
+                Notification.sent == False,
+                or_(Notification.send_after == None, Notification.send_after <= now),
+            )
+        )
+        overdue_notifications = count(
+            db.query(func.count(Notification.id)).filter(
+                Notification.sent == False,
+                Notification.send_after != None,
+                Notification.send_after <= overdue_cutoff,
+            )
+        )
+        failed_notifications = count(
+            db.query(func.count(Notification.id)).filter(
+                Notification.sent == False,
+                Notification.error_message != None,
+                Notification.error_message != "",
+            )
+        )
+        open_issues = count(
+            db.query(func.count(ReportedIssue.id)).filter(
+                ReportedIssue.status.in_(["reported", "fixing", "failed"])
+            )
+        )
+        issues_reported_24h = count(
+            db.query(func.count(ReportedIssue.id)).filter(ReportedIssue.created_at >= since)
+        )
+        issues_resolved_24h = count(
+            db.query(func.count(ReportedIssue.id)).filter(
+                ReportedIssue.resolved_at != None,
+                ReportedIssue.resolved_at >= since,
+            )
+        )
+
+        services = db.query(ServiceHealthStatus).order_by(ServiceHealthStatus.service_name.asc()).all()
+        workers = db.query(WorkerHealthStatus).order_by(WorkerHealthStatus.worker_name.asc()).all()
+        unhealthy_services = [
+            service for service in services
+            if service.configured and service.status in {"degraded", "down"}
+        ]
+        worker_errors = [
+            worker for worker in workers
+            if worker.status in {"error", "failed"}
+        ]
+
+        actions = []
+
+        def add_action(severity, title, detail, target_tab, item_count, intent=None):
+            actions.append({
+                "severity": severity,
+                "title": title,
+                "detail": detail,
+                "target_tab": target_tab,
+                "count": int(item_count or 0),
+                "intent": intent or target_tab,
+            })
+
+        if unhealthy_services:
+            names = ", ".join(service.service_name for service in unhealthy_services[:3])
+            if len(unhealthy_services) > 3:
+                names += f" +{len(unhealthy_services) - 3} more"
+            add_action(
+                "critical",
+                "Service reachability needs attention",
+                names,
+                "health",
+                len(unhealthy_services),
+                "service_health",
+            )
+        if worker_errors:
+            names = ", ".join(worker.worker_name for worker in worker_errors[:3])
+            if len(worker_errors) > 3:
+                names += f" +{len(worker_errors) - 3} more"
+            add_action(
+                "critical",
+                "Background worker errors",
+                names,
+                "health",
+                len(worker_errors),
+                "worker_health",
+            )
+        if failed_notifications:
+            add_action(
+                "critical",
+                "Notification failures",
+                "Pending notifications have stored delivery errors.",
+                "notifications",
+                failed_notifications,
+                "failed_notifications",
+            )
+        if overdue_notifications:
+            add_action(
+                "warning",
+                "Queue items are overdue",
+                "Pending notifications are more than 1 hour past their send time.",
+                "notifications",
+                overdue_notifications,
+                "overdue_notifications",
+            )
+        if open_issues:
+            add_action(
+                "warning",
+                "Open reported issues",
+                "Review user-reported playback or media issues.",
+                "issues",
+                open_issues,
+                "open_issues",
+            )
+        if tracking_requests:
+            add_action(
+                "info",
+                "Requests still waiting",
+                "Approved or pending requests are not available yet.",
+                "requests",
+                tracking_requests,
+                "tracking_requests",
+            )
+        if pending_notifications and not overdue_notifications and not failed_notifications:
+            add_action(
+                "info",
+                "Notifications queued",
+                "Queued notifications are waiting for their delivery window.",
+                "notifications",
+                pending_notifications,
+                "pending_notifications",
+            )
+        if not active_users and total_users:
+            add_action(
+                "warning",
+                "No active users",
+                "All synced users are currently inactive.",
+                "users",
+                total_users,
+                "inactive_users",
+            )
+
+        if not actions:
+            add_action(
+                "success",
+                "No urgent admin work",
+                "Services, workers, queue, and reported issues look quiet.",
+                "health",
+                0,
+                "all_clear",
+            )
+
+        severity_rank = {"critical": 0, "warning": 1, "info": 2, "success": 3}
+        actions.sort(key=lambda item: (severity_rank.get(item["severity"], 9), -item["count"]))
+
+        return {
+            "generated_at": now.isoformat(),
+            "window_hours": 24,
+            "summary": {
+                "active_users": active_users,
+                "inactive_users": max(0, total_users - active_users),
+                "requests_created_24h": requests_created_24h,
+                "requests_fulfilled_24h": requests_fulfilled_24h,
+                "tracking_requests": tracking_requests,
+                "notifications_sent_24h": notifications_sent_24h,
+                "pending_notifications": pending_notifications,
+                "ready_notifications": ready_notifications,
+                "overdue_notifications": overdue_notifications,
+                "failed_notifications": failed_notifications,
+                "open_issues": open_issues,
+                "issues_reported_24h": issues_reported_24h,
+                "issues_resolved_24h": issues_resolved_24h,
+                "unhealthy_services": len(unhealthy_services),
+                "worker_errors": len(worker_errors),
+                "configured_services": sum(1 for service in services if service.configured),
+            },
+            "actions": actions,
+        }
+    except Exception as e:
+        logger.error(f"Failed to get daily brief: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -363,6 +578,7 @@ async def list_notifications(
                 "sent": n.sent,
                 "sent_at": n.sent_at.isoformat() + 'Z' if n.sent_at else None,
                 "send_after": n.send_after.isoformat() + 'Z' if n.send_after else None,
+                "error_message": n.error_message,
                 "created_at": n.created_at.isoformat() + 'Z' if n.created_at else None
             }
             for n in notifications
