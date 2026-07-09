@@ -371,6 +371,51 @@ Exit criteria:
 
 ---
 
+## Phase 8 - Staging Soak and Production Launch
+
+Purpose: run the release candidate beside production under its real hostname,
+prove the upgrade and operational workflows, then publish `v3.0.0`.
+
+Status: in progress on `codex/v3.0-ops-cockpit`.
+
+Deliverables:
+
+- Isolated branch-built Docker stack:
+  - `bingealert-v3-dev` project and container
+  - `bingealert:v3-staging` local image
+  - `127.0.0.1:8010` reverse-proxy target
+  - separate `data-v3-dev/` persistence
+  - `https://binge.dev.marlintodd.com` public URL
+- Production-like smoke testing:
+  - setup and migration behavior
+  - service and worker health
+  - SMTP/Pushover routing to staging destinations
+  - sanitized webhook ingest and replay
+  - reports, timelines, user portal, and digest delivery
+- At least 24 hours of staging soak with worker, database, and notification
+  error review.
+- Fresh production file inventory and drift check after staging passes.
+- Merge, `v3.0.0` tag, GitHub release, multi-architecture GHCR package, and
+  post-deployment verification.
+
+Safety rules:
+
+- Staging never mounts production `./data/`.
+- SMTP and alert routes use staging-only destinations during the soak.
+- Live Seerr/Sonarr/Radarr webhooks are not mirrored until duplicate user
+  notifications are contained.
+- The public tag is not created before the fresh production drift check.
+
+Exit criteria:
+
+- The branch runs at `binge.dev.marlintodd.com` for at least 24 hours without
+  unexplained worker failures, notification duplication, or database errors.
+- Upgrade and rollback steps are rehearsed from an isolated backup.
+- Production drift is zero or explicitly reconciled.
+- `v3.0.0` images pass `linux/amd64` and `linux/arm64` package verification.
+
+---
+
 ## Stretch Candidates
 
 These are useful, but should not block v3.0 unless they become easy while
@@ -391,8 +436,9 @@ building the core phases.
 3. `v3.0-beta1` - Webhook Inbox and Replay.
 4. `v3.0-beta2` - Queue, Import, and Storage Health.
 5. `v3.0-rc1` - User Status and Preferences.
-6. `v3.0-rc1` - Digests, reports, preferences, and release hardening.
-7. `v3.0` - Drift check, final package verification, tag, and public release.
+6. `v3.0-rc2` - Digests, reports, preferences, and release hardening.
+7. Branch staging - `binge.dev.marlintodd.com` deployment and soak.
+8. `v3.0` - Drift check, final package verification, tag, and public release.
 
 ## Open Decisions
 

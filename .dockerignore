@@ -4,6 +4,7 @@
 .env
 .env.example
 data/
+data-v3-dev/
 docker-compose*.yml
 *.sh
 LICENSE

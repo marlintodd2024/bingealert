@@ -89,6 +89,28 @@ docker compose -f docker-compose.ghcr.yml up -d
 
 Open `http://your-host:8000`. The setup wizard runs on first boot; fill in six steps and click **Save & Start**. The container restarts and lands you on the login page.
 
+### Test the v3 branch alongside production
+
+The branch includes an isolated staging stack for
+`https://binge.dev.marlintodd.com`. It builds the checked-out branch as
+`bingealert:v3-staging`, listens on `127.0.0.1:8010`, and stores everything in
+`./data-v3-dev/` so it cannot overwrite the normal `./data/` installation.
+
+```bash
+git switch codex/v3.0-ops-cockpit
+git pull --ff-only origin codex/v3.0-ops-cockpit
+mkdir -p data-v3-dev && sudo chown -R 1000:1000 data-v3-dev
+export DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
+export BINGEALERT_BUILD_SHA=$(git rev-parse --short HEAD)
+docker compose -f docker-compose.v3-staging.yml up -d --build
+```
+
+Point the staging reverse proxy or tunnel at `http://127.0.0.1:8010`. Use a
+test SMTP destination and keep live upstream webhooks disconnected until
+duplicate user alerts are impossible. The full deployment, smoke-test, update,
+and rollback procedure is in
+[the v3 staging runbook](docs/V3_STAGING_DEPLOYMENT.md).
+
 ### What lives where
 
 ```
