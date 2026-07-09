@@ -204,6 +204,17 @@ Implementation notes:
 - Prefer Sonarr/Radarr APIs for queue and root-folder data.
 - Plex indexing checks should be bounded and cached.
 - Do not poll aggressively; make intervals configurable.
+- Initial v3 slice adds a live `/admin/ops-health` endpoint and Health-tab
+  sections for Sonarr/Radarr queue diagnostics, root-folder/disk free space, and
+  import-to-Plex notification lag.
+- Queue classification flags import failures, stalled/failed items, no-seeder
+  hints, download-client errors, and slow queue items. The existing stuck
+  download worker remains responsible for automated remediation and email alerts.
+- Storage uses Sonarr/Radarr `/rootfolder` and `/diskspace` data with conservative
+  built-in warning thresholds until per-admin thresholds are added.
+- Import-to-Plex lag is inferred from BingeAlert tracking, notification, and
+  delivery-ledger rows; live Plex library probes remain a follow-up to avoid
+  expensive searches on every dashboard load.
 
 Exit criteria:
 

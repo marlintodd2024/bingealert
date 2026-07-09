@@ -3068,6 +3068,18 @@
                     <div class="stat-label">Check Interval</div>
                     <div class="stat-value compact" id="healthInterval">-</div>
                 </div>
+                <div class="health-summary-card">
+                    <div class="stat-label">Queue Problems</div>
+                    <div class="stat-value compact" id="healthQueueProblems">-</div>
+                </div>
+                <div class="health-summary-card">
+                    <div class="stat-label">Low Storage</div>
+                    <div class="stat-value compact" id="healthLowStorage">-</div>
+                </div>
+                <div class="health-summary-card">
+                    <div class="stat-label">Lag Items</div>
+                    <div class="stat-value compact" id="healthLagItems">-</div>
+                </div>
             </div>
 
             <h3 style="margin: 18px 0 12px; color: #e5a00d;">Connected Services</h3>
@@ -3087,6 +3099,67 @@
                     </thead>
                     <tbody id="serviceHealthTableBody">
                         <tr><td colspan="8" class="loading"><div class="spinner"></div>Loading service health...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h3 style="margin: 24px 0 12px; color: #e5a00d;">Acquisition Queue</h3>
+            <div class="data-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="sortable" onclick="sortTable('opsQueue', 'service_name')">Service</th>
+                            <th class="sortable" onclick="sortTable('opsQueue', 'title')">Title</th>
+                            <th class="sortable" onclick="sortTable('opsQueue', 'severity')">Health</th>
+                            <th class="sortable" onclick="sortTable('opsQueue', 'status')">Queue Status</th>
+                            <th class="sortable" onclick="sortTable('opsQueue', 'age_hours')">Age</th>
+                            <th class="sortable" onclick="sortTable('opsQueue', 'progress_percent')">Progress</th>
+                            <th>Client</th>
+                            <th>Reason</th>
+                        </tr>
+                    </thead>
+                    <tbody id="opsQueueTableBody">
+                        <tr><td colspan="8" class="loading"><div class="spinner"></div>Loading queue diagnostics...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h3 style="margin: 24px 0 12px; color: #e5a00d;">Storage & Root Folders</h3>
+            <div class="data-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="sortable" onclick="sortTable('opsStorage', 'service_name')">Service</th>
+                            <th class="sortable" onclick="sortTable('opsStorage', 'row_type')">Type</th>
+                            <th class="sortable" onclick="sortTable('opsStorage', 'path')">Path</th>
+                            <th class="sortable" onclick="sortTable('opsStorage', 'status')">Status</th>
+                            <th class="sortable" onclick="sortTable('opsStorage', 'free_bytes')">Free</th>
+                            <th class="sortable" onclick="sortTable('opsStorage', 'free_percent')">Free %</th>
+                            <th>Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody id="opsStorageTableBody">
+                        <tr><td colspan="7" class="loading"><div class="spinner"></div>Loading storage diagnostics...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h3 style="margin: 24px 0 12px; color: #e5a00d;">Import-to-Plex Lag</h3>
+            <div class="data-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="sortable" onclick="sortTable('opsLag', 'severity')">Health</th>
+                            <th class="sortable" onclick="sortTable('opsLag', 'state')">State</th>
+                            <th class="sortable" onclick="sortTable('opsLag', 'title')">Title</th>
+                            <th class="sortable" onclick="sortTable('opsLag', 'media_type')">Type</th>
+                            <th>Detail</th>
+                            <th class="sortable" onclick="sortTable('opsLag', 'updated_at')">Updated</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="opsLagTableBody">
+                        <tr><td colspan="7" class="loading"><div class="spinner"></div>Loading lag diagnostics...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -4381,8 +4454,13 @@
         let allServiceHealth = [];
         let allWorkerHealth = [];
         let allHealthEvents = [];
+        let allOpsQueue = [];
+        let allOpsStorage = [];
+        let allOpsLag = [];
         let allWebhookEvents = [];
         let allActivity = [];
+        let systemHealthProblemCount = 0;
+        let opsHealthProblemCount = 0;
         let upcomingViewMode = 'grouped'; // 'grouped' or 'list'
         let activityViewMode = 'feed'; // 'feed' or 'logs'
         
@@ -4398,6 +4476,9 @@
             serviceHealth: { column: 'status', direction: 'asc' },
             workerHealth: { column: 'status', direction: 'asc' },
             healthEvents: { column: 'checked_at', direction: 'desc' },
+            opsQueue: { column: 'severity', direction: 'asc' },
+            opsStorage: { column: 'status', direction: 'asc' },
+            opsLag: { column: 'severity', direction: 'asc' },
             webhooks: { column: 'created_at', direction: 'desc' },
             activity: { column: 'created_at', direction: 'desc' }
         };
@@ -4424,7 +4505,7 @@
         function persistSort(tab) { ssSave('sort.' + tab, sortState[tab]); }
         function persistFilter(tab, payload) { ssSave('filter.' + tab, payload); }
         function loadPersistedSort() {
-            ['users','requests','notifications','upcoming','issues','backups','maintenance','serviceHealth','workerHealth','healthEvents','webhooks','activity'].forEach(tab => {
+            ['users','requests','notifications','upcoming','issues','backups','maintenance','serviceHealth','workerHealth','healthEvents','opsQueue','opsStorage','opsLag','webhooks','activity'].forEach(tab => {
                 const saved = ssLoad('sort.' + tab, null);
                 if (saved && saved.column) sortState[tab] = saved;
             });
@@ -4435,7 +4516,10 @@
                 backups: 'backupTab',
                 serviceHealth: 'healthTab',
                 workerHealth: 'healthTab',
-                healthEvents: 'healthTab'
+                healthEvents: 'healthTab',
+                opsQueue: 'healthTab',
+                opsStorage: 'healthTab',
+                opsLag: 'healthTab'
             };
             const tabEl = document.getElementById(tabContainerMap[tab] || (tab + 'Tab'));
             if (!tabEl) return;
@@ -4464,6 +4548,16 @@
             return data.slice().sort((a, b) => {
                 let aVal = a[column];
                 let bVal = b[column];
+                if (column === 'severity' || column === 'status') {
+                    const rank = { error: 0, failed: 0, down: 0, critical: 0, warning: 1, degraded: 1, info: 2, running: 2, unknown: 3, not_configured: 3, ok: 4, success: 4, sent: 4 };
+                    const aRank = rank[String(aVal || '').toLowerCase()];
+                    const bRank = rank[String(bVal || '').toLowerCase()];
+                    if (aRank !== undefined || bRank !== undefined) {
+                        const av = aRank === undefined ? 9 : aRank;
+                        const bv = bRank === undefined ? 9 : bRank;
+                        return direction === 'asc' ? av - bv : bv - av;
+                    }
+                }
                 if (column.includes('_at') || ['air_date', 'created', 'start_time', 'end_time', 'next_run_at', 'last_success_at', 'last_checked_at'].includes(column)) {
                     const aTime = aVal ? new Date(aVal).getTime() : 0;
                     const bTime = bVal ? new Date(bVal).getTime() : 0;
@@ -5760,6 +5854,34 @@
             return `${(num / 1000).toFixed(1)} s`;
         }
 
+        function formatBytes(bytes) {
+            if (bytes === null || bytes === undefined || bytes === '') return '-';
+            const num = Number(bytes);
+            if (!Number.isFinite(num)) return '-';
+            const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+            let value = Math.abs(num);
+            let unit = 0;
+            while (value >= 1024 && unit < units.length - 1) {
+                value /= 1024;
+                unit += 1;
+            }
+            const sign = num < 0 ? '-' : '';
+            const decimals = unit <= 1 ? 0 : 1;
+            return `${sign}${value.toFixed(decimals)} ${units[unit]}`;
+        }
+
+        function formatHours(value) {
+            if (value === null || value === undefined || value === '') return '-';
+            const num = Number(value);
+            if (!Number.isFinite(num)) return '-';
+            if (num < 1) return `${Math.max(1, Math.round(num * 60))} min`;
+            return `${num.toFixed(1)} h`;
+        }
+
+        function updateHealthBadge() {
+            updateTabCount('health', Number(systemHealthProblemCount || 0) + Number(opsHealthProblemCount || 0));
+        }
+
         async function loadSystemHealth(force) {
             const btn = document.getElementById('healthCheckBtn');
             if (btn && force) {
@@ -5779,7 +5901,8 @@
                 allWorkerHealth = data.workers || [];
                 allHealthEvents = data.history || [];
                 const unhealthy = data.unhealthy_services || 0;
-                updateTabCount('health', unhealthy);
+                systemHealthProblemCount = unhealthy;
+                updateHealthBadge();
                 document.getElementById('unhealthyServices').textContent = unhealthy;
 
                 const configured = allServiceHealth.filter(s => s.configured).length;
@@ -5798,6 +5921,10 @@
                 applyHeaderSortIndicators('serviceHealth');
                 applyHeaderSortIndicators('workerHealth');
                 applyHeaderSortIndicators('healthEvents');
+                applyHeaderSortIndicators('opsQueue');
+                applyHeaderSortIndicators('opsStorage');
+                applyHeaderSortIndicators('opsLag');
+                await loadOpsHealth(force);
                 filterHealth();
                 tabCache.health = true;
                 if (force) showSuccess('System health check complete.');
@@ -5806,11 +5933,45 @@
                 document.getElementById('serviceHealthTableBody').innerHTML = '<tr><td colspan="8" class="empty-state">Failed to load service health</td></tr>';
                 document.getElementById('workerHealthTableBody').innerHTML = '<tr><td colspan="7" class="empty-state">Failed to load worker health</td></tr>';
                 document.getElementById('healthEventsTableBody').innerHTML = '<tr><td colspan="6" class="empty-state">Failed to load health events</td></tr>';
+                await loadOpsHealth(force);
             } finally {
                 if (btn && force) {
                     btn.disabled = false;
                     btn.textContent = '🔄 Check Now';
                 }
+            }
+        }
+
+        async function loadOpsHealth(force) {
+            try {
+                const response = await fetch(`${API_BASE}/admin/ops-health`, {
+                    cache: 'no-store',
+                    headers: { 'Accept': 'application/json' }
+                });
+                const data = await readJsonResponse(response, 'Ops health request failed');
+                allOpsQueue = data.queue || [];
+                allOpsStorage = data.storage || [];
+                allOpsLag = data.lag || [];
+                const summary = data.summary || {};
+                const queueProblems = Number(summary.queue_problems || 0);
+                const lowStorage = Number(summary.low_storage_paths || 0);
+                const lagProblems = Number(summary.lag_problems || 0);
+                opsHealthProblemCount = queueProblems + lowStorage + lagProblems + Number(summary.service_errors || 0);
+                updateHealthBadge();
+                setText('healthQueueProblems', formatCount(queueProblems));
+                setText('healthLowStorage', formatCount(lowStorage));
+                setText('healthLagItems', formatCount(summary.lag_items || 0));
+                filterHealth();
+            } catch (error) {
+                opsHealthProblemCount = 0;
+                updateHealthBadge();
+                setText('healthQueueProblems', '-');
+                setText('healthLowStorage', '-');
+                setText('healthLagItems', '-');
+                document.getElementById('opsQueueTableBody').innerHTML = '<tr><td colspan="8" class="empty-state">Failed to load queue diagnostics</td></tr>';
+                document.getElementById('opsStorageTableBody').innerHTML = '<tr><td colspan="7" class="empty-state">Failed to load storage diagnostics</td></tr>';
+                document.getElementById('opsLagTableBody').innerHTML = '<tr><td colspan="7" class="empty-state">Failed to load lag diagnostics</td></tr>';
+                showError('Failed to load ops health: ' + error.message);
             }
         }
 
@@ -5835,7 +5996,31 @@
                 (e.status || '').toLowerCase().includes(search) ||
                 (e.error || '').toLowerCase().includes(search)
             );
+            const queue = allOpsQueue.filter(item =>
+                (item.service_name || '').toLowerCase().includes(search) ||
+                (item.title || '').toLowerCase().includes(search) ||
+                (item.status || '').toLowerCase().includes(search) ||
+                (item.issue_type || '').toLowerCase().includes(search) ||
+                (item.reason || '').toLowerCase().includes(search) ||
+                (item.download_client || '').toLowerCase().includes(search)
+            );
+            const storage = allOpsStorage.filter(row =>
+                (row.service_name || '').toLowerCase().includes(search) ||
+                (row.row_type || '').toLowerCase().includes(search) ||
+                (row.path || '').toLowerCase().includes(search) ||
+                (row.status || '').toLowerCase().includes(search) ||
+                (row.reason || '').toLowerCase().includes(search)
+            );
+            const lag = allOpsLag.filter(item =>
+                (item.title || '').toLowerCase().includes(search) ||
+                (item.state || '').toLowerCase().includes(search) ||
+                (item.media_type || '').toLowerCase().includes(search) ||
+                (item.detail || '').toLowerCase().includes(search)
+            );
             renderServiceHealth(services);
+            renderOpsQueue(queue);
+            renderOpsStorage(storage);
+            renderOpsLag(lag);
             renderWorkerHealth(workers);
             renderHealthEvents(events);
         }
@@ -5862,6 +6047,92 @@
                     <td class="table-error-cell">${s.last_error ? escapeHtml(s.last_error) : '-'}</td>
                 </tr>
             `).join('');
+        }
+
+        function renderOpsQueue(rows) {
+            const tbody = document.getElementById('opsQueueTableBody');
+            const sorted = sortDataset(rows || [], 'opsQueue');
+            if (!sorted.length) {
+                tbody.innerHTML = emptyHintRow(8, '📥', 'No acquisition queue items match the current filters.');
+                return;
+            }
+            tbody.innerHTML = sorted.map(item => {
+                const progress = item.progress_percent == null ? '-' : `${Number(item.progress_percent).toFixed(1)}%`;
+                const clientBits = [item.download_client, item.protocol, item.quality].filter(Boolean).map(escapeHtml).join('<br>');
+                const serviceLink = item.service_url
+                    ? `<br><a class="action-btn" href="${escapeAttr(item.service_url)}" target="_blank" rel="noopener" style="display:inline-block;margin-top:6px;text-decoration:none;">Open</a>`
+                    : '';
+                const messages = Array.isArray(item.messages) && item.messages.length
+                    ? `<br><small style="color:#888;">${escapeHtml(item.messages.slice(0, 2).join(' · '))}</small>`
+                    : '';
+                return `
+                    <tr>
+                        <td><strong>${escapeHtml(item.service_name || '-')}</strong>${serviceLink}</td>
+                        <td>${escapeHtml(item.title || '-')}</td>
+                        <td>${statusPill(item.severity || 'unknown')}</td>
+                        <td>${escapeHtml(item.status || '-')}<br><small style="color:#888;">${escapeHtml(item.tracked_state || item.tracked_status || '')}</small></td>
+                        <td>${formatHours(item.age_hours)}</td>
+                        <td>${progress}<br><small style="color:#888;">${formatBytes(item.size_left_bytes)} left</small></td>
+                        <td>${clientBits || '-'}</td>
+                        <td class="table-error-cell">${escapeHtml(item.reason || '-')}${messages}${item.action ? `<br><small style="color:#aaa;">${escapeHtml(item.action)}</small>` : ''}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function renderOpsStorage(rows) {
+            const tbody = document.getElementById('opsStorageTableBody');
+            const sorted = sortDataset(rows || [], 'opsStorage');
+            if (!sorted.length) {
+                tbody.innerHTML = emptyHintRow(7, '💽', 'No storage rows match the current filters.');
+                return;
+            }
+            tbody.innerHTML = sorted.map(row => {
+                const typeLabel = (row.row_type || 'storage').replace(/_/g, ' ');
+                const freePercent = row.free_percent == null ? '-' : `${Number(row.free_percent).toFixed(1)}%`;
+                const notes = [
+                    row.reason,
+                    row.accessible === false ? 'Not accessible' : '',
+                    row.unmapped_folders ? `${row.unmapped_folders} unmapped folder${row.unmapped_folders === 1 ? '' : 's'}` : ''
+                ].filter(Boolean).join(' · ');
+                return `
+                    <tr>
+                        <td><strong>${escapeHtml(row.service_name || '-')}</strong></td>
+                        <td>${escapeHtml(typeLabel)}</td>
+                        <td class="table-error-cell">${escapeHtml(row.path || '-')}</td>
+                        <td>${statusPill(row.status || 'unknown')}</td>
+                        <td>${formatBytes(row.free_bytes)}<br><small style="color:#888;">of ${formatBytes(row.total_bytes)}</small></td>
+                        <td>${freePercent}</td>
+                        <td class="table-error-cell">${escapeHtml(notes || '-')}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function renderOpsLag(rows) {
+            const tbody = document.getElementById('opsLagTableBody');
+            const sorted = sortDataset(rows || [], 'opsLag');
+            if (!sorted.length) {
+                tbody.innerHTML = emptyHintRow(7, '🧭', 'No import-to-Plex lag items match the current filters.');
+                return;
+            }
+            tbody.innerHTML = sorted.map(item => {
+                const state = (item.state || 'unknown').replace(/_/g, ' ');
+                const actions = item.request_id
+                    ? `<button class="action-btn" onclick="openRequestTimeline(${item.request_id})">Timeline</button>`
+                    : '-';
+                return `
+                    <tr>
+                        <td>${statusPill(item.severity || 'unknown')}</td>
+                        <td>${escapeHtml(state)}</td>
+                        <td><strong>${escapeHtml(item.title || '-')}</strong></td>
+                        <td>${escapeHtml(item.media_type || '-')}</td>
+                        <td class="table-error-cell">${escapeHtml(item.detail || '-')}</td>
+                        <td>${formatDateTime(item.updated_at)}</td>
+                        <td>${actions}</td>
+                    </tr>
+                `;
+            }).join('');
         }
 
         function renderWorkerHealth(workers) {
@@ -6954,6 +7225,9 @@
             else if (tableName === 'serviceHealth') filterHealth();
             else if (tableName === 'workerHealth') filterHealth();
             else if (tableName === 'healthEvents') filterHealth();
+            else if (tableName === 'opsQueue') filterHealth();
+            else if (tableName === 'opsStorage') filterHealth();
+            else if (tableName === 'opsLag') filterHealth();
             else if (tableName === 'webhooks') filterWebhooks();
             else if (tableName === 'activity') filterActivity();
         }

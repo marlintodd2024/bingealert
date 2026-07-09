@@ -408,6 +408,18 @@ async def get_system_health_history(hours: int = 24, limit: int = 200):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+@router.get("/ops-health")
+async def get_ops_health(db: Session = Depends(get_db)):
+    """Return acquisition queue, storage, and notification lag diagnostics."""
+    try:
+        from app.services.ops_health import collect_ops_health
+
+        return await collect_ops_health(db)
+    except Exception as e:
+        logger.error(f"Failed to get ops health: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
 def _webhook_event_to_summary(row: WebhookEventLog) -> dict:
     matched_request_ids = _parse_json_array(row.matched_request_ids)
     matched_user_ids = _parse_json_array(row.matched_user_ids)
