@@ -3965,6 +3965,33 @@
             return resp;
         };
 
+        async function readJsonResponse(response, fallbackMessage) {
+            const contentType = response.headers.get('content-type') || '';
+            const text = await response.text();
+            const trimmed = text.trim();
+            const looksJson = contentType.includes('application/json') || trimmed.startsWith('{') || trimmed.startsWith('[');
+
+            if (!looksJson) {
+                const preview = trimmed.replace(/\s+/g, ' ').slice(0, 120);
+                const typeLabel = contentType || 'non-JSON response';
+                const statusLabel = response.status ? `HTTP ${response.status}` : 'unknown status';
+                throw new Error(`${fallbackMessage || 'Request failed'}: expected JSON but received ${typeLabel} (${statusLabel})${preview ? `; response starts with "${preview}"` : ''}`);
+            }
+
+            let data;
+            try {
+                data = trimmed ? JSON.parse(trimmed) : {};
+            } catch (error) {
+                throw new Error(`${fallbackMessage || 'Request failed'}: invalid JSON response (${response.status || 'unknown status'})`);
+            }
+
+            if (!response.ok) {
+                throw new Error(data.detail || data.message || `${fallbackMessage || 'Request failed'} (${response.status})`);
+            }
+
+            return data;
+        }
+
         let latestVersionInfo = null;
         const UPDATE_TOAST_KEY_PREFIX = 'bingealert:update-toast-shown:';
 
@@ -4882,10 +4909,10 @@
             try {
                 const response = await fetch(`${API_BASE}/admin/system-health${force ? '/check' : ''}`, {
                     method: force ? 'POST' : 'GET',
-                    cache: 'no-store'
+                    cache: 'no-store',
+                    headers: { 'Accept': 'application/json' }
                 });
-                const data = await response.json();
-                if (!response.ok) throw new Error(data.detail || 'Failed to load system health');
+                const data = await readJsonResponse(response, 'System health request failed');
 
                 allServiceHealth = data.services || [];
                 allWorkerHealth = data.workers || [];
