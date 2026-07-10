@@ -294,7 +294,7 @@ async def _notification_processor() -> None:
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            logger.error(f"notification processor error: {e}")
+            logger.exception("notification processor error")
             record_worker_failure(
                 "notification_processor",
                 "Notification processor",

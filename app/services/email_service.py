@@ -76,6 +76,33 @@ def _record_successful_delivery(db, notification: Notification, sent_at: datetim
             tracking.available_in_plex = True
 
 
+def _short_error(error: Exception, limit: int = 240) -> str:
+    message = str(error or error.__class__.__name__).replace("\r", " ").replace("\n", " ").strip()
+    return message[:limit] or error.__class__.__name__
+
+
+def _mark_processing_error(db, notification_ids: list[int], error: Exception) -> None:
+    """Store a row-level processing error without leaving the session failed."""
+    ids = [int(notification_id) for notification_id in notification_ids if notification_id]
+    if not ids:
+        return
+    message = f"Processing failed: {_short_error(error)}"
+    try:
+        db.rollback()
+    except Exception:
+        pass
+
+    try:
+        rows = db.query(Notification).filter(Notification.id.in_(ids)).all()
+        for row in rows:
+            if not row.sent:
+                row.error_message = message
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("failed recording notification processing error for ids=%s", ids)
+
+
 class EmailService:
     def __init__(self):
         self.smtp_host = settings.smtp_host
@@ -339,145 +366,172 @@ class EmailService:
         # Process TV episodes with smart batching
         processed_tv = set()
         for notif in tv_notifications:
-            if notif.id in processed_tv:
-                continue
-            
-            # Check if more episodes are in Sonarr queue
-            # Check if more episodes are in any Sonarr instance's queue
-            queue_episodes = []
-            for sonarr in sonarr_instances:
-                qe = await sonarr.get_series_episodes_in_queue(notif.series_id)
-                if qe:
-                    queue_episodes.extend(qe)
-                    break  # Found in this instance, no need to check others
-            
-            # ALSO check if there are more pending notifications for this series coming soon
-            # (episodes that downloaded but haven't reached their send_after time yet)
-            extension_minutes = max(1, min(10, int(settings.notification_extension_delay_minutes or 3)))
-            max_wait_minutes = max(5, min(60, int(settings.notification_max_wait_minutes or 20)))
-            future_window = now + timedelta(minutes=min(max_wait_minutes, 10))
-            pending_notifications = db.query(Notification).filter(
-                Notification.sent == False,
-                Notification.user_id == notif.user_id,
-                Notification.series_id == notif.series_id,
-                Notification.notification_type == "episode",
-                Notification.id != notif.id,  # Not this one
-                Notification.send_after > now,  # In the future
-                Notification.send_after <= future_window  # But within 10 min
-            ).count()
-            
-            # Calculate how old this notification is
-            age_minutes = (now - notif.created_at).total_seconds() / 60
-            
-            # Extend if: more episodes in queue OR more notifications pending
-            if (queue_episodes or pending_notifications > 0) and age_minutes < max_wait_minutes:
-                # More episodes coming! Extend delay
-                extend_by = min(extension_minutes, max_wait_minutes - age_minutes)
-                new_send_after = now + timedelta(minutes=extend_by)
-                notif.send_after = new_send_after
-                db.commit()
-                
-                reason = []
-                if queue_episodes:
-                    reason.append(f"{len(queue_episodes)} in Sonarr queue")
-                if pending_notifications:
-                    reason.append(f"{pending_notifications} pending notifications")
-                
-                logger.info(f"Extended delay for {notif.subject} - {', '.join(reason)} (waiting {extend_by} more minutes, age: {age_minutes:.1f}m)")
-                processed_tv.add(notif.id)
-                continue
-            
-            # No more episodes coming OR hit max wait time - batch and send!
-            # Find all notifications for same user + series that are ready OR will be ready soon
-            # This ensures we don't split episodes that are just a minute apart
-            soon = now + timedelta(minutes=max(1, min(extension_minutes, 5)))
-            batch = db.query(Notification).filter(
-                Notification.sent == False,
-                Notification.user_id == notif.user_id,
-                Notification.series_id == notif.series_id,
-                Notification.notification_type == "episode",
-                (Notification.send_after == None) | (Notification.send_after <= soon)
-            ).all()
-            
-            if len(batch) > 1:
-                # Multiple episodes - send combined email
-                logger.info(f"Batching {len(batch)} episode notifications for user {notif.user.email}")
-                
-                # Get episode details from tracking table
-                from app.database import EpisodeTracking
-                episodes = []
-                series_title = None
-                for b in batch:
-                    # Extract episode info from subject (e.g., "New Episode: Series S01E05")
-                    import re
-                    match = re.search(r'S(\d+)E(\d+)', b.subject)
-                    if match:
-                        season_num = int(match.group(1))
-                        episode_num = int(match.group(2))
-                        
-                        # Try to get episode title from tracking table
-                        tracking = db.query(EpisodeTracking).filter(
-                            EpisodeTracking.series_id == b.series_id,
-                            EpisodeTracking.season_number == season_num,
-                            EpisodeTracking.episode_number == episode_num
-                        ).first()
-                        
-                        episodes.append({
-                            'season': season_num,
-                            'episode': episode_num,
-                            'title': tracking.episode_title if tracking and tracking.episode_title else ''
-                        })
-                    # Extract series title from first notification
-                    if not series_title:
-                        series_title = b.subject.split(':')[1].split('S')[0].strip() if ':' in b.subject else "Series"
-                
-                # Sort episodes by season, then episode number
-                episodes.sort(key=lambda x: (x['season'], x['episode']))
-                
-                # Get poster from one of the notifications (they're all the same series)
-                # We'll use the body from the first notification but update episode list
-                from app.services.tmdb_service import TMDBService
-                from app.config import settings
-                tmdb_service = TMDBService(settings.jellyseerr_url, settings.jellyseerr_api_key)
-                poster_url = await tmdb_service.get_tv_poster(notif.request.tmdb_id)
-                
-                # Render batched email
-                html_body = self.render_episode_notification(
-                    series_title=series_title,
-                    episodes=episodes,
-                    poster_url=poster_url
-                )
-                
-                subject = f"New Episodes: {series_title} ({len(episodes)} episodes)"
-                
-                # Send one email
-                success = await self.send_email(
-                    to_email=notif.user.email,
-                    subject=subject,
-                    html_body=html_body,
-                    user=notif.user,
-                )
+            error_ids = [notif.id]
+            try:
+                if notif.id in processed_tv:
+                    continue
 
-                # Mark all batched notifications as sent
-                for b in batch:
+                # Check if more episodes are in any Sonarr instance's queue.
+                queue_episodes = []
+                for sonarr in sonarr_instances:
+                    qe = await sonarr.get_series_episodes_in_queue(notif.series_id)
+                    if qe:
+                        queue_episodes.extend(qe)
+                        break  # Found in this instance, no need to check others
+
+                # ALSO check if there are more pending notifications for this series coming soon
+                # (episodes that downloaded but haven't reached their send_after time yet)
+                extension_minutes = max(1, min(10, int(settings.notification_extension_delay_minutes or 3)))
+                max_wait_minutes = max(5, min(60, int(settings.notification_max_wait_minutes or 20)))
+                future_window = now + timedelta(minutes=min(max_wait_minutes, 10))
+                pending_notifications = db.query(Notification).filter(
+                    Notification.sent == False,
+                    Notification.user_id == notif.user_id,
+                    Notification.series_id == notif.series_id,
+                    Notification.notification_type == "episode",
+                    Notification.id != notif.id,  # Not this one
+                    Notification.send_after > now,  # In the future
+                    Notification.send_after <= future_window  # But within 10 min
+                ).count()
+
+                # Calculate how old this notification is
+                age_minutes = (now - notif.created_at).total_seconds() / 60
+
+                # Extend if: more episodes in queue OR more notifications pending
+                if (queue_episodes or pending_notifications > 0) and age_minutes < max_wait_minutes:
+                    # More episodes coming! Extend delay
+                    extend_by = min(extension_minutes, max_wait_minutes - age_minutes)
+                    new_send_after = now + timedelta(minutes=extend_by)
+                    notif.send_after = new_send_after
+                    db.commit()
+
+                    reason = []
+                    if queue_episodes:
+                        reason.append(f"{len(queue_episodes)} in Sonarr queue")
+                    if pending_notifications:
+                        reason.append(f"{pending_notifications} pending notifications")
+
+                    logger.info(f"Extended delay for {notif.subject} - {', '.join(reason)} (waiting {extend_by} more minutes, age: {age_minutes:.1f}m)")
+                    processed_tv.add(notif.id)
+                    continue
+
+                # No more episodes coming OR hit max wait time - batch and send!
+                # Find all notifications for same user + series that are ready OR will be ready soon
+                # This ensures we don't split episodes that are just a minute apart
+                soon = now + timedelta(minutes=max(1, min(extension_minutes, 5)))
+                batch = db.query(Notification).filter(
+                    Notification.sent == False,
+                    Notification.user_id == notif.user_id,
+                    Notification.series_id == notif.series_id,
+                    Notification.notification_type == "episode",
+                    (Notification.send_after == None) | (Notification.send_after <= soon)
+                ).all()
+                error_ids = [b.id for b in batch] or [notif.id]
+
+                if len(batch) > 1:
+                    # Multiple episodes - send combined email
+                    logger.info(f"Batching {len(batch)} episode notifications for user {notif.user.email}")
+
+                    # Get episode details from tracking table
+                    from app.database import EpisodeTracking
+                    episodes = []
+                    series_title = None
+                    for b in batch:
+                        # Extract episode info from subject (e.g., "New Episode: Series S01E05")
+                        import re
+                        match = re.search(r'S(\d+)E(\d+)', b.subject)
+                        if match:
+                            season_num = int(match.group(1))
+                            episode_num = int(match.group(2))
+
+                            # Try to get episode title from tracking table
+                            tracking = db.query(EpisodeTracking).filter(
+                                EpisodeTracking.series_id == b.series_id,
+                                EpisodeTracking.season_number == season_num,
+                                EpisodeTracking.episode_number == episode_num
+                            ).first()
+
+                            episodes.append({
+                                'season': season_num,
+                                'episode': episode_num,
+                                'title': tracking.episode_title if tracking and tracking.episode_title else ''
+                            })
+                        # Extract series title from first notification
+                        if not series_title:
+                            series_title = b.subject.split(':')[1].split('S')[0].strip() if ':' in b.subject else "Series"
+
+                    # Sort episodes by season, then episode number
+                    episodes.sort(key=lambda x: (x['season'], x['episode']))
+
+                    # Get poster from one of the notifications (they're all the same series)
+                    # We'll use the body from the first notification but update episode list
+                    from app.services.tmdb_service import TMDBService
+                    tmdb_service = TMDBService(settings.jellyseerr_url, settings.jellyseerr_api_key)
+                    poster_url = await tmdb_service.get_tv_poster(notif.request.tmdb_id)
+
+                    # Render batched email
+                    html_body = self.render_episode_notification(
+                        series_title=series_title,
+                        episodes=episodes,
+                        poster_url=poster_url
+                    )
+
+                    subject = f"New Episodes: {series_title} ({len(episodes)} episodes)"
+
+                    # Send one email
+                    success = await self.send_email(
+                        to_email=notif.user.email,
+                        subject=subject,
+                        html_body=html_body,
+                        user=notif.user,
+                    )
+
+                    # Mark all batched notifications as sent
+                    for b in batch:
+                        if success:
+                            sent_at = datetime.utcnow()
+                            b.sent = True
+                            b.sent_at = sent_at
+                            _record_successful_delivery(db, b, sent_at)
+                        else:
+                            b.error_message = "SMTP send failed"
+                        processed_tv.add(b.id)
+
+                else:
+                    # Single episode - send as-is
+                    success = await self.send_email(
+                        to_email=notif.user.email,
+                        subject=notif.subject,
+                        html_body=notif.body,
+                        user=notif.user,
+                    )
+
                     if success:
                         sent_at = datetime.utcnow()
-                        b.sent = True
-                        b.sent_at = sent_at
-                        _record_successful_delivery(db, b, sent_at)
+                        notif.sent = True
+                        notif.sent_at = sent_at
+                        _record_successful_delivery(db, notif, sent_at)
                     else:
-                        b.error_message = "SMTP send failed"
-                    processed_tv.add(b.id)
-                
-            else:
-                # Single episode - send as-is
+                        notif.error_message = "SMTP send failed"
+
+                    processed_tv.add(notif.id)
+
+                db.commit()
+            except Exception as e:
+                logger.exception("Failed processing TV notification id=%s", notif.id)
+                _mark_processing_error(db, error_ids, e)
+                processed_tv.update(error_ids)
+
+        # Process movie notifications (no batching needed)
+        for notif in movie_notifications:
+            try:
                 success = await self.send_email(
                     to_email=notif.user.email,
                     subject=notif.subject,
                     html_body=notif.body,
                     user=notif.user,
                 )
-                
+
                 if success:
                     sent_at = datetime.utcnow()
                     notif.sent = True
@@ -485,46 +539,32 @@ class EmailService:
                     _record_successful_delivery(db, notif, sent_at)
                 else:
                     notif.error_message = "SMTP send failed"
-                
-                processed_tv.add(notif.id)
-            
-            db.commit()
-        
-        # Process movie notifications (no batching needed)
-        for notif in movie_notifications:
-            success = await self.send_email(
-                to_email=notif.user.email,
-                subject=notif.subject,
-                html_body=notif.body,
-                user=notif.user,
-            )
-            
-            if success:
-                sent_at = datetime.utcnow()
-                notif.sent = True
-                notif.sent_at = sent_at
-                _record_successful_delivery(db, notif, sent_at)
-            else:
-                notif.error_message = "SMTP send failed"
-            
-            db.commit()
+
+                db.commit()
+            except Exception as e:
+                logger.exception("Failed processing movie notification id=%s", notif.id)
+                _mark_processing_error(db, [notif.id], e)
         
         # Process other notifications (quality_waiting, coming_soon, weekly_summary)
         for notif in other_notifications:
-            success = await self.send_email(
-                to_email=notif.user.email,
-                subject=notif.subject,
-                html_body=notif.body,
-                user=notif.user,
-            )
-            
-            if success:
-                notif.sent = True
-                notif.sent_at = datetime.utcnow()
-            else:
-                notif.error_message = "SMTP send failed"
-            
-            db.commit()
+            try:
+                success = await self.send_email(
+                    to_email=notif.user.email,
+                    subject=notif.subject,
+                    html_body=notif.body,
+                    user=notif.user,
+                )
+
+                if success:
+                    notif.sent = True
+                    notif.sent_at = datetime.utcnow()
+                else:
+                    notif.error_message = "SMTP send failed"
+
+                db.commit()
+            except Exception as e:
+                logger.exception("Failed processing notification id=%s type=%s", notif.id, notif.notification_type)
+                _mark_processing_error(db, [notif.id], e)
         
         logger.info(f"Processed {len(processed_tv)} TV notifications, {len(movie_notifications)} movie notifications, {len(other_notifications)} other notifications")
     
