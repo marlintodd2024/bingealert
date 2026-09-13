@@ -7,7 +7,7 @@ from typing import List, Optional
 from datetime import datetime
 
 from app.config import normalize_smtp_security, settings
-from app.database import EpisodeTracking, Notification, User
+from app.database import EpisodeTracking, MediaRequest, Notification, User
 from app.services.notification_history import (
     delivery_entries_for_notification,
     record_delivery_for_notification,
@@ -548,6 +548,22 @@ class EmailService:
         # Process other notifications (quality_waiting, coming_soon, weekly_summary)
         for notif in other_notifications:
             try:
+                if notif.notification_type == "quality_waiting":
+                    suppressed = db.query(
+                        MediaRequest.quality_monitor_suppressed_at
+                    ).filter(MediaRequest.id == notif.request_id).scalar()
+                    if suppressed is not None:
+                        # A Maintainerr event can race with a processor that already
+                        # loaded this row. Re-check immediately before SMTP delivery.
+                        notif.sent = True
+                        notif.error_message = "Skipped — media intentionally retired"
+                        db.commit()
+                        logger.info(
+                            "Skipped stale quality-waiting notification %s after intentional cleanup",
+                            notif.id,
+                        )
+                        continue
+
                 success = await self.send_email(
                     to_email=notif.user.email,
                     subject=notif.subject,

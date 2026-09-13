@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Request
 import hmac
 import ipaddress
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 import logging
 from datetime import datetime, timedelta
@@ -15,6 +16,10 @@ from app.services.notification_history import (
     movie_dedupe_key,
 )
 from app.services.pushover_service import PushoverService
+from app.services.maintainerr_service import (
+    extract_request_keys,
+    is_media_handled_notification,
+)
 from app.services.sonarr_service import SonarrService
 from app.config import settings
 from app.security import clean_email_address, sanitize_for_log
@@ -122,7 +127,7 @@ def _check_webhook_auth(request: Request):
     """
     Validate webhook source IP and optional shared secret.
     If webhook_allowed_ips is set, only those IPs can send webhooks.
-    If webhook_secret is set, callers must send it as a header or ?token=.
+    If webhook_secret is set, callers must send it as a supported header or ?token=.
     If not set, all IPs are allowed (backwards compatible).
     """
     from app.auth import get_client_ip
@@ -130,9 +135,13 @@ def _check_webhook_auth(request: Request):
 
     secret = (settings.webhook_secret or "").strip()
     if secret:
+        authorization = (request.headers.get("authorization") or "").strip()
+        if authorization.lower().startswith("bearer "):
+            authorization = authorization[7:].strip()
         supplied = (
             request.headers.get("x-bingealert-webhook-secret")
             or request.headers.get("x-webhook-secret")
+            or authorization
             or request.query_params.get("token")
             or ""
         )
@@ -165,6 +174,27 @@ def _notification_initial_delay() -> timedelta:
     return timedelta(minutes=minutes)
 
 
+def _clear_quality_monitor_suppression(
+    requests: List[MediaRequest], trigger: str
+) -> int:
+    """Reactivate requests when upstream starts acquiring the media again."""
+    cleared = 0
+    for media_request in requests:
+        if media_request.quality_monitor_suppressed_at is None:
+            continue
+        media_request.quality_monitor_suppressed_at = None
+        media_request.quality_monitor_suppression_source = None
+        cleared += 1
+
+    if cleared:
+        logger.info(
+            "Cleared quality-monitor suppression for %s request(s) after %s",
+            cleared,
+            trigger,
+        )
+    return cleared
+
+
 async def _process_pending_notifications_background():
     """Background-task wrapper with its own DB session."""
     db = SessionLocal()
@@ -172,6 +202,83 @@ async def _process_pending_notifications_background():
         await email_service.process_pending_notifications(db)
     finally:
         db.close()
+
+
+@router.post("/maintainerr", response_model=WebhookResponse)
+async def maintainerr_webhook(
+    request: Request,
+    webhook: dict,
+    db: Session = Depends(get_db),
+):
+    """Suppress quality waiting after Maintainerr intentionally handles media."""
+    _check_webhook_auth(request)
+
+    notification_type = (
+        webhook.get("notification_type")
+        or webhook.get("notificationType")
+        or webhook.get("type")
+    )
+    if not is_media_handled_notification(notification_type):
+        return WebhookResponse(
+            success=True,
+            message=f"Ignored Maintainerr event: {notification_type or 'unknown'}",
+            processed_items=0,
+        )
+
+    request_keys = extract_request_keys(webhook)
+    if not request_keys:
+        logger.warning(
+            "Maintainerr Media Handled webhook had no supported whole-movie/show TMDB identifiers"
+        )
+        return WebhookResponse(
+            success=True,
+            message="Media Handled received, but no supported movie/show TMDB identifiers were present",
+            processed_items=0,
+        )
+
+    filters = [
+        and_(MediaRequest.media_type == media_type, MediaRequest.tmdb_id == tmdb_id)
+        for media_type, tmdb_id in request_keys
+    ]
+    matched_requests = db.query(MediaRequest).filter(or_(*filters)).all()
+    now = datetime.utcnow()
+    newly_suppressed = 0
+    for media_request in matched_requests:
+        if media_request.quality_monitor_suppressed_at is None:
+            newly_suppressed += 1
+        media_request.quality_monitor_suppressed_at = now
+        media_request.quality_monitor_suppression_source = "maintainerr"
+
+    request_ids = [media_request.id for media_request in matched_requests]
+    cancelled = 0
+    if request_ids:
+        cancelled = db.query(Notification).filter(
+            Notification.request_id.in_(request_ids),
+            Notification.notification_type == "quality_waiting",
+            Notification.sent.is_(False),
+        ).delete(synchronize_session=False)
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.error("Failed to process Maintainerr Media Handled webhook", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+    logger.info(
+        "Maintainerr cleanup suppressed %s request(s) (%s newly suppressed) and cancelled %s pending quality notification(s)",
+        len(matched_requests),
+        newly_suppressed,
+        cancelled,
+    )
+    return WebhookResponse(
+        success=True,
+        message=(
+            f"Suppressed {len(matched_requests)} matching request(s); "
+            f"cancelled {cancelled} pending quality notification(s)"
+        ),
+        processed_items=len(matched_requests),
+    )
 
 
 @router.post("/sonarr", response_model=WebhookResponse)
@@ -207,6 +314,8 @@ async def sonarr_webhook(
             
             if not requests:
                 return WebhookResponse(success=True, message="No matching requests found")
+
+            _clear_quality_monitor_suppression(requests, "Sonarr Grab")
             
             # Cancel any pending quality_waiting notifications since download is starting
             cancelled_count = 0
@@ -256,6 +365,12 @@ async def sonarr_webhook(
         if not requests:
             logger.info(f"No requests found for series TMDB ID {tmdb_id}")
             return WebhookResponse(success=True, message="No matching requests found")
+
+        if _clear_quality_monitor_suppression(requests, "Sonarr Download"):
+            # The wrong-quality branch returns before the handler's normal final
+            # commit. Persist reactivation now so a re-added file can re-enter
+            # quality monitoring regardless of its first imported quality.
+            db.commit()
         
         logger.info("Found %s request(s) for series: %s", len(requests), sanitize_for_log(webhook.series.title))
         
@@ -494,6 +609,8 @@ async def radarr_webhook(
             
             if not requests:
                 return WebhookResponse(success=True, message="No matching requests found")
+
+            _clear_quality_monitor_suppression(requests, "Radarr Grab")
             
             # Cancel any pending quality_waiting notifications since download is starting
             cancelled_count = 0
@@ -535,6 +652,8 @@ async def radarr_webhook(
         if not requests:
             logger.info(f"No requests found for movie TMDB ID {tmdb_id}")
             return WebhookResponse(success=True, message="No matching requests found")
+
+        _clear_quality_monitor_suppression(requests, "Radarr Download")
         
         notifications_created = 0
         for request in requests:
@@ -756,8 +875,10 @@ async def jellyseerr_webhook(
                 MediaRequest.jellyseerr_request_id == jellyseerr_request_id
             ).first()
         
-        if not existing_request:
-            # Also check by user + TMDB ID
+        if not existing_request and not jellyseerr_request_id:
+            # Legacy/custom Seerr templates may omit request_id. Only then fall
+            # back to identity matching; a new request_id for the same title is
+            # a real re-request and must get a fresh notification lifecycle.
             existing_request = db.query(MediaRequest).filter(
                 MediaRequest.user_id == user.id,
                 MediaRequest.tmdb_id == tmdb_id,
@@ -768,6 +889,9 @@ async def jellyseerr_webhook(
             # Update existing request status
             if notification_type in ['MEDIA_APPROVED', 'MEDIA_AUTO_APPROVED']:
                 existing_request.status = 'approved'
+                _clear_quality_monitor_suppression(
+                    [existing_request], "new Seerr approval"
+                )
             logger.info(f"Updated existing request {existing_request.id}")
             request_obj = existing_request
         else:

@@ -1,0 +1,1 @@
+"""BingeAlert test suite."""

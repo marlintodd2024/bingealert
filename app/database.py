@@ -128,6 +128,11 @@ class MediaRequest(Base):
     title = Column(String, nullable=False)
     status = Column(String, nullable=False)  # 'pending' | 'approved' | 'available'
     season_count = Column(Integer, nullable=True)
+    # Maintainerr (or another intentional cleanup source) can retire media after
+    # it was delivered. Keep that state separate from request.status so a later
+    # explicit request/import can reactivate quality monitoring cleanly.
+    quality_monitor_suppressed_at = Column(DateTime, nullable=True)
+    quality_monitor_suppression_source = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

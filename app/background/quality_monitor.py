@@ -11,7 +11,14 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
-from app.database import get_db, MediaRequest, Notification, User, EpisodeTracking
+from app.database import (
+    get_db,
+    MediaRequest,
+    Notification,
+    User,
+    EpisodeTracking,
+    NotificationDeliveryLog,
+)
 from app.services.email_service import EmailService
 from app.services.sonarr_service import SonarrService
 from app.services.radarr_service import RadarrService
@@ -55,7 +62,8 @@ class QualityReleaseMonitor:
             # Get all approved requests that aren't available yet
             pending_requests = db.query(MediaRequest).filter(
                 MediaRequest.status.in_(['pending', 'approved']),
-                MediaRequest.jellyseerr_request_id.isnot(None)
+                MediaRequest.jellyseerr_request_id.isnot(None),
+                MediaRequest.quality_monitor_suppressed_at.is_(None),
             ).all()
             
             logger.info(f"Checking {len(pending_requests)} pending requests")
@@ -93,6 +101,13 @@ class QualityReleaseMonitor:
     
     async def _check_tv_show(self, request: MediaRequest, db: Session):
         """Check TV show for release status and quality"""
+        if request.quality_monitor_suppressed_at is not None:
+            logger.info(
+                "Skipping quality check for intentionally retired series '%s'",
+                request.title,
+            )
+            return
+
         # If we don't have a series_id, try to find it in Sonarr by TMDB ID
         series = None
         matched_sonarr = self.sonarr  # Default to primary
@@ -112,7 +127,7 @@ class QualityReleaseMonitor:
                 # Look up series by TMDB ID
                 all_series = await sonarr_inst.get_all_series()
                 if all_series:
-                    s = next((s for s in all_series if s.get('tvdbId') == request.tmdb_id), None)
+                    s = next((s for s in all_series if s.get('tmdbId') == request.tmdb_id), None)
                     if s:
                         series = s
                         matched_sonarr = sonarr_inst
@@ -120,6 +135,10 @@ class QualityReleaseMonitor:
         
         if not series:
             logger.debug(f"Series not yet in Sonarr for request {request.id} ({request.title})")
+            return
+
+        if series.get('monitored') is False:
+            logger.info("Series '%s' is unmonitored - skipping quality notification", request.title)
             return
         
         # Check if series hasn't premiered yet
@@ -138,10 +157,38 @@ class QualityReleaseMonitor:
         episodes = await matched_sonarr.get_episodes_by_series(series.get('id'))
         if not episodes:
             return
+
+        # A TV request remains approved so future episodes can still be announced.
+        # Do not mistake already-delivered historical episodes for newly missing
+        # content after a retention tool removes their files.
+        completed_episodes = {
+            (season, episode)
+            for season, episode in db.query(
+                EpisodeTracking.season_number,
+                EpisodeTracking.episode_number,
+            ).filter(
+                EpisodeTracking.request_id == request.id,
+                EpisodeTracking.notified.is_(True),
+            ).all()
+        }
+        completed_episodes.update(
+            (season, episode)
+            for season, episode in db.query(
+                NotificationDeliveryLog.season_number,
+                NotificationDeliveryLog.episode_number,
+            ).filter(
+                NotificationDeliveryLog.request_id == request.id,
+                NotificationDeliveryLog.notification_type == "episode",
+                NotificationDeliveryLog.season_number.isnot(None),
+                NotificationDeliveryLog.episode_number.isnot(None),
+            ).all()
+        )
         
         # Check if any episodes are available but in wrong quality
-        quality_profile = series.get('qualityProfileId')
         for episode in episodes:
+            episode_key = (episode.get('seasonNumber'), episode.get('episodeNumber'))
+            if episode.get('monitored') is False or episode_key in completed_episodes:
+                continue
             if episode.get('hasFile') and not episode.get('episodeFile', {}).get('qualityCutoffNotMet', False):
                 continue  # Episode has file and meets quality requirements
             
@@ -199,6 +246,13 @@ class QualityReleaseMonitor:
     
     async def _check_movie(self, request: MediaRequest, db: Session):
         """Check movie for release status and quality"""
+        if request.quality_monitor_suppressed_at is not None:
+            logger.info(
+                "Skipping quality check for intentionally retired movie '%s'",
+                request.title,
+            )
+            return
+
         # Get all movies from Radarr
         movies = await self.radarr.get_movies()
         
@@ -213,6 +267,9 @@ class QualityReleaseMonitor:
         
         if not movie:
             logger.info(f"Movie '{request.title}' (TMDB: {request.tmdb_id}) not yet in Radarr - skipping quality check")
+            return
+        if movie.get('monitored') is False:
+            logger.info("Movie '%s' is unmonitored - skipping quality notification", request.title)
             return
         
         logger.info(f"Checking movie '{request.title}' - Status: {movie.get('status')}, HasFile: {movie.get('hasFile')}")

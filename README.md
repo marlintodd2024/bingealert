@@ -25,6 +25,7 @@ BingeAlert sits between your media stack and your users. It listens to every web
 - **Smart email notifications** — HTML emails with TMDB posters and Plex deep links. Episodes from the same show are batched into one email.
 - **Plex availability check** — Notifications wait until Plex has actually indexed the file, with retry/backoff.
 - **Quality & release monitoring** — "Coming Soon" emails for unreleased content; "Quality Waiting" emails when a grab doesn't match the quality profile. Cancelled automatically when a real download starts.
+- **Maintainerr-aware cleanup** — Intentionally retired media does not produce false "Quality Waiting" emails, and a later request or import automatically reactivates monitoring.
 - **Import failure auto-fix** — When Sonarr/Radarr import fails, the bad release is blocklisted and re-searched. Admin email when it happens.
 - **Issue auto-fix** — Issues reported in Seerr (bad audio, wrong subs, corrupted file) trigger a blacklist + re-search. Configurable as manual review, full auto, or auto-with-notification.
 - **Stuck download detection** — Background worker every 30 min; TBA episode titles are auto-fixed by refreshing metadata, true stalls trigger an admin alert.
@@ -95,10 +96,43 @@ Once the wizard is done, configure your upstream services to POST here:
 | Jellyseerr / Overseerr | `http://YOUR_HOST:8000/webhooks/jellyseerr` |
 | Sonarr (Connect → Webhook → On Grab + On Import Complete) | `http://YOUR_HOST:8000/webhooks/sonarr` |
 | Radarr (Connect → Webhook → On Grab + On File Import) | `http://YOUR_HOST:8000/webhooks/radarr` |
+| Maintainerr (optional; Media Handled only) | `http://YOUR_HOST:8000/webhooks/maintainerr` |
 
 > **Important:** Radarr's setting is **"On File Import"**, not "On Import Complete". They're different events.
 
 If you have multiple Sonarr instances (anime), point both to the same `/webhooks/sonarr` URL — BingeAlert routes by the payload's series metadata.
+
+### Maintainerr cleanup integration
+
+BingeAlert already ignores missing media that Radarr/Sonarr has unmonitored, as
+well as TV episodes it previously delivered. The Maintainerr webhook adds an
+authoritative cleanup signal and cancels any delayed quality notification that
+was queued just before deletion.
+
+1. In Maintainerr, create a **Webhook** notification agent.
+2. Set its URL to `http://YOUR_HOST:8000/webhooks/maintainerr`.
+3. Use this JSON payload:
+
+   ```json
+   {
+     "notification_type": "{{notification_type}}"
+   }
+   ```
+
+   Current Maintainerr builds flatten the event's `extra` fields, including the
+   stringified `mediaItems` array, into the outgoing payload automatically.
+4. Enable only **Media Handled** and connect the agent only to rule groups whose
+   configured action deletes media.
+5. If BingeAlert has a webhook secret configured, set Maintainerr's **Auth
+   Header** to `Bearer YOUR_WEBHOOK_SECRET`. An IP/subnet allowlist can be used
+   as an additional restriction.
+
+Whole movies and shows are matched by TMDB ID. Season- and episode-level events
+are deliberately not allowed to suppress an entire show; their false positives
+are prevented by BingeAlert's monitored and prior-delivery checks instead. A
+later Seerr approval, Sonarr grab/import, or Radarr grab/import clears the
+suppression automatically. A genuinely new Seerr request has its own clean
+request record and follows the normal availability-notification flow.
 
 ---
 

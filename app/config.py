@@ -152,7 +152,8 @@ class Settings(BaseSettings):
     # Comma-separated CIDRs / IPs allowed to POST to /webhooks/*. Empty = allow all.
     webhook_allowed_ips: str = ""
     # Optional shared secret required on webhook requests. Send as
-    # X-BingeAlert-Webhook-Secret, X-Webhook-Secret, or ?token=... .
+    # X-BingeAlert-Webhook-Secret, X-Webhook-Secret, Authorization: Bearer,
+    # or ?token=... .
     webhook_secret: Optional[str] = None
 
     # Optional Cloudflare Turnstile (CAPTCHA on login)
