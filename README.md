@@ -26,6 +26,7 @@ BingeAlert sits between your media stack and your users. It listens to every web
 - **Plex availability check** — Notifications wait until Plex has actually indexed the file, with retry/backoff.
 - **Quality & release monitoring** — "Coming Soon" emails for unreleased content; "Quality Waiting" emails when a grab doesn't match the quality profile. Cancelled automatically when a real download starts.
 - **Maintainerr-aware cleanup** — Intentionally retired media does not produce false "Quality Waiting" emails, and a later request or import automatically reactivates monitoring.
+- **Organized settings control center** — Searchable categories, consistent configuration panels, and an in-app Maintainerr setup/status view keep administration manageable.
 - **Import failure auto-fix** — When Sonarr/Radarr import fails, the bad release is blocklisted and re-searched. Admin email when it happens.
 - **Issue auto-fix** — Issues reported in Seerr (bad audio, wrong subs, corrupted file) trigger a blacklist + re-search. Configurable as manual review, full auto, or auto-with-notification.
 - **Stuck download detection** — Background worker every 30 min; TBA episode titles are auto-fixed by refreshing metadata, true stalls trigger an admin alert.
@@ -126,6 +127,10 @@ was queued just before deletion.
 5. If BingeAlert has a webhook secret configured, set Maintainerr's **Auth
    Header** to `Bearer YOUR_WEBHOOK_SECRET`. An IP/subnet allowlist can be used
    as an additional restriction.
+
+The BingeAlert admin dashboard now provides these values under **Settings →
+Maintainerr**, along with copy controls, authentication and allowlist status,
+the last received result, and recent cleanup activity.
 
 Whole movies and shows are matched by TMDB ID. Season- and episode-level events
 are deliberately not allowed to suppress an entire show; their false positives

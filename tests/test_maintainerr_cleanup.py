@@ -11,8 +11,17 @@ from sqlalchemy.pool import StaticPool
 
 from app.background.quality_monitor import QualityReleaseMonitor
 from app.config import settings
-from app.database import Base, EpisodeTracking, MediaRequest, Notification, User, get_db
-from app.routers.webhooks import router
+from app.database import (
+    AdminActivityLog,
+    Base,
+    EpisodeTracking,
+    MediaRequest,
+    Notification,
+    User,
+    get_db,
+)
+from app.routers.admin import router as admin_router
+from app.routers.webhooks import router as webhook_router
 from app.services.email_service import EmailService
 from app.services.maintainerr_service import (
     extract_request_keys,
@@ -99,7 +108,8 @@ class MaintainerrWebhookTests(unittest.TestCase):
         db.close()
 
         app = FastAPI()
-        app.include_router(router, prefix="/webhooks")
+        app.include_router(webhook_router, prefix="/webhooks")
+        app.include_router(admin_router, prefix="/admin")
 
         def override_get_db():
             session = self.Session()
@@ -144,7 +154,37 @@ class MaintainerrWebhookTests(unittest.TestCase):
         self.assertIsNotNone(media_request.quality_monitor_suppressed_at)
         self.assertEqual(media_request.quality_monitor_suppression_source, "maintainerr")
         self.assertEqual(db.query(Notification).count(), 0)
+        activity = db.query(AdminActivityLog).filter_by(action="maintainerr_webhook").one()
+        details = json.loads(activity.details)
+        self.assertEqual(activity.status, "success")
+        self.assertEqual(details["matched_requests"], 1)
+        self.assertEqual(details["cancelled_notifications"], 1)
         db.close()
+
+        response = self.client.get("/admin/stats")
+        self.assertEqual(response.status_code, 200)
+        stats = response.json()
+        self.assertEqual(stats["requests"]["tracking"], 0)
+        self.assertEqual(stats["notifications"]["pending"], 0)
+
+        response = self.client.get("/admin/requests")
+        self.assertEqual(response.status_code, 200)
+        request_row = response.json()["requests"][0]
+        self.assertTrue(request_row["quality_monitor_suppressed"])
+        self.assertEqual(
+            request_row["quality_monitor_suppression_source"], "maintainerr"
+        )
+
+        response = self.client.get("/admin/integrations/maintainerr")
+        self.assertEqual(response.status_code, 200)
+        integration = response.json()
+        self.assertEqual(integration["endpoint_path"], "/webhooks/maintainerr")
+        self.assertTrue(integration["secret_configured"])
+        self.assertEqual(integration["last_status"], "success")
+        self.assertEqual(integration["recent_events"][0]["matched_requests"], 1)
+        self.assertEqual(
+            integration["recent_events"][0]["cancelled_notifications"], 1
+        )
 
         response = self.client.post(
             "/webhooks/radarr",
@@ -161,6 +201,10 @@ class MaintainerrWebhookTests(unittest.TestCase):
         self.assertIsNone(media_request.quality_monitor_suppressed_at)
         self.assertIsNone(media_request.quality_monitor_suppression_source)
         db.close()
+
+        response = self.client.get("/admin/stats")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["requests"]["tracking"], 1)
 
     def test_new_seerr_request_for_cleaned_title_gets_fresh_lifecycle(self):
         db = self.Session()
@@ -196,6 +240,24 @@ class MaintainerrWebhookTests(unittest.TestCase):
         self.assertIsNone(requests[1].quality_monitor_suppressed_at)
         self.assertEqual(requests[1].status, "approved")
         db.close()
+
+    def test_non_handled_event_is_visible_as_warning_activity(self):
+        response = self.client.post(
+            "/webhooks/maintainerr",
+            headers={"Authorization": "Bearer test-secret"},
+            json={"notification_type": "MEDIA_ABOUT_TO_BE_HANDLED"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["processed_items"], 0)
+
+        response = self.client.get("/admin/integrations/maintainerr")
+        self.assertEqual(response.status_code, 200)
+        integration = response.json()
+        self.assertEqual(integration["last_status"], "warning")
+        self.assertEqual(
+            integration["recent_events"][0]["notification_type"],
+            "MEDIA_ABOUT_TO_BE_HANDLED",
+        )
 
 
 class _FakeSonarr:

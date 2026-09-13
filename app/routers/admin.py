@@ -87,7 +87,10 @@ async def get_stats(db: Session = Depends(get_db)):
                 "total": db.query(func.count(MediaRequest.id)).scalar(),
                 "movies": db.query(func.count(MediaRequest.id)).filter(MediaRequest.media_type == "movie").scalar(),
                 "tv_shows": db.query(func.count(MediaRequest.id)).filter(MediaRequest.media_type == "tv").scalar(),
-                "tracking": db.query(func.count(MediaRequest.id)).filter(MediaRequest.status != "available").scalar(),
+                "tracking": db.query(func.count(MediaRequest.id)).filter(
+                    MediaRequest.status != "available",
+                    MediaRequest.quality_monitor_suppressed_at.is_(None),
+                ).scalar(),
             },
             "episodes_tracked": db.query(func.count(EpisodeTracking.id)).scalar(),
             "notifications": {
@@ -183,6 +186,59 @@ async def get_admin_activity(limit: int = 100, db: Session = Depends(get_db)):
         }
     except Exception as e:
         logger.error(f"Failed to get admin activity: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/integrations/maintainerr")
+async def get_maintainerr_integration_status(db: Session = Depends(get_db)):
+    """Return safe setup metadata and recent Maintainerr webhook activity."""
+    from app.config import settings as _s
+
+    try:
+        rows = (
+            db.query(AdminActivityLog)
+            .filter(AdminActivityLog.action == "maintainerr_webhook")
+            .order_by(AdminActivityLog.created_at.desc())
+            .limit(5)
+            .all()
+        )
+
+        def parse_details(value):
+            if not value:
+                return {}
+            try:
+                parsed = json.loads(value)
+                return parsed if isinstance(parsed, dict) else {}
+            except (TypeError, ValueError):
+                return {}
+
+        recent_events = []
+        for row in rows:
+            details = parse_details(row.details)
+            recent_events.append(
+                {
+                    "status": row.status,
+                    "message": row.message,
+                    "received_at": row.created_at.isoformat() if row.created_at else None,
+                    "notification_type": details.get("notification_type"),
+                    "media_items": details.get("media_items", 0),
+                    "matched_requests": details.get("matched_requests", 0),
+                    "cancelled_notifications": details.get("cancelled_notifications", 0),
+                }
+            )
+
+        latest = recent_events[0] if recent_events else None
+        return {
+            "endpoint_path": "/webhooks/maintainerr",
+            "payload_template": {"notification_type": "{{notification_type}}"},
+            "secret_configured": bool((_s.webhook_secret or "").strip()),
+            "ip_allowlist_configured": bool((_s.webhook_allowed_ips or "").strip()),
+            "last_received_at": latest["received_at"] if latest else None,
+            "last_status": latest["status"] if latest else "never",
+            "recent_events": recent_events,
+        }
+    except Exception as e:
+        logger.error("Failed to load Maintainerr integration status: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -331,6 +387,8 @@ async def list_requests(skip: int = 0, limit: int = 50, db: Session = Depends(ge
                 "media_type": r.media_type,
                 "title": r.title,
                 "status": r.status,
+                "quality_monitor_suppressed": r.quality_monitor_suppressed_at is not None,
+                "quality_monitor_suppression_source": r.quality_monitor_suppression_source,
                 "created_at": r.created_at.isoformat() + 'Z' if r.created_at else None
             }
             for r in requests

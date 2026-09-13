@@ -9,6 +9,7 @@ from typing import List, Optional
 
 from app.database import get_db, MediaRequest, EpisodeTracking, Notification, User, SessionLocal
 from app.schemas import SonarrWebhook, RadarrWebhook, WebhookResponse
+from app.services.admin_activity import record_admin_activity
 from app.services.email_service import EmailService
 from app.services.notification_history import (
     episode_dedupe_key,
@@ -212,6 +213,9 @@ async def maintainerr_webhook(
 ):
     """Suppress quality waiting after Maintainerr intentionally handles media."""
     _check_webhook_auth(request)
+    from app.auth import get_client_ip
+
+    client_ip = get_client_ip(request)
 
     notification_type = (
         webhook.get("notification_type")
@@ -219,6 +223,20 @@ async def maintainerr_webhook(
         or webhook.get("type")
     )
     if not is_media_handled_notification(notification_type):
+        record_admin_activity(
+            "maintainerr_webhook",
+            "Maintainerr webhook received an event that was not Media Handled",
+            status="warning",
+            details={"notification_type": str(notification_type or "unknown")},
+            actor="maintainerr",
+            ip_address=client_ip,
+            db=db,
+        )
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.debug("Failed to record ignored Maintainerr webhook", exc_info=True)
         return WebhookResponse(
             success=True,
             message=f"Ignored Maintainerr event: {notification_type or 'unknown'}",
@@ -230,6 +248,20 @@ async def maintainerr_webhook(
         logger.warning(
             "Maintainerr Media Handled webhook had no supported whole-movie/show TMDB identifiers"
         )
+        record_admin_activity(
+            "maintainerr_webhook",
+            "Maintainerr Media Handled event contained no supported whole-media identifiers",
+            status="warning",
+            details={"notification_type": str(notification_type)},
+            actor="maintainerr",
+            ip_address=client_ip,
+            db=db,
+        )
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.debug("Failed to record invalid Maintainerr webhook", exc_info=True)
         return WebhookResponse(
             success=True,
             message="Media Handled received, but no supported movie/show TMDB identifiers were present",
@@ -257,6 +289,21 @@ async def maintainerr_webhook(
             Notification.notification_type == "quality_waiting",
             Notification.sent.is_(False),
         ).delete(synchronize_session=False)
+
+    record_admin_activity(
+        "maintainerr_webhook",
+        "Maintainerr Media Handled cleanup processed",
+        details={
+            "notification_type": str(notification_type),
+            "media_items": len(request_keys),
+            "matched_requests": len(matched_requests),
+            "newly_suppressed": newly_suppressed,
+            "cancelled_notifications": cancelled,
+        },
+        actor="maintainerr",
+        ip_address=client_ip,
+        db=db,
+    )
 
     try:
         db.commit()
