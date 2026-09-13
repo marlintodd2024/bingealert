@@ -26,6 +26,7 @@ from app.services.email_service import EmailService
 from app.services.maintainerr_service import (
     extract_request_keys,
     is_media_handled_notification,
+    is_test_notification,
 )
 
 
@@ -67,6 +68,12 @@ class MaintainerrPayloadTests(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertTrue(is_media_handled_notification(value))
         self.assertFalse(is_media_handled_notification("MEDIA_ABOUT_TO_BE_HANDLED"))
+
+    def test_accepts_maintainerr_test_type_variants(self):
+        for value in (128, "128", "TEST_NOTIFICATION", "Test Notification"):
+            with self.subTest(value=value):
+                self.assertTrue(is_test_notification(value))
+        self.assertFalse(is_test_notification("MEDIA_HANDLED"))
 
 
 class MaintainerrWebhookTests(unittest.TestCase):
@@ -240,6 +247,60 @@ class MaintainerrWebhookTests(unittest.TestCase):
         self.assertIsNone(requests[1].quality_monitor_suppressed_at)
         self.assertEqual(requests[1].status, "approved")
         db.close()
+
+    def test_connection_test_is_success_without_cleanup(self):
+        response = self.client.post(
+            "/webhooks/maintainerr",
+            headers={"Authorization": "Bearer test-secret"},
+            json={"notification_type": "TEST_NOTIFICATION"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["success"])
+        self.assertEqual(response.json()["processed_items"], 0)
+        self.assertEqual(
+            response.json()["message"], "Maintainerr test connection verified"
+        )
+
+        db = self.Session()
+        media_request = db.query(MediaRequest).one()
+        self.assertIsNone(media_request.quality_monitor_suppressed_at)
+        self.assertEqual(db.query(Notification).count(), 1)
+        activity = (
+            db.query(AdminActivityLog).filter_by(action="maintainerr_webhook").one()
+        )
+        self.assertEqual(activity.status, "success")
+        self.assertEqual(json.loads(activity.details)["event_kind"], "test")
+        db.close()
+
+        response = self.client.get("/admin/integrations/maintainerr")
+        integration = response.json()
+        self.assertEqual(integration["last_status"], "success")
+        self.assertEqual(integration["last_event_kind"], "test")
+        self.assertEqual(
+            integration["recent_events"][0]["message"],
+            "Maintainerr test connection verified",
+        )
+
+    def test_v238_warning_test_activity_is_reclassified(self):
+        db = self.Session()
+        db.add(
+            AdminActivityLog(
+                action="maintainerr_webhook",
+                status="warning",
+                message="Maintainerr webhook received an event that was not Media Handled",
+                details=json.dumps({"notification_type": "TEST_NOTIFICATION"}),
+                actor="maintainerr",
+            )
+        )
+        db.commit()
+        db.close()
+
+        response = self.client.get("/admin/integrations/maintainerr")
+        self.assertEqual(response.status_code, 200)
+        integration = response.json()
+        self.assertEqual(integration["last_status"], "success")
+        self.assertEqual(integration["last_event_kind"], "test")
+        self.assertEqual(integration["recent_events"][0]["event_kind"], "test")
 
     def test_non_handled_event_is_visible_as_warning_activity(self):
         response = self.client.post(

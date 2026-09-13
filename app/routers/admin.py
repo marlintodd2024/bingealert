@@ -26,6 +26,7 @@ from app.security import (
     validate_ip_or_cidr_csv,
 )
 from app.services.admin_activity import record_admin_activity
+from app.services.maintainerr_service import is_test_notification
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -215,12 +216,22 @@ async def get_maintainerr_integration_status(db: Session = Depends(get_db)):
         recent_events = []
         for row in rows:
             details = parse_details(row.details)
+            notification_type = details.get("notification_type")
+            event_kind = details.get("event_kind")
+            if not event_kind and is_test_notification(notification_type):
+                # Reclassify test rows written by v2.3.8 so the corrected UI
+                # becomes accurate immediately after upgrade.
+                event_kind = "test"
+            is_test = event_kind == "test"
             recent_events.append(
                 {
-                    "status": row.status,
-                    "message": row.message,
+                    "status": "success" if is_test else row.status,
+                    "message": (
+                        "Maintainerr test connection verified" if is_test else row.message
+                    ),
                     "received_at": row.created_at.isoformat() if row.created_at else None,
-                    "notification_type": details.get("notification_type"),
+                    "event_kind": event_kind,
+                    "notification_type": notification_type,
                     "media_items": details.get("media_items", 0),
                     "matched_requests": details.get("matched_requests", 0),
                     "cancelled_notifications": details.get("cancelled_notifications", 0),
@@ -235,6 +246,7 @@ async def get_maintainerr_integration_status(db: Session = Depends(get_db)):
             "ip_allowlist_configured": bool((_s.webhook_allowed_ips or "").strip()),
             "last_received_at": latest["received_at"] if latest else None,
             "last_status": latest["status"] if latest else "never",
+            "last_event_kind": latest["event_kind"] if latest else None,
             "recent_events": recent_events,
         }
     except Exception as e:

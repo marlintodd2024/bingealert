@@ -4392,6 +4392,7 @@
                     <div class="maintainerr-step"><span>Set the request body to the JSON payload above and enable only the <strong>Media Handled</strong> notification type.</span></div>
                     <div class="maintainerr-step"><span>Add an <strong>Authorization</strong> header using <code>Bearer YOUR_SECRET</code>. The secret is managed in <a href="#settings-security">Webhook &amp; Security</a>.</span></div>
                     <div class="maintainerr-step"><span>Attach the agent only to collection-removal rules that delete media. A later re-add is treated as a fresh availability cycle.</span></div>
+                    <div class="maintainerr-step"><span><strong>Test Connection</strong> verifies delivery only and contains no media. BingeAlert will show <strong>Connection verified</strong>; an actual cleanup is confirmed by a later <strong>Media Handled cleanup processed</strong> event.</span></div>
                 </div>
             </div>
 
@@ -7048,7 +7049,9 @@
                     warning: { label: 'Needs attention', className: 'warning', overview: 'Last cleanup event needs attention' },
                     never: { label: 'Awaiting first event', className: '', overview: 'Cleanup webhook awaiting first event' }
                 };
-                const state = statusMap[status.last_status] || statusMap.warning;
+                const state = status.last_event_kind === 'test'
+                    ? { label: 'Connection verified', className: 'ok', overview: 'Maintainerr connection verified' }
+                    : (statusMap[status.last_status] || statusMap.warning);
                 statusPill.textContent = state.label;
                 statusPill.className = `integration-status ${state.className}`.trim();
                 setText('settings-maintainerr-overview', state.overview);
@@ -7061,10 +7064,18 @@
                         activity.innerHTML = '<div class="integration-event"><span>—</span><span>No Maintainerr events received yet.</span><span></span></div>';
                     } else {
                         activity.innerHTML = status.recent_events.map(event => {
-                            const label = event.status === 'success' ? 'Processed' : 'Ignored';
-                            const counts = event.status === 'success'
-                                ? `${event.matched_requests || 0} request${event.matched_requests === 1 ? '' : 's'} matched · ${event.cancelled_notifications || 0} notification${event.cancelled_notifications === 1 ? '' : 's'} cancelled`
-                                : (event.message || 'Event ignored');
+                            let label;
+                            let counts;
+                            if (event.event_kind === 'test') {
+                                label = 'Test';
+                                counts = 'Connection verified — no cleanup performed';
+                            } else if (event.status === 'success') {
+                                label = 'Processed';
+                                counts = `${event.matched_requests || 0} request${event.matched_requests === 1 ? '' : 's'} matched · ${event.cancelled_notifications || 0} notification${event.cancelled_notifications === 1 ? '' : 's'} cancelled`;
+                            } else {
+                                label = 'Ignored';
+                                counts = event.message || 'Event ignored';
+                            }
                             return `<div class="integration-event"><span>${escapeHtml(label)}</span><span>${escapeHtml(counts)}</span><span class="integration-event-time">${escapeHtml(formatDateTime(event.received_at))}</span></div>`;
                         }).join('');
                     }

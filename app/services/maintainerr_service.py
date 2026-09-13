@@ -7,12 +7,19 @@ from typing import Any
 
 
 _HANDLED_TYPES = {"16", "MEDIAHANDLED", "MEDIAHANDLEDNOTIFICATION"}
+_TEST_TYPES = {"128", "TEST", "TESTNOTIFICATION"}
 
 
 def is_media_handled_notification(value: Any) -> bool:
     """Accept the numeric, display, and symbolic forms used by Maintainerr builds."""
     normalized = re.sub(r"[^A-Z0-9]", "", str(value or "").upper())
     return normalized in _HANDLED_TYPES
+
+
+def is_test_notification(value: Any) -> bool:
+    """Return whether Maintainerr sent its test-connection notification."""
+    normalized = re.sub(r"[^A-Z0-9]", "", str(value or "").upper())
+    return normalized in _TEST_TYPES
 
 
 def _decode_json(value: Any) -> Any:

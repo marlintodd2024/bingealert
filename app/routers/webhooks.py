@@ -20,6 +20,7 @@ from app.services.pushover_service import PushoverService
 from app.services.maintainerr_service import (
     extract_request_keys,
     is_media_handled_notification,
+    is_test_notification,
 )
 from app.services.sonarr_service import SonarrService
 from app.config import settings
@@ -222,12 +223,46 @@ async def maintainerr_webhook(
         or webhook.get("notificationType")
         or webhook.get("type")
     )
-    if not is_media_handled_notification(notification_type):
+    if is_test_notification(notification_type):
         record_admin_activity(
             "maintainerr_webhook",
-            "Maintainerr webhook received an event that was not Media Handled",
+            "Maintainerr test connection verified",
+            details={
+                "event_kind": "test",
+                "notification_type": str(notification_type),
+            },
+            actor="maintainerr",
+            ip_address=client_ip,
+            db=db,
+        )
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.debug("Failed to record Maintainerr test connection", exc_info=True)
+        return WebhookResponse(
+            success=True,
+            message="Maintainerr test connection verified",
+            processed_items=0,
+        )
+
+    if not is_media_handled_notification(notification_type):
+        unresolved_template = (
+            str(notification_type or "").strip() == "{{notification_type}}"
+        )
+        message = (
+            "Maintainerr sent an unresolved notification_type template"
+            if unresolved_template
+            else "Maintainerr webhook received an event that was not Media Handled"
+        )
+        record_admin_activity(
+            "maintainerr_webhook",
+            message,
             status="warning",
-            details={"notification_type": str(notification_type or "unknown")},
+            details={
+                "event_kind": "ignored",
+                "notification_type": str(notification_type or "unknown"),
+            },
             actor="maintainerr",
             ip_address=client_ip,
             db=db,
@@ -252,7 +287,10 @@ async def maintainerr_webhook(
             "maintainerr_webhook",
             "Maintainerr Media Handled event contained no supported whole-media identifiers",
             status="warning",
-            details={"notification_type": str(notification_type)},
+            details={
+                "event_kind": "invalid",
+                "notification_type": str(notification_type),
+            },
             actor="maintainerr",
             ip_address=client_ip,
             db=db,
@@ -294,6 +332,7 @@ async def maintainerr_webhook(
         "maintainerr_webhook",
         "Maintainerr Media Handled cleanup processed",
         details={
+            "event_kind": "cleanup",
             "notification_type": str(notification_type),
             "media_items": len(request_keys),
             "matched_requests": len(matched_requests),
