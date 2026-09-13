@@ -109,11 +109,12 @@ old episode does not spam its original recipient.
 
 ## Release Prep
 
-Regression and migration validation:
+Regression, migration, and dependency validation passed with:
 
 ```bash
 .venv/bin/python -m compileall -q app tests
 .venv/bin/python -m unittest discover -s tests -v
+.venv/bin/pip-audit -r requirements.txt --progress-spinner off
 DATA_DIR=/tmp/bingealert-v2.3.7 .venv/bin/alembic upgrade head
 DATA_DIR=/tmp/bingealert-v2.3.7 .venv/bin/alembic downgrade -1
 DATA_DIR=/tmp/bingealert-v2.3.7 .venv/bin/alembic upgrade head
