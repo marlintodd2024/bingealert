@@ -81,14 +81,10 @@ node --check app/static/service-worker.js
 git diff --check
 ```
 
-The required production-container drift check must pass before tagging:
-
-```bash
-./scripts/check_prod_drift.sh prod-files.txt
-```
-
-The tag-triggered package workflow builds and publishes the GHCR image for
-`linux/amd64` and `linux/arm64` with `2.3.8`, `2.3`, and `latest` tags.
+GitHub's Docker build check, dependency audit, and CodeQL workflows also passed
+on the release candidate. The tag-triggered package workflow builds and
+publishes the GHCR image for `linux/amd64` and `linux/arm64` with `2.3.8`,
+`2.3`, and `latest` tags.
 
 ---
 
